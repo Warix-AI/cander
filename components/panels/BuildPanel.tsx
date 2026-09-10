@@ -380,13 +380,10 @@ export function BuildPanel() {
                       status: websiteBrief?.status ?? "setup",
                       completedSteps: websiteBrief?.completedSteps ?? 0,
                       detail:
-                        websiteBrief?.status === "building" && buildJob.latestProgress
-                          ? buildJob.latestProgress
-                          : websiteBrief?.validationIssues?.[0] || envMessage || null,
-                      steps:
-                        websiteBrief?.status === "building" && buildJob.isActive
-                          ? buildJob.progressLines
+                        websiteBrief?.status === "failed"
+                          ? websiteBrief?.validationIssues?.[0] || envMessage || null
                           : null,
+                      steps: null,
                     }
                   : null
               }

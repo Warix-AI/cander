@@ -262,6 +262,7 @@ import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
+import { sanitizeUserProgress } from "@/lib/build/jobs/user-progress";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
 import { primeAutomationBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
@@ -3244,13 +3245,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             // Presentation buffer only — model already finished; smooth visual pace.
             if (result.presentationStreamed) {
-              patchAssistant(
-                result.content,
-                "complete",
-                result.condensationOccurred,
-                result.citations,
-                result.blocks,
+              const buildJobStart = result.toolResults?.find(
+                (t) =>
+                  t.name === "build.job.start" &&
+                  t.ok &&
+                  (t.data?.mode === "edit" || t.data?.mode === "create") &&
+                  typeof t.data.jobId === "string",
               );
+              const buildJobId =
+                typeof buildJobStart?.data?.jobId === "string"
+                  ? buildJobStart.data.jobId
+                  : null;
+              if (buildJobId) {
+                const acks = buildJobAckByJobIdRef.current.get(buildJobId) ?? [];
+                if (!acks.includes(assistantId)) acks.push(assistantId);
+                buildJobAckByJobIdRef.current.set(buildJobId, acks);
+                const buildMode =
+                  buildJobStart?.data?.mode === "create" ? "create" : "edit";
+                patchAssistant(
+                  result.content,
+                  "complete",
+                  result.condensationOccurred,
+                  result.citations,
+                  result.blocks,
+                );
+                setThreads((current) =>
+                  current.map((item) => {
+                    const apply = (thread: Thread): Thread => ({
+                      ...thread,
+                      messages: thread.messages.map((message) =>
+                        message.id === assistantId
+                          ? {
+                              ...message,
+                              content: result.content,
+                              status: "pending" as const,
+                              activity: {
+                                phase: "updating" as const,
+                                startedAt: Date.now(),
+                                detail:
+                                  buildMode === "create"
+                                    ? "Getting your workspace ready…"
+                                    : "Updating your site…",
+                                kind: "work" as const,
+                              },
+                            }
+                          : message,
+                      ),
+                    });
+                    if (item.id === activeId) return apply(item);
+                    if (item.messages.some((m) => m.id === assistantId))
+                      return apply(item);
+                    return item;
+                  }),
+                );
+              } else {
+                patchAssistant(
+                  result.content,
+                  "complete",
+                  result.condensationOccurred,
+                  result.citations,
+                  result.blocks,
+                );
+              }
               finishLatency(result.pausedForUser ? "paused" : "ok");
               if (
                 result.generatedAttachmentIds?.length &&
@@ -3268,23 +3324,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               return;
             }
             typewriterReveal(result.content, (partial, done) => {
-              const editJobStart = result.toolResults?.find(
+              const buildJobStart = result.toolResults?.find(
                 (t) =>
                   t.name === "build.job.start" &&
                   t.ok &&
-                  t.data?.mode === "edit" &&
+                  (t.data?.mode === "edit" || t.data?.mode === "create") &&
                   typeof t.data.jobId === "string",
               );
-              const editJobId =
-                typeof editJobStart?.data?.jobId === "string"
-                  ? editJobStart.data.jobId
+              const buildJobId =
+                typeof buildJobStart?.data?.jobId === "string"
+                  ? buildJobStart.data.jobId
                   : null;
-              // Keep the "On it…" bubble open so progress sits under it and
-              // the final Done line replaces it instead of stacking below.
-              if (done && editJobId) {
-                const acks = buildJobAckByJobIdRef.current.get(editJobId) ?? [];
+              const buildMode =
+                buildJobStart?.data?.mode === "create" ? "create" : "edit";
+              // Keep the drafting / "On it…" bubble open so progress sits under
+              // it and the final Done line replaces it instead of stacking.
+              if (done && buildJobId) {
+                const acks = buildJobAckByJobIdRef.current.get(buildJobId) ?? [];
                 if (!acks.includes(assistantId)) acks.push(assistantId);
-                buildJobAckByJobIdRef.current.set(editJobId, acks);
+                buildJobAckByJobIdRef.current.set(buildJobId, acks);
                 setThreads((current) =>
                   current.map((item) => {
                     const apply = (thread: Thread): Thread => ({
@@ -3298,7 +3356,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                               activity: {
                                 phase: "updating" as const,
                                 startedAt: Date.now(),
-                                detail: "Working on your change…",
+                                detail:
+                                  buildMode === "create"
+                                    ? "Getting your workspace ready…"
+                                    : "Updating your site…",
                                 kind: "work" as const,
                               },
                             }
@@ -4011,12 +4072,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       });
     };
-    // Edit jobs: update the ack bubble's status line (directly under "On it…").
+    // Create + edit: update the ack bubble's thinking line under the drafting message.
     const onProgress = (ev: Event) => {
       const detail = (ev as CustomEvent).detail as
         | { projectId?: string; jobId?: string; message?: string }
         | undefined;
       if (!detail?.projectId || !detail.jobId || !detail.message) return;
+      const safe = sanitizeUserProgress(detail.message);
+      if (!safe) return;
       const progressMarker = `build-job:${detail.jobId}:progress`;
       const resultMarker = `build-job:${detail.jobId}`;
       const ackList = buildJobAckByJobIdRef.current.get(detail.jobId) ?? [];
@@ -4035,7 +4098,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return current;
         if (ackId && target.messages.some((m) => m.id === ackId)) {
           const existing = target.messages.find((m) => m.id === ackId);
-          if (existing?.activity?.detail === detail.message) return current;
+          if (existing?.activity?.detail === safe) return current;
           return current.map((t) =>
             t.id !== target.id
               ? t
@@ -4051,7 +4114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                             activity: {
                               phase: "updating" as const,
                               startedAt: existing?.activity?.startedAt ?? Date.now(),
-                              detail: detail.message,
+                              detail: safe,
                               kind: "work" as const,
                             },
                           }
@@ -4061,7 +4124,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           );
         }
         const existing = target.messages.find((m) => m.id === progressMarker);
-        if (existing?.activity?.detail === detail.message) return current;
+        if (existing?.activity?.detail === safe) return current;
         const line = {
           id: progressMarker,
           role: "assistant" as const,
@@ -4071,7 +4134,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activity: {
             phase: "updating" as const,
             startedAt: existing?.activity?.startedAt ?? Date.now(),
-            detail: detail.message,
+            detail: safe,
             kind: "work" as const,
           },
         };

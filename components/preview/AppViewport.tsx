@@ -139,7 +139,12 @@ export function AppViewport({
                   style={{ animationDuration: "1.1s" }}
                 />
               )}
-              <CanderMark tone="color" className="!h-5 !w-5" />
+              <span className="relative z-[1] flex h-5 w-5 items-center justify-center">
+                <CanderMark
+                  tone="color"
+                  className="!h-5 !w-5 object-contain object-center"
+                />
+              </span>
             </div>
             {(envStatus === "error" || envStatus === "unavailable") &&
             onRetryEnv ? (

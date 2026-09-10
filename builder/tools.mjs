@@ -32,6 +32,21 @@ const BLOCKED_COMMAND_RE =
 const ALLOWED_COMMAND_PREFIX_RE =
   /^(npm|npx|pnpm|yarn|node|tsc|next|ls|cat|head|tail|wc|find|grep|rg|echo|printf|test|mkdir|cp|mv|rm|touch|curl|git\s+(status|diff|log|show|ls-files)|sed\s+-n|sort|uniq|tr|cut|jq|env|pwd|which|true|sleep|kill|pkill|ps)\b/;
 
+
+/** Detect foreground next/npm-dev and rewrite to a short detached start. */
+function autoDetachLongServer(cmd) {
+  const looksLikeServer =
+    /(?:^|[;&|]\s*)(?:npm\s+run\s+dev|npm\s+start|npx\s+(?:--yes\s+)?next\s+dev|next\s+dev)\b/i.test(
+      cmd,
+    );
+  if (!looksLikeServer) return null;
+  // Already backgrounded (trailing & outside quotes) — leave alone but cap wait.
+  if (/&\s*$/.test(cmd) || /&\s*(?:#.*)?$/.test(cmd)) {
+    return `${cmd.replace(/&\s*$/, "").trim()} > /tmp/cander-dev.log 2>&1 & echo $!`;
+  }
+  return `( ${cmd} ) > /tmp/cander-dev.log 2>&1 & echo $!; sleep 1; tail -n 20 /tmp/cander-dev.log 2>/dev/null || true`;
+}
+
 export class SandboxTools {
   /**
    * @param {{ repoDir: string, devServerUrl: string, log: import("./events.mjs").EventLog, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null }} opts
@@ -195,7 +210,7 @@ export class SandboxTools {
       {
         name: "emit_progress",
         description:
-          "Report a short, user-facing progress line (what you are doing now). Call this at each milestone.",
+          "Report a short, plain-English progress line for the user (no framework names, no npm/tsc/GitHub/Vercel). Call at each milestone.",
         parameters: {
           type: "object",
           properties: { message: { type: "string" } },
@@ -515,7 +530,7 @@ export class SandboxTools {
   }
 
   async runCommand(command, timeoutSec) {
-    const cmd = String(command ?? "").trim();
+    let cmd = String(command ?? "").trim();
     if (!cmd) throw new Error("command required");
     if (BLOCKED_COMMAND_RE.test(cmd)) {
       throw new Error("command blocked by policy");
@@ -527,6 +542,21 @@ export class SandboxTools {
       if (!ALLOWED_COMMAND_PREFIX_RE.test(s)) {
         throw new Error(`command not allowed: ${seg.slice(0, 80)}`);
       }
+    }
+    // Long-lived servers hang the agent if run in the foreground. Detach them
+    // automatically and return immediately so the coder can keep working.
+    const detached = autoDetachLongServer(cmd);
+    if (detached) {
+      cmd = detached;
+      this.log.emit("tool", `$ ${cmd.slice(0, 160)}`, { command: cmd.slice(0, 500), detached: true });
+      const result = await execShell(cmd, { cwd: this.repoDir, timeoutMs: 15_000 });
+      const out = [
+        result.stdout,
+        result.stderr ? `\n[stderr]\n${result.stderr}` : "",
+        "\n[started in background — use check_preview; do not start the preview server again]",
+        `\n[exit ${result.exitCode}${result.timedOut ? ", timed out" : ""}]`,
+      ].join("");
+      return truncate(out, 20_000);
     }
     const timeoutMs = Math.min(Math.max(Number(timeoutSec) || 180, 5), 900) * 1000;
     this.log.emit("tool", `$ ${cmd.slice(0, 160)}`, { command: cmd.slice(0, 500) });

@@ -29,8 +29,8 @@ function arcPath(
 
 /**
  * Blank-preview progress for guided website setup.
- * White canvas; color mark stays still; only the ring spins while building
- * (same pattern as ConnectorLoadingState).
+ * While building: logo + spinning ring only (status lives in chat).
+ * Setup: segmented ring + short copy. Failed: short copy + Retry.
  */
 export function WebsiteSetupProgress({
   completedSteps = 0,
@@ -39,7 +39,6 @@ export function WebsiteSetupProgress({
   label,
   onRetry,
   detail,
-  steps,
 }: {
   /** 0–8 filled segments during setup */
   completedSteps?: number;
@@ -49,7 +48,7 @@ export function WebsiteSetupProgress({
   /** Failed: re-run /build/ready finalization */
   onRetry?: () => void;
   detail?: string | null;
-  /** Building (V2): recent progress lines from the builder job, oldest first. */
+  /** @deprecated Building status moved to chat; ignored. */
   steps?: string[] | null;
 }) {
   const filled = Math.max(0, Math.min(SEGMENTS, Math.floor(completedSteps)));
@@ -117,35 +116,24 @@ export function WebsiteSetupProgress({
             })}
           </svg>
         )}
-        {/* Mark stays stationary — only the ring animates. */}
-        <CanderMark tone="color" className="!h-5 !w-5" />
+        {/* Mark stays stationary — only the ring animates. Square box keeps the
+            non-square PNG optically centered inside the ring. */}
+        <span className="relative z-[1] flex h-5 w-5 items-center justify-center">
+          <CanderMark
+            tone="color"
+            className="!h-5 !w-5 object-contain object-center"
+          />
+        </span>
       </div>
-      <p className="mt-4 max-w-[18rem] text-center text-[13px] text-neutral-500">
-        {spinning
-          ? steps?.length
-            ? "Drafting your website — hang tight."
-            : "Building your draft…"
-          : mode === "failed"
+      {spinning ? null : (
+        <p className="mt-4 max-w-[18rem] text-center text-[13px] text-neutral-500">
+          {mode === "failed"
             ? "Draft preview failed to start."
             : filled >= SEGMENTS
               ? "Confirm in chat to build."
               : "Answer the setup questions in chat."}
-      </p>
-      {spinning && (detail || steps?.length) ? (
-        <div className="mt-3 flex max-w-sm flex-col items-center gap-1 text-center">
-          {(steps?.length ? steps.slice(-4, -1) : []).map((line, i) => (
-            <p
-              key={`${i}-${line}`}
-              className="max-w-sm truncate text-[12px] leading-relaxed text-neutral-300"
-            >
-              {line}
-            </p>
-          ))}
-          <p className="max-w-sm text-[12.5px] leading-relaxed text-neutral-400">
-            {steps?.length ? steps[steps.length - 1] : detail}
-          </p>
-        </div>
-      ) : null}
+        </p>
+      )}
       {mode === "failed" && detail ? (
         <p className="mt-2 max-w-sm text-center text-[12.5px] leading-relaxed text-neutral-400">
           {detail}

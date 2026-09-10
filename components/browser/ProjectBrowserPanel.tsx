@@ -2840,16 +2840,14 @@ export function ProjectBrowserPanel({
               ? {
                   status: websiteBrief?.status ?? "setup",
                   completedSteps: websiteBrief?.completedSteps ?? 0,
+                  // Building status lives in chat; keep panel logo-only.
                   detail:
-                    websiteBrief?.status === "building" && buildJob.latestProgress
-                      ? buildJob.latestProgress
-                      : websiteBrief?.validationIssues?.[0] ||
+                    websiteBrief?.status === "failed"
+                      ? websiteBrief?.validationIssues?.[0] ||
                         sandboxEnvMessage ||
-                        null,
-                  steps:
-                    websiteBrief?.status === "building" && buildJob.isActive
-                      ? buildJob.progressLines
+                        null
                       : null,
+                  steps: null,
                 }
               : null
           }

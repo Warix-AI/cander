@@ -58,6 +58,7 @@ import {
 } from "@/lib/ai/build/plan/spec-memory";
 import type { ProjectSpec } from "@/lib/ai/build/plan/types";
 import { signedProjectAssetUrl } from "@/lib/project-assets-server";
+import { sanitizeUserProgress } from "@/lib/build/jobs/user-progress";
 
 const LOG = "[cander:build-job]";
 const BUILDER_DIR_IN_SANDBOX = ".cander/builder";
@@ -67,6 +68,8 @@ const CREATE_WALL_CLOCK_MS = 75 * 60 * 1000;
 const EDIT_WALL_CLOCK_MS = 25 * 60 * 1000;
 /** Consider the builder dead if the process is gone and no terminal event arrived. */
 const STALL_GRACE_MS = 3 * 60 * 1000;
+/** Fail even when the builder PID is still alive but emits nothing (hung next/dev, etc.). */
+const EVENT_STALL_MS = 10 * 60 * 1000;
 
 type BuilderSandbox = {
   runCommand(params: {
@@ -544,9 +547,11 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
         phase,
       });
     }
+    const noteRaw = lastProgress?.message ?? job.progressNote;
+    const note = sanitizeUserProgress(noteRaw) ?? job.progressNote;
     current =
       (await updateBuildJob(job.id, {
-        progressNote: lastProgress?.message ?? job.progressNote,
+        progressNote: note,
         facts: {
           eventOffset: offset + fileBytesConsumed,
           eventSeq: Math.max(job.facts.eventSeq ?? 0, ...events.map((e) => e.seq)),
@@ -564,11 +569,15 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
     return (await failBuildJob(current, failed.message || "Builder failed.")) ?? current;
   }
 
+  const lastAt = Date.parse(
+    current.facts.lastEventAt || current.facts.startedAt || current.createdAt,
+  );
+  const silentMs = Date.now() - (Number.isFinite(lastAt) ? lastAt : Date.now());
+
   // Dead process without a terminal event → fail after a short grace period
   // (the final flush may still be landing).
   if (!alive && !hasResult) {
-    const lastAt = Date.parse(current.facts.lastEventAt || current.facts.startedAt || current.createdAt);
-    if (Date.now() - lastAt > STALL_GRACE_MS) {
+    if (silentMs > STALL_GRACE_MS) {
       const tail = meta.split("\n").slice(-12).join("\n").trim();
       return (
         (await failBuildJob(
@@ -577,6 +586,16 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
         )) ?? current
       );
     }
+  }
+
+  // Alive but silent for too long (e.g. hung on `npm run dev`) — unlock the UI.
+  if (!hasResult && silentMs > EVENT_STALL_MS) {
+    return (
+      (await failBuildJob(
+        current,
+        "Something took too long while drafting. Hit Retry in the preview, or tell me what to try next.",
+      )) ?? current
+    );
   }
   return current;
 }
@@ -614,9 +633,11 @@ export async function ingestPushedBuildJobEvents(
       phase,
     });
   }
+  const noteRaw = lastProgress?.message ?? job.progressNote;
+  const note = sanitizeUserProgress(noteRaw) ?? job.progressNote;
   const updated =
     (await updateBuildJob(job.id, {
-      progressNote: lastProgress?.message ?? job.progressNote,
+      progressNote: note,
       facts: {
         eventSeq: Math.max(job.facts.eventSeq ?? 0, ...clean.map((e) => e.seq)),
         lastEventAt: new Date().toISOString(),

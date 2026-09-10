@@ -137,16 +137,21 @@ export function useBuildJob(opts: {
     };
   }, [enabled, refresh, opts.projectId, armed]);
 
-  // Edit jobs run with the preview visible, so surface progress in chat.
+  // Surface progress in chat for create + edit (right panel stays logo-only).
   const lastProgressSentRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!enabled || !job || !ACTIVE.has(job.status) || job.facts?.mode !== "edit") return;
+    if (!enabled || !job || !ACTIVE.has(job.status)) return;
     const line = job.progressNote?.trim();
     if (!line || line === lastProgressSentRef.current) return;
     lastProgressSentRef.current = line;
     window.dispatchEvent(
       new CustomEvent("cander:build-job-progress", {
-        detail: { projectId: opts.projectId, jobId: job.id, message: line },
+        detail: {
+          projectId: opts.projectId,
+          jobId: job.id,
+          message: line,
+          mode: job.facts?.mode ?? null,
+        },
       }),
     );
   }, [enabled, job, opts.projectId]);

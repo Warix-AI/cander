@@ -345,8 +345,8 @@ async function runBuildV2CreateTurn(
   }
   return {
     content: isApp
-      ? "Drafting your app — hang tight. I’m planning the screens, wiring the data layer, writing the components, and checking every route. You’ll see the draft appear on the right when it’s ready."
-      : "Drafting your website — hang tight. I’m planning the pages, writing the copy and components, and checking every route. You’ll see the draft appear on the right when it’s ready; this can take a while for a full site.",
+      ? "Drafting your app — hang tight. This can take a few minutes; I’ll keep you updated here."
+      : "Drafting your website — hang tight. This can take a few minutes; I’ll keep you updated here.",
     runtime: "cloud",
     offline: false,
     condensationOccurred: false,

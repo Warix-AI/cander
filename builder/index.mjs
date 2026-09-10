@@ -109,8 +109,9 @@ async function main() {
     },
   );
 
-  // Wait for the dev server so check_preview works from the first call.
-  await waitForDevServer(devServerUrl, log);
+  // Edits need the live preview immediately. Creates do most writing first and
+  // accept at the end — only wait briefly so a cold sandbox doesn't burn 3 min.
+  await waitForDevServer(devServerUrl, log, mode === "create" ? 12_000 : 180_000);
 
   // ---- plan (create only) ----------------------------------------------------
   let plan = null;
@@ -302,7 +303,7 @@ async function waitForDevServer(url, log, maxMs = 180_000) {
       /* not up yet */
     }
     if (!announced) {
-      log.emit("progress", "Waiting for the dev server…");
+      log.emit("progress", "Getting your workspace ready…");
       announced = true;
     }
     await new Promise((r) => setTimeout(r, 2500));

@@ -106,22 +106,22 @@ export async function runPlanningPhase(opts) {
 
   const routes = uniq([...plan.matchAll(/\|\s*(\/[a-z0-9\-\/]*)\s*\|/gi)].map((m) => m[1]));
   if (routes.length) {
-    opts.log.emit("progress", `Planned ${routes.length} page(s): ${routes.slice(0, 8).join(", ")}`);
+    opts.log.emit("progress", routes.length ? `Planning ${routes.length} pages…` : "Planning your pages…");
   }
 
   // ---- fan-out --------------------------------------------------------------
-  opts.log.emit("progress", "Writing copy, designing the system, and picking components in parallel…");
+  opts.log.emit("progress", "Writing copy and picking a look…");
   const planContext = isApp
     ? `Project: ${opts.projectName || "Untitled"}\n\nRequest:\n${opts.instruction || "(none)"}\n\nApp plan:\n${plan}`
     : `Project: ${opts.projectName || "Untitled"}\n\nBrief:\n${briefText}\n\nSite plan:\n${plan}`;
 
   const tasks = [
-    subAgent(opts, "copy", isApp ? "Writing UI text" : "Writing page copy", {
+    subAgent(opts, "copy", isApp ? "Writing your screens" : "Writing your copy", {
       instructions: isApp ? APP_COPY_INSTRUCTIONS : COPY_INSTRUCTIONS,
       input: planContext,
       maxOutputTokens: 12_000,
     }),
-    subAgent(opts, "design", "Designing the visual system", {
+    subAgent(opts, "design", "Picking colors and fonts", {
       instructions: DESIGN_INSTRUCTIONS,
       input: planContext,
       maxOutputTokens: 5000,
@@ -129,7 +129,7 @@ export async function runPlanningPhase(opts) {
     componentAgent(opts, plan),
     inspirationAgent(opts),
     opts.webSearch && !isApp
-      ? subAgent(opts, "research", "Researching the market", {
+      ? subAgent(opts, "research", "Learning about your industry", {
           instructions: RESEARCH_INSTRUCTIONS,
           input: `Project: ${opts.projectName || "Untitled"}\n\nBrief:\n${briefText}`,
           maxOutputTokens: 2500,
@@ -185,7 +185,7 @@ async function inspirationAgent(opts) {
         .slice(0, 3)
     : [];
   if (!urls.length) return null;
-  opts.log.emit("progress", `Studying ${urls.length} reference site(s)…`);
+  opts.log.emit("progress", "Looking at sites you liked…");
   const results = [];
   for (const url of urls) {
     try {
@@ -289,7 +289,7 @@ async function componentAgent(opts, plan) {
   const planQueries = [...plan.matchAll(/^\s*[-*]?\s*`?search:\s*([^`\n]+)`?\s*$/gim)].map((m) => m[1].trim());
   const queries = uniq([...categories, ...planQueries]).slice(0, 10);
   if (!queries.length) return null;
-  opts.log.emit("progress", `Searching 21st.dev for ${queries.length} section ideas…`);
+  opts.log.emit("progress", "Gathering design ideas…");
   const lines = [];
   for (const q of queries) {
     if (Date.now() > opts.deadlineMs - 3 * 60_000) break;
