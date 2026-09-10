@@ -1682,6 +1682,21 @@ export async function runBuildProjectTurn(
     });
   }
 
+  // Phase 4 — conversational draft-only edits (sites).
+  if (isSiteProject) {
+    const { runEditWebsitePipeline } = await import(
+      "@/lib/ai/build/edit-pipeline"
+    );
+    return runEditWebsitePipeline({
+      request,
+      turnOpts: opts,
+      projectId,
+      workspaceId,
+      websiteBrief,
+      report,
+    });
+  }
+
   report({
     phase: "thinking",
     label: "Preparing environment",
@@ -1705,17 +1720,20 @@ export async function runBuildProjectTurn(
     detail: sandbox.detail,
   });
 
+  // Non-site project refine path (apps): sandbox tool loop, no compose / publish.
+  const editTools = allowedTools.filter((n) => n !== "build.publish");
+
   let working: AiGenerateRequest = {
     ...request,
     allowTools: true,
-    allowedToolNames: allowedTools,
+    allowedToolNames: editTools,
     modelMode: "coding",
     toolContext: [
-      formatToolsForPrompt(allowedTools),
+      formatToolsForPrompt(editTools),
       BUILD_PROJECT_INSTRUCTIONS,
       `Active projectId: ${projectId}`,
       `workspaceId: ${workspaceId}`,
-      "Implement the user's request with computer.files.* tools now. No code dumps in chat.",
+      "Implement the user's request with computer.files.* tools now. No code dumps in chat. Do not publish.",
     ].join("\n\n"),
   };
 
@@ -1747,8 +1765,9 @@ export async function runBuildProjectTurn(
     const { text, call } = parseToolCallFromContent(generated.content);
 
     let toolCall = call;
-    if (toolCall && !allowedTools.includes(toolCall.name)) toolCall = null;
+    if (toolCall && !editTools.includes(toolCall.name)) toolCall = null;
     if (toolCall && !isBuildToolName(toolCall.name)) toolCall = null;
+    if (toolCall?.name === "build.publish") toolCall = null;
 
     if (!toolCall) {
       const visible =
@@ -1767,52 +1786,25 @@ export async function runBuildProjectTurn(
           ...working,
           modelMode: "coding",
           toolContext: [
-            formatToolsForPrompt(allowedTools),
+            formatToolsForPrompt(editTools),
             BUILD_PROJECT_INSTRUCTIONS,
             formatToolResultsNote(toolResults),
-            "CRITICAL: Do not paste code in chat. Call computer.files.write now for package.json, app/layout.tsx, and app/page.tsx. Prefer TSX; delete any competing app/page.js sibling.",
+            "CRITICAL: Do not paste code in chat. Call computer.files.write for the files you need. No full-site rewrite.",
           ].join("\n\n"),
           content: [
             request.content,
             "",
-            "Write the Next.js files with computer.files.write. No code-only replies.",
+            "Write files with computer.files.write. No code-only replies.",
           ].join("\n"),
         };
         continue;
       }
 
-      // Still dumped code with no writes — fall back to SiteSpec compose.
+      // Phase 4: never fall back to full SiteSpec compose on edit turns.
       if (writes === 0 && looksLikeCodeDump(visible)) {
-        report({
-          phase: "thinking",
-          label: "Building",
-          detail: "Composing site files into the sandbox instead of chatting code…",
-        });
-        const spec = await planWebsite(request, opts);
-        const files = composeSiteFromSpec(spec);
-        const written = await writeScaffold({
-          projectId,
-          workspaceId,
-          files,
-          report,
-        });
-        toolResults.push(...written);
-        const okWrites = written.filter(
-          (r) => r.name === "computer.files.write" && r.ok,
-        ).length;
-        if (okWrites > 0) {
-          await ensureSandboxReady({
-            projectId,
-            workspaceId,
-            forceRestart: false,
-          });
-        }
         return {
           content:
-            okWrites > 0
-              ? `Created a draft site for **${spec.businessName}** (${okWrites} files) and saved it to GitHub. Reload Preview if blank.`
-              : written.find((r) => !r.ok)?.output ||
-                "Couldn’t write files. Try again.",
+            "I need to edit files with tools rather than paste code. Try again with a specific change (file or section).",
           runtime: "cloud",
           offline: false,
           condensationOccurred: false,
@@ -1866,10 +1858,10 @@ export async function runBuildProjectTurn(
       ...working,
       modelMode: "coding",
       toolContext: [
-        formatToolsForPrompt(allowedTools),
+        formatToolsForPrompt(editTools),
         BUILD_PROJECT_INSTRUCTIONS,
         formatToolResultsNote(toolResults),
-        "Continue with more file writes if needed, then a short user summary — no code dumps.",
+        "Continue with more file writes if needed, then a short user summary — no code dumps. Do not publish.",
       ].join("\n\n"),
       content: request.content,
       messages: [

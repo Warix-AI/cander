@@ -199,3 +199,122 @@ export async function commitProjectDraftFilesClient(opts: {
     };
   }
 }
+
+/** Inspect draft tip SHA + paths (Phase 4 edit context). */
+export async function inspectProjectDraftTipClient(opts: {
+  projectId: string;
+  workspaceId: string;
+}): Promise<{
+  ok: boolean;
+  draftSha: string | null;
+  draftBranch: string | null;
+  githubFullName: string | null;
+  paths: string[];
+  error?: string;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+  const token = await authToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/git/tip?workspaceId=${encodeURIComponent(opts.workspaceId)}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      draftSha?: string | null;
+      draftBranch?: string | null;
+      githubFullName?: string | null;
+      paths?: string[];
+      error?: string;
+    };
+    if (!res.ok || data.ok === false) {
+      return {
+        ok: false,
+        draftSha: null,
+        draftBranch: null,
+        githubFullName: null,
+        paths: [],
+        error: data.error || `tip inspect failed (${res.status})`,
+      };
+    }
+    return {
+      ok: true,
+      draftSha: data.draftSha ?? null,
+      draftBranch: data.draftBranch ?? null,
+      githubFullName: data.githubFullName ?? null,
+      paths: data.paths ?? [],
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      draftSha: null,
+      draftBranch: null,
+      githubFullName: null,
+      paths: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/** Commit all dirty sandbox files to cander/draft in one commit. */
+export async function persistProjectSandboxDraftClient(opts: {
+  projectId: string;
+  workspaceId: string;
+  message?: string;
+}): Promise<{
+  ok: boolean;
+  draftSha?: string;
+  paths?: string[];
+  noop?: boolean;
+  error?: string;
+} | null> {
+  if (!isSupabaseConfigured()) return null;
+  const token = await authToken();
+  if (!token) return null;
+
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/git/persist`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workspaceId: opts.workspaceId,
+          message: opts.message || "Cander: conversational draft edit",
+        }),
+      },
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      draftSha?: string;
+      paths?: string[];
+      noop?: boolean;
+      error?: string;
+    };
+    if (!res.ok || data.ok === false) {
+      return {
+        ok: false,
+        error: data.error || `sandbox persist failed (${res.status})`,
+      };
+    }
+    return {
+      ok: true,
+      draftSha: data.draftSha,
+      paths: data.paths,
+      noop: data.noop,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
