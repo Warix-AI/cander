@@ -14,11 +14,34 @@ export type ClarificationQuestionType =
   | "time"
   | "datetime"
   | "date_range"
-  | "attachment";
+  | "attachment"
+  // Tap-first visual steps (website setup): rendered mini-previews instead of
+  // text chips. Values are choice ids, or small objects for palette/upload.
+  | "visual_choice"
+  | "palette"
+  | "type_sample"
+  | "upload"
+  | "urls";
+
+import { AI_CHOICE_VALUE } from "@/lib/ai/clarification/ai-choice";
+export { AI_CHOICE_VALUE };
+
+export type ClarificationChoicePreview =
+  | { kind: "style"; bg: string; fg: string; accent: string; radius: string; font?: string }
+  | { kind: "palette"; primary: string; accent: string; background: string; foreground: string; mode: "light" | "dark" }
+  | { kind: "type"; display: string; body: string; sample?: string }
+  | { kind: "component"; radius: string; shadow: string; border: string; density: "compact" | "regular" | "airy"; button: "rounded" | "pill" | "square" }
+  | { kind: "layout"; arrangement: "centered" | "left" | "split" | "bleed" | "grid" }
+  | { kind: "icon"; name: string };
 
 export type ClarificationChoice = {
   id: string;
   label: string;
+  /** One-line supporting copy under the label. */
+  hint?: string;
+  preview?: ClarificationChoicePreview;
+  /** Preselected when the step is first shown. */
+  recommended?: boolean;
 };
 
 export type ClarificationQuestion = {
@@ -32,6 +55,14 @@ export type ClarificationQuestion = {
   choices?: ClarificationChoice[];
   min?: number;
   max?: number;
+  /** Show a “Let AI choose” action that answers with AI_CHOICE_VALUE. */
+  aiChoice?: boolean;
+  /** visual_choice/palette: allow a free-text “Other…” value. */
+  allowCustom?: boolean;
+  /** multi_choice/visual_choice: select several. */
+  multiple?: boolean;
+  /** upload: which fields to render. */
+  uploadFields?: Array<"business_name" | "tagline" | "logo" | "favicon" | "og_title" | "og_description">;
 };
 
 export type ClarificationCardStatus =
@@ -129,7 +160,36 @@ export function validateQuestionAnswer(
       }
       break;
     }
+    case "visual_choice": {
+      if (value === AI_CHOICE_VALUE) return null;
+      if (question.multiple) {
+        if (!Array.isArray(value)) return "Pick one or more.";
+        return null;
+      }
+      if (typeof value !== "string") return "Pick one of the options.";
+      if (question.choices && !question.allowCustom && !question.choices.some((c) => c.id === value)) {
+        return "Pick one of the listed options.";
+      }
+      return null;
+    }
+    case "palette":
+    case "type_sample":
+    case "upload":
+      return null;
+    case "urls": {
+      const list = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[\s,]+/) : [];
+      for (const raw of list.map(String).filter(Boolean)) {
+        const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+        try {
+          new URL(candidate);
+        } catch {
+          return `“${raw}” doesn’t look like a web address.`;
+        }
+      }
+      return null;
+    }
     case "multi_choice": {
+      if (value === AI_CHOICE_VALUE) return null;
       if (!Array.isArray(value)) return "Select one or more options.";
       if (question.choices) {
         const allowed = new Set(question.choices.map((c) => c.id));

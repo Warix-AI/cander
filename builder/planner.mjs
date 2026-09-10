@@ -59,6 +59,8 @@ const DESIGN_INSTRUCTIONS = `You are a senior product designer who writes Tailwi
 2. A short Markdown style guide: spacing rhythm (section paddings), heading scale (which Tailwind classes for h1/h2/h3/lead), button variants (primary/secondary/ghost classes), card treatment, image treatment (aspect ratios, rounding, overlays), motion rules (framer-motion: fade-up on scroll, 0.4s, once), and the dark/light decision.
 No placeholder colors — pick real values.`;
 
+const INSPIRATION_INSTRUCTIONS = `You are a senior web designer analysing a reference site the client likes. From the extracted structure below, describe in ≤90 words what to LEARN from it — page structure and section order, visual hierarchy, density/whitespace, navigation pattern, component style (cards, buttons, imagery treatment), CTA placement, and tone. Never quote its copy, brand names or suggest reusing its assets. Output one plain paragraph.`;
+
 const RESEARCH_INSTRUCTIONS = `You are a market researcher for a web agency. Using web search, gather what a best-in-class website in this exact niche does today: 4–6 competitor or exemplar sites (name + URL + what they do well), typical page structure, trust signals customers expect (certifications, guarantees, reviews), pricing presentation norms, and 5 industry-specific phrases/terms to use. Output terse Markdown (max ~500 words). Cite URLs inline.`;
 
 /**
@@ -124,6 +126,7 @@ export async function runPlanningPhase(opts) {
       maxOutputTokens: 5000,
     }),
     componentAgent(opts, plan),
+    inspirationAgent(opts),
     opts.webSearch && !isApp
       ? subAgent(opts, "research", "Researching the market", {
           instructions: RESEARCH_INSTRUCTIONS,
@@ -133,12 +136,13 @@ export async function runPlanningPhase(opts) {
         })
       : Promise.resolve(null),
   ];
-  const [copy, design, components, research] = await Promise.all(tasks);
+  const [copy, design, components, inspiration, research] = await Promise.all(tasks);
 
   const packet = [
     "# Build packet",
     isApp ? "## App plan" : "## Site plan",
     plan,
+    inspiration ? `## Inspiration (structure only — never copy content)\n${inspiration}` : "",
     research ? `## Market research\n${research}` : "",
     design ? `## Design system (implement exactly; adjust only for correctness)\n${design}` : "",
     copy ? `## Final copy (use verbatim; do not invent different copy)\n${copy}` : "",
@@ -165,6 +169,80 @@ async function subAgent(opts, name, progress, call) {
     opts.log.emit("log", `${name} agent failed: ${err?.message || err}`);
     return null;
   }
+}
+
+/**
+ * Inspiration research: fetch the sites the user pointed at, reduce them to
+ * structure (headings, nav, sections, buttons), summarise what to learn, and
+ * record the summaries in the project spec via a spec_update event.
+ */
+async function inspirationAgent(opts) {
+  const urls = Array.isArray(opts.projectSpec?.inspiration)
+    ? opts.projectSpec.inspiration
+        .filter((i) => i && typeof i.url === "string" && !(i.summary && i.summary.trim()))
+        .map((i) => i.url)
+        .slice(0, 3)
+    : [];
+  if (!urls.length) return null;
+  opts.log.emit("progress", `Studying ${urls.length} reference site(s)…`);
+  const results = [];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(15_000),
+        headers: { "user-agent": "Mozilla/5.0 (compatible; CanderBuilder/1.0)", accept: "text/html" },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = (await res.text()).slice(0, 600_000);
+      const structure = extractStructure(html);
+      const summary = await opts.llm.text({
+        model: opts.model,
+        instructions: INSPIRATION_INSTRUCTIONS,
+        input: `URL: ${url}\n\n${structure}`,
+        maxOutputTokens: 400,
+      });
+      if (summary?.trim()) results.push({ url, summary: summary.trim() });
+    } catch (err) {
+      opts.log.emit("log", `inspiration: ${url} skipped (${err?.message || err})`);
+    }
+  }
+  if (!results.length) return null;
+  const existing = Array.isArray(opts.projectSpec?.inspiration) ? opts.projectSpec.inspiration : [];
+  const merged = existing.map((i) => results.find((r) => r.url === i.url) || i);
+  for (const r of results) if (!merged.some((m) => m.url === r.url)) merged.push(r);
+  opts.log.emit("spec_update", "Recorded inspiration research", {
+    patch: { inspiration: merged },
+    decision: `Studied ${results.length} reference site(s) for structure and hierarchy.`,
+  });
+  return results.map((r) => `- ${r.url}: ${r.summary}`).join("\n");
+}
+
+function extractStructure(html) {
+  const strip = (s) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const title = strip(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "");
+  const headings = [...html.matchAll(/<(h[1-3])[^>]*>([\s\S]*?)<\/\1>/gi)]
+    .map((m) => `${m[1].toUpperCase()}: ${strip(m[2]).slice(0, 80)}`)
+    .slice(0, 40);
+  const navLinks = [...(html.match(/<nav[\s\S]*?<\/nav>/i)?.[0] || "").matchAll(/<a[^>]*>([\s\S]*?)<\/a>/gi)]
+    .map((m) => strip(m[1]).slice(0, 30))
+    .filter(Boolean)
+    .slice(0, 15);
+  const buttons = [...html.matchAll(/<(?:button|a)[^>]*class=["'][^"']*(?:btn|button|cta)[^"']*["'][^>]*>([\s\S]*?)<\/(?:button|a)>/gi)]
+    .map((m) => strip(m[1]).slice(0, 30))
+    .filter(Boolean)
+    .slice(0, 12);
+  const sections = (html.match(/<section[\s>]/gi) || []).length;
+  const images = (html.match(/<img[\s>]/gi) || []).length;
+  const videos = (html.match(/<video[\s>]/gi) || []).length;
+  const hasDark = /(?:^|\s)dark(?:\s|$)|prefers-color-scheme:\s*dark/i.test(html);
+  return [
+    `Title: ${title}`,
+    `Nav links (${navLinks.length}): ${navLinks.join(" | ")}`,
+    `Heading outline:\n${headings.join("\n")}`,
+    `Button/CTA labels: ${buttons.join(" | ")}`,
+    `Counts: sections=${sections} images=${images} videos=${videos} darkTheme=${hasDark}`,
+  ].join("\n\n");
 }
 
 async function componentAgent(opts, plan) {

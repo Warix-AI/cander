@@ -583,8 +583,8 @@ export async function runBuildProjectTurn(
   if (isSiteProject && needsWebsiteGuidedSetup(websiteBrief)) {
     return {
       content: wantsCreate
-        ? "Finish the website setup questions above the composer (all 8 steps), then confirm **Build my site**. I won’t generate a draft until then — the preview stays blank with the progress ring."
-        : "Your website project is in guided setup. Answer the questions in the card above the composer — the preview stays blank until we build.",
+        ? "Finish the quick setup above the composer — every step is skippable — then tap **Build my site**. I’ll generate the draft right after."
+        : "Your website is in setup. Tap through the card above the composer (skip anything you like), then **Build my site**.",
       runtime: "cloud",
       offline: false,
       condensationOccurred: false,

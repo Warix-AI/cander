@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import {
   clarificationBack,
   clarificationNext,
@@ -18,8 +18,17 @@ import type {
 } from "@/lib/ai/clarification/schema";
 import {
   WEBSITE_SETUP_RESUME_TOOL,
-  countCompletedSetupSteps,
+  WEBSITE_SETUP_STEP_COUNT,
 } from "@/lib/ai/build/website-setup-brief";
+import { AI_CHOICE_VALUE } from "@/lib/ai/clarification/schema";
+import {
+  AiChooseButton,
+  IdentityField,
+  PaletteField,
+  TypeSampleField,
+  UrlsField,
+  VisualChoiceField,
+} from "@/components/chat/SetupVisualFields";
 import { persistWebsiteSetupProgress } from "@/lib/ai/clarification/website-setup-ui";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
@@ -29,16 +38,85 @@ function QuestionField({
   value,
   error,
   onChange,
+  ctx,
 }: {
   question: ClarificationQuestion;
   value: unknown;
   error?: string;
   onChange: (next: unknown) => void;
+  ctx?: { projectId?: string | null; workspaceId?: string | null; suggestedName?: string | null };
 }) {
   const inputClass =
     "w-full rounded-[10px] border border-border bg-input px-3 py-2 text-[14px] outline-none focus:border-foreground/30";
 
+  const heading = (
+    <>
+      <label className="text-[14px] font-medium leading-snug">{question.label}</label>
+      {question.description ? (
+        <p className="text-[12px] text-muted-foreground">{question.description}</p>
+      ) : null}
+    </>
+  );
+  const errorLine = error ? <p className="text-[12px] text-destructive">{error}</p> : null;
+  const aiOn = value === AI_CHOICE_VALUE;
+  const aiRow = question.aiChoice ? (
+    <div className="flex items-center gap-2 pt-0.5">
+      <AiChooseButton on={aiOn} onClick={() => onChange(aiOn ? undefined : AI_CHOICE_VALUE)} />
+    </div>
+  ) : null;
+
   switch (question.type) {
+    case "visual_choice":
+      return (
+        <div className="flex flex-col gap-2">
+          {heading}
+          <VisualChoiceField question={question} value={aiOn ? undefined : value} onChange={onChange} />
+          {aiRow}
+          {errorLine}
+        </div>
+      );
+    case "palette":
+      return (
+        <div className="flex flex-col gap-2">
+          {heading}
+          <PaletteField question={question} value={aiOn ? undefined : value} onChange={onChange} />
+          {aiRow}
+          {errorLine}
+        </div>
+      );
+    case "type_sample":
+      return (
+        <div className="flex flex-col gap-2">
+          {heading}
+          <TypeSampleField question={question} value={aiOn ? undefined : value} onChange={onChange} />
+          {aiRow}
+          {errorLine}
+        </div>
+      );
+    case "urls":
+      return (
+        <div className="flex flex-col gap-2">
+          {heading}
+          <UrlsField question={question} value={value} onChange={onChange} />
+          {errorLine}
+        </div>
+      );
+    case "upload":
+      return (
+        <div className="flex flex-col gap-2">
+          {heading}
+          <IdentityField
+            question={question}
+            value={aiOn ? undefined : value}
+            onChange={onChange}
+            projectId={ctx?.projectId}
+            workspaceId={ctx?.workspaceId}
+            suggestedName={ctx?.suggestedName}
+          />
+          {aiRow}
+          {errorLine}
+        </div>
+      );
     case "textarea":
       return (
         <div className="flex flex-col gap-1.5">
@@ -130,37 +208,39 @@ function QuestionField({
     case "multi_choice": {
       const selected = Array.isArray(value) ? value.map(String) : [];
       return (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[13px] font-medium">{question.label}</label>
+        <div className="flex flex-col gap-2">
+          {heading}
           <div className="flex flex-wrap gap-2">
             {(question.choices ?? []).map((c) => {
-              const on = selected.includes(c.id);
+              const on = !aiOn && selected.includes(c.id);
               return (
                 <button
                   key={c.id}
                   type="button"
+                  aria-pressed={on}
                   onClick={() =>
                     onChange(
                       on
                         ? selected.filter((id) => id !== c.id)
-                        : [...selected, c.id],
+                        : [...(aiOn ? [] : selected), c.id],
                     )
                   }
                   className={cn(
-                    "rounded-full px-3 py-1.5 text-[13px]",
+                    "inline-flex min-h-[36px] items-center gap-1.5 rounded-full px-3.5 text-[13px] transition",
                     on
                       ? "bg-foreground text-background"
-                      : "bg-muted text-muted-foreground",
+                      : "bg-muted text-foreground hover:bg-muted/70",
                   )}
                 >
+                  {on ? <Check className="h-3.5 w-3.5" strokeWidth={2.4} /> : null}
                   {c.label}
+                  {c.hint ? <span className="text-[11px] opacity-70">· {c.hint}</span> : null}
                 </button>
               );
             })}
           </div>
-          {error ? (
-            <p className="text-[12px] text-destructive">{error}</p>
-          ) : null}
+          {aiRow}
+          {errorLine}
         </div>
       );
     }
@@ -293,6 +373,35 @@ function ClarificationCardView({
     typeof card.resumeArguments?.projectId === "string"
       ? card.resumeArguments.projectId
       : null;
+  const suggestedName =
+    typeof card.resumeArguments?.projectName === "string"
+      ? card.resumeArguments.projectName
+      : null;
+  // Smart defaults: pre-select recommended options the first time a step shows.
+  const currentValue =
+    q && card.answers[q.id] === undefined && q.defaultValue !== undefined && !(q.id in card.answers)
+      ? q.defaultValue
+      : q
+        ? card.answers[q.id]
+        : undefined;
+  const answeredCount = card.questions.filter(
+    (question) => card.answers[question.id] !== undefined && card.answers[question.id] !== "",
+  ).length;
+  const stepCount = isWebsiteSetup ? WEBSITE_SETUP_STEP_COUNT : card.questions.length;
+
+  /** Website setup: any unanswered step becomes “Cander decides”. */
+  const finalizeWebsiteAnswers = (answers: Record<string, unknown>) => {
+    const out: Record<string, unknown> = { ...answers };
+    for (const question of card.questions) {
+      const v = out[question.id];
+      if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) {
+        if (question.defaultValue !== undefined && !(question.id in out)) out[question.id] = question.defaultValue;
+        else if (question.aiChoice) out[question.id] = AI_CHOICE_VALUE;
+        else delete out[question.id];
+      }
+    }
+    return out;
+  };
 
   const syncWebsiteBrief = (answers: Record<string, unknown>) => {
     if (!isWebsiteSetup || !projectId || !workspaceId) return;
@@ -322,11 +431,28 @@ function ClarificationCardView({
             </p>
           ) : null}
           {card.questions.length > 1 ? (
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {isWebsiteSetup
-                ? `${Math.min(8, countCompletedSetupSteps(card.answers))} of 8`
-                : `${card.stepIndex + 1} of ${card.questions.length}`}
-            </p>
+            <div className="mt-1.5 flex items-center gap-2">
+              <div className="flex gap-1" aria-hidden>
+                {card.questions.map((question, i) => (
+                  <span
+                    key={question.id}
+                    className={cn(
+                      "h-1 w-3 rounded-full transition-colors sm:w-4",
+                      i === card.stepIndex
+                        ? "bg-foreground"
+                        : card.answers[question.id] !== undefined
+                          ? "bg-foreground/50"
+                          : "bg-foreground/15",
+                    )}
+                  />
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {isWebsiteSetup
+                  ? `Step ${card.stepIndex + 1} of ${stepCount} · ${answeredCount} answered`
+                  : `${card.stepIndex + 1} of ${card.questions.length}`}
+              </p>
+            </div>
           ) : null}
         </div>
         <button
@@ -339,12 +465,13 @@ function ClarificationCardView({
         </button>
       </div>
 
-      <div className="px-4 py-3">
+      <div className="max-h-[min(52vh,520px)] overflow-y-auto px-4 py-3">
         {q ? (
           <QuestionField
             question={q}
-            value={card.answers[q.id]}
+            value={currentValue}
             error={card.errors[q.id]}
+            ctx={{ projectId, workspaceId, suggestedName }}
             onChange={(next) => {
               const patch = { [q.id]: next };
               patchClarificationAnswers(card.threadId, patch);
@@ -394,15 +521,35 @@ function ClarificationCardView({
             >
               Skip all
             </button>
+          ) : !isLast ? (
+            <button
+              type="button"
+              onClick={() => {
+                // Skip = leave unanswered; Cander decides at build time.
+                if (q) patchClarificationAnswers(card.threadId, { [q.id]: undefined });
+                if (clarificationNext(card.threadId)) syncWebsiteBrief(card.answers);
+              }}
+              className="min-h-[36px] rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted"
+            >
+              Skip
+            </button>
           ) : null}
           <button
             type="button"
             onClick={() => {
               if (!isLast) {
+                // Commit smart defaults the user didn't touch before moving on.
+                if (q && currentValue !== card.answers[q.id]) {
+                  patchClarificationAnswers(card.threadId, { [q.id]: currentValue });
+                }
                 if (clarificationNext(card.threadId)) {
-                  syncWebsiteBrief(card.answers);
+                  syncWebsiteBrief({ ...card.answers, ...(q ? { [q.id]: currentValue } : {}) });
                 }
                 return;
+              }
+              if (isWebsiteSetup) {
+                const finalized = finalizeWebsiteAnswers(card.answers);
+                patchClarificationAnswers(card.threadId, finalized);
               }
               const result = submitClarification(card.threadId);
               if (result) {
@@ -420,7 +567,7 @@ function ClarificationCardView({
                 onSubmitted?.(result);
               }
             }}
-            className="rounded-full bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background"
+            className="min-h-[36px] rounded-full bg-foreground px-3.5 text-[12.5px] font-medium text-background"
           >
             {isLast
               ? isWebsiteSetup

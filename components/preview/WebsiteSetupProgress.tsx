@@ -2,8 +2,9 @@
 
 import { CanderMark } from "@/components/brand/CanderMark";
 import { cn } from "@/lib/utils";
+import { WEBSITE_SETUP_STEP_COUNT } from "@/lib/ai/build/website-setup-brief";
 
-const SEGMENTS = 8;
+const SEGMENTS = WEBSITE_SETUP_STEP_COUNT;
 /** Gap between arcs in degrees */
 const GAP_DEG = 8;
 const SWEEP = (360 - GAP_DEG * SEGMENTS) / SEGMENTS;

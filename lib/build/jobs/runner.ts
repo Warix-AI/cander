@@ -57,6 +57,7 @@ import {
   projectSpecRepoFiles,
 } from "@/lib/ai/build/plan/spec-memory";
 import type { ProjectSpec } from "@/lib/ai/build/plan/types";
+import { signedProjectAssetUrl } from "@/lib/project-assets-server";
 
 const LOG = "[cander:build-job]";
 const BUILDER_DIR_IN_SANDBOX = ".cander/builder";
@@ -333,7 +334,10 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       projectName,
       siteUrl,
       brief,
-      projectSpec,
+      // Brand assets referenced as asset:<id> become short-lived signed URLs
+      // the builder can download_image into public/brand/ (config only —
+      // the persisted spec keeps the stable asset reference).
+      projectSpec: projectSpec ? await withSignedBrandAssets(projectSpec, job.projectId) : null,
       instruction: job.facts.instruction ?? null,
       conversation: job.facts.conversation ?? null,
       condensedContext: job.facts.condensedContext ?? null,
@@ -718,6 +722,28 @@ async function completeBuildJob(
 // ---------------------------------------------------------------------------
 // Project spec (durable memory)
 // ---------------------------------------------------------------------------
+
+async function withSignedBrandAssets(spec: ProjectSpec, projectId: string): Promise<ProjectSpec> {
+  const brand = spec.brand;
+  if (!brand) return spec;
+  const out = { ...brand };
+  const pairs: Array<[keyof typeof brand, keyof typeof brand]> = [
+    ["logoPath", "logoUrl"],
+    ["faviconPath", "faviconUrl"],
+    ["ogImagePath", "ogImageUrl"],
+  ];
+  for (const [pathKey, urlKey] of pairs) {
+    const ref = brand[pathKey];
+    if (!ref || !ref.startsWith("asset:")) continue;
+    try {
+      const signed = await signedProjectAssetUrl({ assetId: ref.slice("asset:".length), projectId });
+      if (signed) out[urlKey] = signed.url;
+    } catch (err) {
+      console.warn(LOG, "asset sign failed", { ref, error: err instanceof Error ? err.message : err });
+    }
+  }
+  return { ...spec, brand: out };
+}
 
 async function loadOrSeedProjectSpec(opts: {
   job: BuildJob;

@@ -210,6 +210,17 @@ export async function runAcceptance(opts) {
     if (siteOrigin && root?.ok && root.html && !root.html.includes(siteOrigin)) {
       issues.push(`/ never references ${siteOrigin} — set metadataBase: new URL("${siteOrigin}") in app/layout.tsx and use it in robots/sitemap/JSON-LD.`);
     }
+    const iconFile = ["app/icon.tsx", "app/icon.ts", "app/icon.png", "app/icon.svg", "app/icon.ico", "app/favicon.ico"].find((f) =>
+      existsSync(join(repoDir, f)),
+    );
+    if (!iconFile) {
+      issues.push("No favicon: add app/icon.tsx (ImageResponse from \"next/og\") or app/icon.png from the brand asset, plus app/apple-icon.");
+    } else if (root?.ok && root.html && !/<link[^>]+rel=["'](?:icon|shortcut icon)["']/i.test(root.html)) {
+      issues.push(`/ has no <link rel="icon"> even though ${iconFile} exists — check the file exports (size/contentType) and that it is under app/.`);
+    }
+    if (root?.ok && root.html && !/<meta[^>]+name=["']twitter:card["']/i.test(root.html)) {
+      issues.push("/ has no twitter:card meta — add metadata.twitter (card: \"summary_large_image\", title, description, images).");
+    }
     const ogFile = ["app/opengraph-image.tsx", "app/opengraph-image.ts", "app/opengraph-image.png", "app/opengraph-image.jpg"].find((f) =>
       existsSync(join(repoDir, f)),
     );

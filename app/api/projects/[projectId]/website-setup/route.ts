@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { assertProjectAccess } from "@/lib/security/project-access";
 import {
+  WEBSITE_SETUP_STEP_COUNT,
   countCompletedSetupSteps,
   emptyWebsiteSetupBrief,
   mergeAnswersIntoBrief,
@@ -157,7 +158,7 @@ export async function PATCH(request: Request, ctx: RouteCtx) {
   if (typeof body.completedSteps === "number") {
     brief = {
       ...brief,
-      completedSteps: Math.max(0, Math.min(8, body.completedSteps)),
+      completedSteps: Math.max(0, Math.min(WEBSITE_SETUP_STEP_COUNT, body.completedSteps)),
     };
   } else {
     brief = {

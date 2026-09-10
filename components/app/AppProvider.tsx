@@ -4602,6 +4602,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         openWebsiteSetupClarification({
           threadId: tid,
           projectId: projectKey,
+          projectName: "title" in match && typeof match.title === "string" ? match.title : null,
           answers: (brief.answers as Record<string, unknown>) ?? {},
         });
       })();
@@ -4992,6 +4993,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             openWebsiteSetupClarification({
               threadId: taskThreadId,
               projectId: project.id,
+              projectName: project.title,
             });
           }
           return {

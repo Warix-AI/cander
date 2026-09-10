@@ -17,7 +17,9 @@ export const QUALITY_BAR = `Quality bar — this must look like a real, launch-r
 - Design system in app/globals.css: CSS variables for brand colors from the brief, typography scale, radius. Tailwind utilities everywhere else.
 - Accessible: semantic landmarks, one h1 per page, focus styles, alt text, sufficient contrast.
 - SEO: export metadata from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (SITE_URL is given in the task — never invent a domain), title template, description, openGraph + twitter (with images), and per page \`alternates: { canonical: "<route>" }\` plus its own title/description. app/robots.ts and app/sitemap.ts must use SITE_URL and list every route. JSON-LD (Organization/LocalBusiness) in the root layout using SITE_URL.
-- Social image: create app/opengraph-image.tsx using \`ImageResponse\` from "next/og" (1200×630, brand colors, business name + tagline; export size/contentType/alt) and re-export it as app/twitter-image.tsx. Next serves it and wires og:image automatically — no external image hosting.
+- Social image: create app/opengraph-image.tsx using \`ImageResponse\` from "next/og" (1200×630, brand colors, business name + tagline; export size/contentType/alt) and re-export it as app/twitter-image.tsx. Next serves it and wires og:image automatically — no external image hosting. If the spec gives a social title/description, use them for openGraph.title/description.
+- Favicon & app icon (required): if the spec's brand has a logo/favicon URL, download_image it into public/brand/ and create app/icon.png (512×512 or the original) and app/apple-icon.png from it; otherwise create app/icon.tsx and app/apple-icon.tsx with \`ImageResponse\` (brand mark or initials on the primary color, export size/contentType). Never leave the default Next favicon; the HTML must carry <link rel="icon"> and apple-touch-icon.
+- Brand logo: when a logo URL is provided, download it to public/brand/logo.<ext> and use it in the header/footer (with alt text) instead of a text-only wordmark.
 - Routing: the home page MUST be app/page.tsx (the boot skeleton file — overwrite it). Route groups like app/(marketing)/... are fine for other pages, but never create a second page that resolves to "/" and never leave the skeleton placeholder.
 - Responsive from 360px to 1440px. Test with check_preview after each batch of pages.`;
 
@@ -162,6 +164,18 @@ export function editTask(ctx) {
 }
 
 const BRIEF_LABELS = {
+  purpose: "Purpose",
+  primary_cta: "Primary call to action",
+  visual_direction: "Visual direction",
+  palette: "Palette",
+  typography: "Typography",
+  component_style: "Component style",
+  layout_direction: "Layout",
+  pages: "Pages",
+  features: "Features",
+  inspiration_urls: "Inspiration sites",
+  identity: "Identity",
+  anything_else: "Notes from the user",
   business_goal: "Business & primary goal",
   audience_cta: "Audience & main call to action",
   site_depth: "Site depth / pages",
@@ -177,7 +191,11 @@ export function formatBrief(brief) {
   for (const [key, label] of Object.entries(BRIEF_LABELS)) {
     const v = brief?.[key];
     if (v == null || v === "" || (Array.isArray(v) && !v.length)) continue;
-    lines.push(`- ${label}: ${Array.isArray(v) ? v.join(", ") : String(v)}`);
+    if (v === "__ai__") {
+      lines.push(`- ${label}: (your call — choose what fits best)`);
+      continue;
+    }
+    lines.push(`- ${label}: ${Array.isArray(v) ? v.join(", ") : typeof v === "object" ? JSON.stringify(v) : String(v)}`);
   }
   for (const [k, v] of Object.entries(brief || {})) {
     if (k in BRIEF_LABELS || k === "confirm_build" || v == null || v === "") continue;

@@ -4,17 +4,38 @@
 
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
 import type { SiteSpec } from "@/lib/ai/build/site-spec";
+import {
+  WEBSITE_SETUP_STEPS,
+  WEBSITE_SETUP_STEP_KEYS,
+  legacyAnswersFromSteps,
+  type IdentityAnswer,
+  type PaletteAnswer,
+} from "@/lib/ai/build/website-setup-steps";
 import { cleanBriefAnswers } from "@/lib/ai/build/plan/spec-memory";
 
 export type WebsiteSetupStatus = "setup" | "building" | "ready" | "failed";
 
 export type WebsiteSetupAnswers = {
+  // Tap-first steps (current). Values may be the AI_CHOICE_VALUE sentinel.
+  purpose?: string;
+  primary_cta?: string;
+  visual_direction?: string;
+  palette?: PaletteAnswer | string;
+  typography?: string;
+  component_style?: string;
+  layout_direction?: string;
+  pages?: string[] | string;
+  features?: string[] | string;
+  inspiration_urls?: string[] | string;
+  identity?: IdentityAnswer | string;
+  anything_else?: string;
+  // Legacy 8-question brief (older projects; also derived from the steps).
   business_goal?: string;
   audience_cta?: string;
   site_depth?: string;
   visual_style?: string;
   brand_colors?: string;
-  layout_shape?: string;
+  layout_shape?: string | string[];
   copy_tone?: string;
   sections_features?: string | string[];
   confirm_build?: boolean | string;
@@ -41,7 +62,8 @@ export type WebsiteSetupBrief = {
   updatedAt: string;
 };
 
-export const WEBSITE_SETUP_ANSWER_KEYS = [
+/** Legacy brief keys — still accepted and derived from the new steps. */
+export const WEBSITE_SETUP_LEGACY_KEYS = [
   "business_goal",
   "audience_cta",
   "site_depth",
@@ -52,105 +74,17 @@ export const WEBSITE_SETUP_ANSWER_KEYS = [
   "sections_features",
 ] as const;
 
-export type WebsiteSetupAnswerKey = (typeof WEBSITE_SETUP_ANSWER_KEYS)[number];
+/** Current step keys (tap-first setup). */
+export const WEBSITE_SETUP_ANSWER_KEYS = WEBSITE_SETUP_STEP_KEYS;
 
-export const WEBSITE_SETUP_QUESTIONS: ClarificationQuestion[] = [
-  {
-    id: "business_goal",
-    type: "textarea",
-    label: "What does the business do, and what’s the primary goal of this site?",
-    description: "E.g. local clinic booking more appointments, SaaS product signups.",
-    placeholder: "We’re a … Our site should …",
-    required: true,
-  },
-  {
-    id: "audience_cta",
-    type: "textarea",
-    label: "Who is the audience, and what’s the primary call to action?",
-    description: "Who should visit, and what should they do?",
-    placeholder: "Audience: … CTA: Book a call / Buy / Get a quote…",
-    required: true,
-  },
-  {
-    id: "site_depth",
-    type: "single_choice",
-    label: "How deep should the site be?",
-    required: true,
-    choices: [
-      { id: "landing", label: "Single landing page" },
-      { id: "small", label: "Small site (Home + a few pages)" },
-      { id: "multi", label: "Multi-page (services, about, contact, …)" },
-    ],
-  },
-  {
-    id: "visual_style",
-    type: "single_choice",
-    label: "Visual style direction",
-    required: true,
-    choices: [
-      { id: "clean-saas", label: "Clean SaaS" },
-      { id: "warm-local", label: "Warm local / trust" },
-      { id: "editorial", label: "Editorial" },
-      { id: "bold-modern", label: "Bold modern" },
-      { id: "dark-premium", label: "Dark premium" },
-    ],
-  },
-  {
-    id: "brand_colors",
-    type: "textarea",
-    label: "Brand colors",
-    description: "Hex codes, brand names, or a short palette note.",
-    placeholder: "Primary #0F172A, accent #38BDF8, or “navy and soft gold”",
-    required: true,
-  },
-  {
-    id: "layout_shape",
-    type: "multi_choice",
-    label: "Layout shape",
-    description: "Pick the feel that fits best.",
-    required: true,
-    choices: [
-      { id: "rounded", label: "Rounded" },
-      { id: "sharp", label: "Sharp" },
-      { id: "spacious", label: "Spacious" },
-      { id: "dense", label: "Dense" },
-      { id: "minimal", label: "Minimal" },
-      { id: "layered", label: "Layered" },
-    ],
-  },
-  {
-    id: "copy_tone",
-    type: "textarea",
-    label: "Copy tone — and real content vs AI placeholders?",
-    description:
-      "Tone (friendly, formal, punchy…) and whether to invent placeholder copy or wait for real text.",
-    placeholder: "Tone: professional but warm. Use AI draft copy for now.",
-    required: true,
-  },
-  {
-    id: "sections_features",
-    type: "multi_choice",
-    label: "Required sections & features",
-    required: true,
-    choices: [
-      { id: "services", label: "Services" },
-      { id: "gallery", label: "Gallery" },
-      { id: "testimonials", label: "Testimonials" },
-      { id: "faq", label: "FAQ" },
-      { id: "forms", label: "Forms" },
-      { id: "contact", label: "Contact" },
-      { id: "locations", label: "Locations" },
-      { id: "pricing", label: "Pricing" },
-    ],
-  },
-  {
-    id: "confirm_build",
-    type: "boolean",
-    label: "Ready to build your site from these answers?",
-    description: "We’ll design from your brief, pull matching components, then compose the draft.",
-    required: true,
-  },
-];
+export type WebsiteSetupAnswerKey =
+  | (typeof WEBSITE_SETUP_ANSWER_KEYS)[number]
+  | (typeof WEBSITE_SETUP_LEGACY_KEYS)[number];
+
+export const WEBSITE_SETUP_STEP_COUNT = WEBSITE_SETUP_STEPS.length;
+
+/** The setup card's questions (tap-first, all skippable). */
+export const WEBSITE_SETUP_QUESTIONS: ClarificationQuestion[] = WEBSITE_SETUP_STEPS;
 
 export const WEBSITE_SETUP_RESUME_TOOL = "website.build_from_setup";
 
@@ -180,19 +114,29 @@ function answerFilled(value: unknown): boolean {
 export function countCompletedSetupSteps(
   answers: WebsiteSetupAnswers | Record<string, unknown>,
 ): number {
+  const a = answers as Record<string, unknown>;
   let n = 0;
   for (const key of WEBSITE_SETUP_ANSWER_KEYS) {
-    if (answerFilled(answers[key])) n += 1;
+    if (answerFilled(a[key])) n += 1;
+  }
+  if (n === 0) {
+    // Legacy briefs answered the old 8 questions.
+    for (const key of WEBSITE_SETUP_LEGACY_KEYS) {
+      if (answerFilled(a[key])) n += 1;
+    }
   }
   return n;
 }
 
+/**
+ * Setup is complete once the user taps “Build my site” — every step is
+ * skippable, so confirmation (not answer count) is the gate.
+ */
 export function isWebsiteSetupComplete(brief: WebsiteSetupBrief): boolean {
   return (
-    countCompletedSetupSteps(brief.answers) >= 8 &&
-    (brief.answers.confirm_build === true ||
-      brief.answers.confirm_build === "true" ||
-      Boolean(brief.confirmedAt))
+    brief.answers.confirm_build === true ||
+    brief.answers.confirm_build === "true" ||
+    Boolean(brief.confirmedAt)
   );
 }
 
@@ -209,8 +153,24 @@ export function needsWebsiteGuidedSetup(
   return !isWebsiteSetupComplete(brief);
 }
 
+/** Legacy-shaped view of the answers (steps mapped onto the 8 old keys). */
+export function legacyBriefAnswers(
+  answers: WebsiteSetupAnswers | Record<string, unknown>,
+): WebsiteSetupAnswers {
+  const a = answers as Record<string, unknown>;
+  const hasSteps = WEBSITE_SETUP_ANSWER_KEYS.some((k) => answerFilled(a[k]));
+  if (!hasSteps) return answers as WebsiteSetupAnswers;
+  return { ...legacyAnswersFromSteps(a), ...pickLegacy(a), confirm_build: a.confirm_build as boolean | string | undefined } as WebsiteSetupAnswers;
+}
+
+function pickLegacy(a: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of WEBSITE_SETUP_LEGACY_KEYS) if (answerFilled(a[k])) out[k] = a[k];
+  return out;
+}
+
 export function briefToPlanningPrompt(brief: WebsiteSetupBrief): string {
-  const a = brief.answers;
+  const a = legacyBriefAnswers(brief.answers);
   const sections = Array.isArray(a.sections_features)
     ? a.sections_features.join(", ")
     : a.sections_features ?? "";
@@ -237,7 +197,7 @@ export function briefToPlanningPrompt(brief: WebsiteSetupBrief): string {
 export function formatWebsiteSetupUserSummary(
   answers: WebsiteSetupAnswers | Record<string, unknown>,
 ): string {
-  const a = answers as WebsiteSetupAnswers;
+  const a = legacyBriefAnswers(answers);
   const depth =
     a.site_depth === "landing"
       ? "a single landing page"
@@ -283,10 +243,11 @@ export function mergeAnswersIntoBrief(
     ...brief.answers,
   };
   const cleaned = cleanBriefAnswers(answers);
-  for (const key of WEBSITE_SETUP_ANSWER_KEYS) {
+  for (const key of [...WEBSITE_SETUP_ANSWER_KEYS, ...WEBSITE_SETUP_LEGACY_KEYS]) {
     if (key in cleaned) {
       const v = cleaned[key];
-      if (typeof v === "string" || Array.isArray(v)) {
+      if (v === undefined) continue;
+      if (typeof v === "string" || Array.isArray(v) || (v && typeof v === "object")) {
         nextAnswers[key] = v as never;
       }
     }
@@ -327,7 +288,7 @@ export function normalizeWebsiteSetupBrief(raw: unknown): WebsiteSetupBrief {
     status,
     completedSteps:
       typeof o.completedSteps === "number"
-        ? Math.max(0, Math.min(8, o.completedSteps))
+        ? Math.max(0, Math.min(WEBSITE_SETUP_STEP_COUNT, o.completedSteps))
         : countCompletedSetupSteps(answers),
     answers,
     confirmedAt: typeof o.confirmedAt === "string" ? o.confirmedAt : undefined,

@@ -19,6 +19,7 @@ import { patchWebsiteSetupBrief } from "@/lib/api/website-setup-client";
 export function openWebsiteSetupClarification(opts: {
   threadId: string;
   projectId: string;
+  projectName?: string | null;
   answers?: Record<string, unknown>;
 }) {
   const existing = getActiveClarification(opts.threadId);
@@ -33,12 +34,15 @@ export function openWebsiteSetupClarification(opts: {
   }
   return openClarificationCard({
     threadId: opts.threadId,
-    title: "Website setup",
+    title: "Set up your website",
     description:
-      "Eight quick answers, then confirm — we’ll design and build your draft.",
+      "Tap through a few quick choices — skip anything, or let Cander choose. Then we build your draft.",
     questions: WEBSITE_SETUP_QUESTIONS,
     resumeTool: WEBSITE_SETUP_RESUME_TOOL,
-    resumeArguments: { projectId: opts.projectId },
+    resumeArguments: {
+      projectId: opts.projectId,
+      ...(opts.projectName ? { projectName: opts.projectName } : {}),
+    },
   });
 }
 
