@@ -215,6 +215,7 @@ async function main() {
     conversation: config.conversation || null,
     condensedContext: config.condensedContext || null,
     routeMap: config.routeMap || null,
+    runtimeContext: config.runtimeContext || null,
     plan: plan?.markdown || null,
   };
 

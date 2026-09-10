@@ -245,10 +245,10 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   const admin = createSupabaseAdminClient();
   const { data: project } = await admin
     .from("projects")
-    .select("name, title, kind, cander_subdomain, custom_domain, published_url")
+    .select("title, kind, cander_subdomain, custom_domain, published_url")
     .eq("id", job.projectId)
     .maybeSingle();
-  const projectName = String(project?.name ?? project?.title ?? job.title ?? "New site");
+  const projectName = String(project?.title ?? job.title ?? "New site");
   // The URL the site will live at, so metadataBase / canonical / OG image
   // URLs are right on the first publish instead of pointing at an invented
   // domain.
@@ -347,6 +347,15 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       brief,
     });
 
+    // One trusted context object per turn (project, repo, backend, deploy,
+    // preview, instructions, design system, recent changes). The builder
+    // renders `runtimeContext` into its prompt; ids stay server-side.
+    const { resolveProjectRuntime, renderProjectRuntimeForAgent } = await import("@/lib/build/project-runtime");
+    const runtime = await resolveProjectRuntime({ projectId: job.projectId, workspaceId: job.workspaceId }).catch((err) => {
+      console.warn(LOG, "project runtime unavailable", err instanceof Error ? err.message : err);
+      return null;
+    });
+
     const config = {
       jobId: job.id,
       projectId: job.projectId,
@@ -354,7 +363,9 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       mode: job.facts.mode,
       projectKind,
       projectName,
-      siteUrl,
+      siteUrl: runtime?.domains.siteUrl || siteUrl,
+      runtimeContext: runtime ? renderProjectRuntimeForAgent(runtime) : null,
+      backendStatus: runtime?.backend.status ?? null,
       brief,
       // Brand assets referenced as asset:<id> become short-lived signed URLs
       // the builder can download_image into public/brand/ (config only —

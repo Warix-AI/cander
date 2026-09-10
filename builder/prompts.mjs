@@ -114,6 +114,7 @@ export function createTask(ctx) {
   if (ctx.projectKind === "app") {
     return [
       `Project: ${ctx.projectName || "Untitled app"}`,
+      ctx.runtimeContext ? `Project state (trusted, resolved by Cander this turn):\n${ctx.runtimeContext}` : "",
       ctx.siteUrl ? `SITE_URL (the app will be published here; use it for metadataBase): ${ctx.siteUrl}` : "",
       `The user asked for this app:\n"""\n${ctx.instruction || "(no description — build a sensible starter dashboard app)"}\n"""`,
       ctx.plan
@@ -127,6 +128,7 @@ export function createTask(ctx) {
   const brief = ctx.brief ? formatBrief(ctx.brief) : "(no setup brief — infer a sensible small-business site)";
   return [
     `Project: ${ctx.projectName || "Untitled site"}`,
+    ctx.runtimeContext ? `Project state (trusted, resolved by Cander this turn):\n${ctx.runtimeContext}` : "",
     ctx.siteUrl ? `SITE_URL (the site will be published here; use it for metadataBase, canonical, sitemap, robots, JSON-LD): ${ctx.siteUrl}` : "",
     ctx.projectSpec
       ? `Project spec (durable memory — the source of truth for purpose, audience, pages and visual language; also at cander.spec.json / DESIGN.md):\n${formatProjectSpec(ctx.projectSpec)}`
@@ -159,6 +161,7 @@ export function editInstructions(ctx = {}) {
 export function editTask(ctx) {
   return [
     `Project: ${ctx.projectName || (ctx.projectKind === "app" ? "Untitled app" : "Untitled site")}`,
+    ctx.runtimeContext ? `Project state (trusted, resolved by Cander this turn):\n${ctx.runtimeContext}` : "",
     ctx.siteUrl ? `SITE_URL (published at): ${ctx.siteUrl}` : "",
     ctx.routeMap ? `Site map at the current draft (URL → file):\n${ctx.routeMap}` : "",
     ctx.projectSpec
