@@ -539,10 +539,45 @@ async function runSitePublishCommandTurn(
   } catch {
     /* fall through */
   }
+
+  // Draft vs live: republish only makes sense when the tip moved.
+  let publishState: "never" | "ahead" | "current" | "unknown" = "unknown";
+  let liveUrl: string | null = null;
+  if (typeof window !== "undefined") {
+    try {
+      const { fetchPublishStatusClient } = await import("@/lib/api/project-publish-client");
+      const status = await fetchPublishStatusClient({
+        projectId: ctx.projectId,
+        workspaceId: ctx.workspaceId,
+      });
+      if (status) {
+        liveUrl = status.publishedUrl;
+        publishState = !status.published ? "never" : status.aheadOfLive ? "ahead" : "current";
+      }
+    } catch {
+      /* unknown */
+    }
+  }
+
+  let content: string;
+  if (!ready) {
+    content =
+      "The draft isn’t ready to publish yet — let it finish building (or ask me to fix what’s blocking it) and then say **publish**.";
+  } else if (publishState === "current") {
+    content = `Your live site is already up to date with this draft${liveUrl ? ` (${liveUrl})` : ""}. Make a change first, then say **republish**.`;
+  } else if (publishState === "ahead") {
+    content =
+      "Your draft has changes that aren’t live yet. I’ve opened the publish panel — confirm to republish and I’ll run a live check afterwards.";
+  } else {
+    content =
+      "Ready to go live. I’ve opened the publish panel — pick your domain and confirm, and I’ll verify the live site once it’s up.";
+  }
+  if (ready && publishState !== "current" && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("cander:open-publish", { detail: { projectId: ctx.projectId } }));
+  }
+
   return {
-    content: ready
-      ? "Ready to go live. Press **Publish** in the top-right to push this draft to your live site — I’ll confirm the URL once it’s up."
-      : "The draft isn’t ready to publish yet — let it finish building (or ask me to fix what’s blocking it) and then press **Publish**.",
+    content,
     runtime: "cloud",
     offline: false,
     condensationOccurred: false,
@@ -552,7 +587,7 @@ async function runSitePublishCommandTurn(
         name: "build.publish",
         ok: true,
         output: ready
-          ? "publish_requested:ready"
+          ? `publish_requested:ready:${publishState}`
           : "publish_requested:not_ready",
         pauseForUser: true,
       },

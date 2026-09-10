@@ -10,14 +10,23 @@ import {
 import { resolvePublishUrl } from "@/lib/publish-domain";
 import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { formatPublishUserError } from "@/lib/publish/format-publish-error";
+import { usePublishStatus } from "@/lib/hooks/use-publish-status";
 
 export function PublishSheet() {
-  const { overlay, closeOverlay, publishApp, liveUrl, projectId } = useApp();
+  const { overlay, closeOverlay, publishApp, liveUrl, projectId, workspaceId } =
+    useApp();
   const { publishBuild } = useSpaceMutation();
   const options = usePublishDomainOptions();
   const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const publishStatus = usePublishStatus({
+    projectId,
+    workspaceId,
+    enabled: overlay === "publish",
+  });
+  const isRepublish = Boolean(publishStatus?.published);
+  const upToDate = Boolean(publishStatus?.published && !publishStatus.aheadOfLive);
 
   const url = useMemo(
     () => resolvePublishUrl(options, selected, liveUrl),
@@ -37,7 +46,7 @@ export function PublishSheet() {
     setError(null);
     try {
       const result = await publishBuild(projectId, url);
-      publishApp(result.url);
+      publishApp(result.url, result.verification ?? null);
       closeOverlay();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Publish failed.");
@@ -54,7 +63,26 @@ export function PublishSheet() {
             <p className="font-mono text-[11px] tracking-[0.08em] text-muted-foreground uppercase">
               Publish
             </p>
-            <h2 className="heading-display mt-2 text-[1.45rem]">Publish your app</h2>
+            <h2 className="heading-display mt-2 text-[1.45rem]">
+              {isRepublish ? "Republish your site" : "Publish your app"}
+            </h2>
+            {publishStatus?.published ? (
+              <p
+                className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] ${
+                  upToDate
+                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "bg-amber-500/10 text-amber-800 dark:text-amber-200"
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className={`h-1.5 w-1.5 rounded-full ${upToDate ? "bg-emerald-500" : "bg-amber-500"}`}
+                />
+                {upToDate
+                  ? "Live site matches your draft"
+                  : "Draft is ahead of live — republish to update"}
+              </p>
+            ) : null}
           </div>
           <button
             type="button"
@@ -103,7 +131,15 @@ export function PublishSheet() {
           onClick={() => void handlePublish()}
           className="mt-6 inline-flex h-10 w-full items-center justify-center rounded-full bg-primary text-[13.5px] font-medium text-primary-foreground hover:bg-foreground disabled:opacity-50"
         >
-          {busy ? "Publishing…" : "Publish"}
+          {busy
+            ? isRepublish
+              ? "Republishing…"
+              : "Publishing…"
+            : isRepublish
+              ? upToDate
+                ? "Republish anyway"
+                : "Republish"
+              : "Publish"}
         </button>
       </div>
     </div>

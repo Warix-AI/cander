@@ -67,7 +67,7 @@ export function createSupabaseBuildRuntimeApi(
 
       if (infra?.ok && infra.url) {
         notifyEntityStoreChange();
-        return { url: infra.url };
+        return { url: infra.url, verification: infra.verification ?? null };
       }
 
       const buildSandboxOn =

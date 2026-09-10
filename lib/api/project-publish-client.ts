@@ -11,6 +11,8 @@ async function authToken() {
   return session?.access_token ?? null;
 }
 
+import type { PublishVerification } from "@/lib/api/build-runtime-api";
+
 export type PublishProjectClientResult = {
   ok: boolean;
   url: string | null;
@@ -21,7 +23,44 @@ export type PublishProjectClientResult = {
   message?: string;
   error?: string;
   status?: string;
+  verification?: PublishVerification | null;
 };
+
+export type PublishStatusClient = {
+  draftSha: string | null;
+  publishedSha: string | null;
+  publishedUrl: string | null;
+  published: boolean;
+  /** Draft tip differs from what is live → Republish needed. */
+  aheadOfLive: boolean;
+  customDomain: string | null;
+  customDomainStatus: string | null;
+  verification?: PublishVerification | null;
+};
+
+/** Draft-vs-live status (+ optional fresh live verification). */
+export async function fetchPublishStatusClient(opts: {
+  projectId: string;
+  workspaceId: string;
+  verify?: boolean;
+}): Promise<PublishStatusClient | null> {
+  if (!isSupabaseConfigured()) return null;
+  const token = await authToken();
+  if (!token) return null;
+  const params = new URLSearchParams({ workspaceId: opts.workspaceId });
+  if (opts.verify) params.set("verify", "1");
+  try {
+    const res = await fetch(
+      `/api/projects/${encodeURIComponent(opts.projectId)}/publish?${params}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as PublishStatusClient | null;
+    return data ?? null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Production publish via Next build-infra route.
@@ -71,6 +110,7 @@ export async function publishProjectClient(opts: {
     const data = (await res.json().catch(() => ({}))) as PublishProjectClientResult & {
       error?: string;
       publishedUrl?: string | null;
+      verification?: PublishVerification | null;
     };
     if (!res.ok) {
       return {
@@ -92,6 +132,7 @@ export async function publishProjectClient(opts: {
       gitSyncRepairNeeded: data.gitSyncRepairNeeded,
       message: data.message,
       status: data.status,
+      verification: data.verification ?? null,
     };
   } catch (err) {
     return {

@@ -17,7 +17,20 @@ export type BuildRuntimeApi = {
     ctx: WorkspaceCtx,
     projectId: string,
     input: PublishInput,
-  ): Promise<{ url: string }>;
+  ): Promise<PublishBuildResult>;
+};
+
+/** Post-publish live-site checklist (see lib/build/publish/verify-live.ts). */
+export type PublishVerification = {
+  url: string;
+  checkedAt: string;
+  ok: boolean;
+  checks: { id: string; label: string; ok: boolean; detail?: string }[];
+};
+
+export type PublishBuildResult = {
+  url: string;
+  verification?: PublishVerification | null;
 };
 
 export function createLocalBuildRuntimeApi(): BuildRuntimeApi {

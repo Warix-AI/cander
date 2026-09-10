@@ -37,6 +37,7 @@ import {
   needsWebsiteGuidedSetup,
 } from "@/lib/ai/build/website-setup-brief";
 import { fetchWebsiteSetupBrief } from "@/lib/api/website-setup-client";
+import type { PublishVerification } from "@/lib/api/build-runtime-api";
 import {
   migrateThreadTaskState,
   upsertThreadTaskState,
@@ -532,7 +533,7 @@ type AppContextValue = {
   liveUrl: string | null;
   memory: ProjectMemory;
   fillSecret: (keyName: string, value: string) => void;
-  publishApp: (url: string) => void;
+  publishApp: (url: string, verification?: PublishVerification | null) => void;
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -3954,41 +3955,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       });
     };
+    // Chat "publish" / "republish" on a ready draft opens the publish sheet.
+    const onOpenPublish = () => setOverlay("publish");
     window.addEventListener("cander:build-job-finished", onFinished);
     window.addEventListener("cander:build-job-progress", onProgress);
+    window.addEventListener("cander:open-publish", onOpenPublish);
     return () => {
       window.removeEventListener("cander:build-job-finished", onFinished);
       window.removeEventListener("cander:build-job-progress", onProgress);
+      window.removeEventListener("cander:open-publish", onOpenPublish);
     };
   }, [threadId, setThreads]);
 
-  const publishApp = useCallback((url: string) => {
-    // Publish is a backend deployment state change — stay in the project UI.
-    // Do not swap the draft preview iframe to the production URL.
-    setOverlay(null);
-    setBuildTool("preview");
-    setThreads((current) =>
-      current.map((thread) =>
-        thread.id !== threadId
-          ? thread
-          : {
-              ...thread,
-              messages: [
-                ...thread.messages,
-                {
-                  id: nextId("a"),
-                  role: "assistant" as const,
-                  content: `Published. Live URL: ${url}`,
-                  at: nowTime(),
-                  blocks: [
-                    { type: "deploy" as const, url, status: "live" as const },
-                  ],
-                },
-              ],
-            },
-      ),
-    );
-  }, [threadId]);
+  const publishApp = useCallback(
+    (url: string, verification?: PublishVerification | null) => {
+      // Publish is a backend deployment state change — stay in the project UI.
+      // Do not swap the draft preview iframe to the production URL.
+      setOverlay(null);
+      setBuildTool("preview");
+      const failed = verification?.checks.filter((c) => !c.ok) ?? [];
+      const checklist = verification
+        ? failed.length
+          ? `\n\nLive check: ${verification.checks.length - failed.length}/${verification.checks.length} passed.\n${failed
+              .map((c) => `✗ ${c.label}${c.detail ? ` — ${c.detail}` : ""}`)
+              .join("\n")}\n\nWant me to fix these and republish?`
+          : `\n\nLive check: all ${verification.checks.length} passed (title, description, canonical, Open Graph, robots, sitemap, 404).`
+        : "";
+      setThreads((current) =>
+        current.map((thread) =>
+          thread.id !== threadId
+            ? thread
+            : {
+                ...thread,
+                messages: [
+                  ...thread.messages,
+                  {
+                    id: nextId("a"),
+                    role: "assistant" as const,
+                    content: `Published. Live URL: ${url}${checklist}`,
+                    at: nowTime(),
+                    blocks: [
+                      { type: "deploy" as const, url, status: "live" as const },
+                    ],
+                  },
+                ],
+              },
+        ),
+      );
+      window.dispatchEvent(
+        new CustomEvent("cander:publish-status-changed", { detail: { url } }),
+      );
+    },
+    [threadId],
+  );
 
   const openSpace = useCallback((id: NavDestinationId) => {
     const allowed = memberSpaces(workspaceId, actor.id, workspacePolicies);
