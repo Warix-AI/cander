@@ -21,6 +21,7 @@ import { ensureProjectInfra } from "@/lib/build/ensure-project-infra";
 import { assertNoConcurrentBuild } from "@/lib/build/sandbox/lock";
 import { resolveSafePublishedUrl } from "@/lib/build/publish/published-url";
 import { preflightPublishTip } from "@/lib/build/publish/preflight";
+import { ensureDraftTipAuthor } from "@/lib/build/git/ensure-tip-author";
 import {
   beginPublishAttempt,
   findSuccessfulPublishForSha,
@@ -423,7 +424,24 @@ async function publishProjectWithRow(opts: {
       projectId: opts.projectId,
       workspaceId: opts.workspaceId,
     });
+    // Tips committed before CANDER_BUILD_GIT_AUTHOR_* was configured carry the
+    // bot identity Vercel rejects; amend in place rather than block publish.
+    let ensuredAuthor: { draftSha: string; repaired: boolean } = {
+      draftSha: "",
+      repaired: false,
+    };
+    try {
+      ensuredAuthor = await ensureDraftTipAuthor({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+      });
+    } catch (err) {
+      logPublish(publishAttemptId, "tip_author_repair_failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
     const publishSha = (
+      ensuredAuthor.draftSha ||
       ensuredSeo.draftSha ||
       ensuredPkg.draftSha ||
       draftSha
@@ -443,6 +461,7 @@ async function publishProjectWithRow(opts: {
       draftBranch,
       seoRepaired: ensuredSeo.repaired,
       packageRepaired: ensuredPkg.repaired,
+      authorRepaired: ensuredAuthor.repaired,
     });
 
     await updatePublishAttempt({
