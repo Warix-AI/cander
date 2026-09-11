@@ -6,6 +6,7 @@ import type { AgentTrigger } from "@/lib/agents/types";
 
 export type SchedulePreset =
   | "hourly"
+  | "every_few_hours"
   | "daily"
   | "weekday"
   | "weekly"
@@ -21,6 +22,9 @@ export function cronFromPreset(
   switch (preset) {
     case "hourly":
       return `${minute} * * * *`;
+    case "every_few_hours":
+      // Every 3 hours at :minute
+      return `${minute} */3 * * *`;
     case "daily":
       return `${minute} ${hour} * * *`;
     case "weekday":
@@ -81,32 +85,37 @@ export function computeNextRunAt(
 
 function matchCronField(field: string, value: number): boolean {
   if (field === "*") return true;
-  if (field.includes("/")) {
-    const [base, stepRaw] = field.split("/");
-    const step = Number(stepRaw) || 1;
-    if (base === "*") return value % step === 0;
+  if (field.startsWith("*/")) {
+    const step = Number(field.slice(2));
+    return Number.isFinite(step) && step > 0 && value % step === 0;
+  }
+  if (field.includes(",")) {
+    return field.split(",").some((part) => matchCronField(part.trim(), value));
   }
   if (field.includes("-")) {
     const [a, b] = field.split("-").map(Number);
     return value >= (a ?? 0) && value <= (b ?? 0);
-  }
-  if (field.includes(",")) {
-    return field.split(",").map(Number).includes(value);
   }
   return Number(field) === value;
 }
 
 function matchDow(field: string, dow: number): boolean {
   if (field === "*") return true;
-  // cron: 0/7 = Sunday, 1-5 = Mon-Fri
-  const normalized = field.replace(/7/g, "0");
-  if (normalized.includes("-")) {
-    const [a, b] = normalized.split("-").map(Number);
-    if (a! <= b!) return dow >= a! && dow <= b!;
-    return dow >= a! || dow <= b!;
-  }
-  if (normalized.includes(",")) {
-    return normalized.split(",").map(Number).includes(dow);
-  }
-  return Number(normalized) === dow;
+  // Cron often uses 0/7 = Sunday
+  return matchCronField(field, dow) || (dow === 0 && matchCronField(field, 7));
+}
+
+export const SCHEDULE_PRESET_LABELS: Record<SchedulePreset, string> = {
+  hourly: "Every hour",
+  every_few_hours: "Every few hours",
+  daily: "Daily",
+  weekday: "Weekdays",
+  weekly: "Weekly",
+  custom: "Custom",
+};
+
+/** Stable schedule slot key for idempotent cron runs. */
+export function scheduleIdempotencyKey(agentId: string, dueAt: string): string {
+  const slot = dueAt.replace(/[^0-9T]/g, "").slice(0, 15);
+  return `schedule:${agentId}:${slot || "unknown"}`;
 }

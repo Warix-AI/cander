@@ -5,8 +5,10 @@
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
+  appendAgentRunEvent,
   completeAgentRun,
   createAgentRun,
+  getAgentRun,
   getLatestSuccessfulRun,
   getProjectAgent,
   loadAgentBundle,
@@ -14,6 +16,7 @@ import {
 } from "@/lib/agents/server";
 import { computeNextRunAt } from "@/lib/agents/schedule";
 import type { AgentRun, ProjectAgentBundle } from "@/lib/agents/types";
+import { isHighImpactTool } from "@/lib/agents/types";
 import { runAgentServerLoop } from "@/lib/ai/runtime/agent-loop-server";
 import { authorizeToolExposure } from "@/lib/connectors/authorization";
 import { listActiveConnections } from "@/lib/connectors/connections";
@@ -27,6 +30,12 @@ export type RunAgentInput = {
   triggerType: "manual" | "schedule" | string;
   /** Optional user nudge for this run */
   message?: string;
+  /** Reuse a run already created (e.g. Gmail poll). */
+  existingRunId?: string;
+  triggerPayload?: Record<string, unknown>;
+  idempotencyKey?: string;
+  /** When set, high-impact tools may run (post-approval). */
+  approvedAction?: boolean;
 };
 
 export type RunAgentResult = {
@@ -35,6 +44,16 @@ export type RunAgentResult = {
   toolCount: number;
 };
 
+function extractDraftReply(content: string): string | null {
+  const labeled = content.match(
+    /DRAFT_REPLY\s*[:\-]?\s*([\s\S]+?)(?:\n#{1,3}\s|\n---|\s*$)/i,
+  );
+  if (labeled?.[1]?.trim()) return labeled[1].trim().slice(0, 8000);
+  const fence = content.match(/```(?:email|reply|draft)?\n([\s\S]+?)```/i);
+  if (fence?.[1]?.trim()) return fence[1].trim().slice(0, 8000);
+  return null;
+}
+
 function buildRuntimePrompt(opts: {
   bundle: ProjectAgentBundle;
   previousSuccessfulAt: string | null;
@@ -42,6 +61,7 @@ function buildRuntimePrompt(opts: {
   nowIso: string;
 }): string {
   const { bundle, previousSuccessfulAt, triggerType, nowIso } = opts;
+  const instructions = bundle.agent.instructions?.trim();
   const skillBlocks = bundle.skills
     .map((s) => {
       const name = s.skill?.name ?? s.skillLabel;
@@ -57,16 +77,32 @@ function buildRuntimePrompt(opts: {
           .join("\n")
       : "None attached.";
 
+  const approvalLines = bundle.tools
+    .filter((t) => t.enabled)
+    .map(
+      (t) =>
+        `- ${t.toolId} on ${t.connectionId}: approval=${t.approvalMode}`,
+    )
+    .join("\n");
+
   return [
     `# Agent`,
     `You are running as the agent: ${bundle.agent.name}.`,
     bundle.agent.description ? `Description: ${bundle.agent.description}` : "",
     ``,
-    `# Your Skills`,
-    skillBlocks || "(No skills attached — explain that you need a skill.)",
+    `# Instructions`,
+    instructions || "(No instructions yet.)",
+    ``,
+    `# Skills`,
+    skillBlocks || "(No additional skills.)",
     ``,
     `# Knowledge`,
     knowledge,
+    ``,
+    `# Tool approval policy`,
+    approvalLines || "(No tools granted.)",
+    `High-impact tools (send/reply/delete/etc.) are blocked until the user approves, unless approval_mode is auto.`,
+    `If you draft a reply, label it clearly with DRAFT_REPLY: and do not send.`,
     ``,
     `# Run Context`,
     `Trigger: ${triggerType}`,
@@ -84,11 +120,12 @@ function buildRuntimePrompt(opts: {
     .join("\n");
 }
 
-/** Intersect agent tool grants with live connection authz. */
+/** Intersect agent tool grants with live connection authz + approval mode. */
 export async function resolveAgentAllowedToolIds(opts: {
   bundle: ProjectAgentBundle;
   workspaceId: string;
   profileId: string;
+  approvedAction?: boolean;
 }): Promise<string[]> {
   const admin = createSupabaseAdminClient();
   const connections = await listActiveConnections({
@@ -120,7 +157,17 @@ export async function resolveAgentAllowedToolIds(opts: {
       profileId: opts.profileId,
       connection: conn,
     });
-    if (authz.ok) allowed.push(t.toolId);
+    if (!authz.ok) continue;
+
+    // Conservative default: block high-impact unless auto or explicitly approved.
+    if (
+      (t.approvalMode === "require_approval" || isHighImpactTool(t.toolId)) &&
+      t.approvalMode !== "auto" &&
+      !opts.approvedAction
+    ) {
+      continue;
+    }
+    allowed.push(t.toolId);
   }
   return [...new Set(allowed)];
 }
@@ -135,8 +182,12 @@ export async function runAgent(
   );
   if (!bundle) throw new Error("Agent not found.");
 
-  if (input.triggerType === "schedule" && bundle.agent.status !== "active") {
-    throw new Error("Scheduled runs require an active agent.");
+  if (
+    (input.triggerType === "schedule" ||
+      input.triggerType === "gmail_new_message") &&
+    bundle.agent.status !== "active"
+  ) {
+    throw new Error("Scheduled/event runs require an active agent.");
   }
   if (
     input.triggerType === "manual" &&
@@ -146,16 +197,47 @@ export async function runAgent(
     throw new Error("Paused agents cannot run. Set status to Active.");
   }
 
-  // 1) Create run BEFORE the model loop
-  const run = await createAgentRun({
-    workspaceId: input.workspaceId,
-    projectId: input.projectId,
-    agentId: input.agentId,
-    triggerType: input.triggerType,
-    userId: input.profileId,
-  });
+  const run =
+    input.existingRunId
+      ? (await getAgentRun(input.existingRunId, input.workspaceId)) ??
+        (await createAgentRun({
+          workspaceId: input.workspaceId,
+          projectId: input.projectId,
+          agentId: input.agentId,
+          triggerType: input.triggerType,
+          userId: input.profileId,
+          idempotencyKey: input.idempotencyKey,
+          triggerPayload: input.triggerPayload,
+        }))
+      : await createAgentRun({
+          workspaceId: input.workspaceId,
+          projectId: input.projectId,
+          agentId: input.agentId,
+          triggerType: input.triggerType,
+          userId: input.profileId,
+          idempotencyKey: input.idempotencyKey,
+          triggerPayload: input.triggerPayload,
+        });
+
+  // Idempotent hit — do not re-execute finished / waiting runs.
+  if (run.status !== "running") {
+    return {
+      run,
+      content: run.summary || `Run already ${run.status}.`,
+      toolCount: 0,
+    };
+  }
 
   try {
+    await appendAgentRunEvent({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      agentId: input.agentId,
+      runId: run.id,
+      eventType: "work_started",
+      payload: { triggerType: input.triggerType },
+    });
+
     const previous = await getLatestSuccessfulRun(
       input.agentId,
       input.workspaceId,
@@ -164,6 +246,7 @@ export async function runAgent(
       bundle,
       workspaceId: input.workspaceId,
       profileId: input.profileId,
+      approvedAction: input.approvedAction,
     });
 
     const nowIso = new Date().toISOString();
@@ -176,10 +259,8 @@ export async function runAgent(
 
     const userMessage =
       input.message?.trim() ||
-      `Execute your skills now for this ${input.triggerType} run. Use tools as needed, then summarize.`;
+      `Execute your instructions now for this ${input.triggerType} run. Use tools as needed, then summarize.`;
 
-    // Prefer admin client for unattended + consistent authz; tool executor
-    // still validates profile/workspace/connection.
     const client = createSupabaseAdminClient();
 
     const loop = await runAgentServerLoop({
@@ -194,11 +275,90 @@ export async function runAgent(
       maxIterations: 8,
     });
 
+    for (const tr of loop.toolResults) {
+      await appendAgentRunEvent({
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+        agentId: input.agentId,
+        runId: run.id,
+        eventType: "tool_called",
+        payload: {
+          tool: tr.toolId,
+          ok: tr.status === "success",
+          outputPreview: String(
+            tr.error?.message ??
+              (typeof tr.data === "string"
+                ? tr.data
+                : JSON.stringify(tr.data ?? {})),
+          ).slice(0, 500),
+        },
+      });
+    }
+
     const summary =
       loop.content.trim().slice(0, 2000) ||
       (loop.toolResults.length
         ? `Completed with ${loop.toolResults.length} tool call(s).`
         : "Completed with no tool calls.");
+
+    const draft = extractDraftReply(loop.content);
+    const needsApproval =
+      !input.approvedAction &&
+      !loop.pause &&
+      Boolean(draft) &&
+      (input.triggerType === "gmail_new_message" || Boolean(draft));
+
+    if (needsApproval && draft) {
+      await appendAgentRunEvent({
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+        agentId: input.agentId,
+        runId: run.id,
+        eventType: "draft_created",
+        payload: {
+          draft,
+          messageId: input.triggerPayload?.messageId ?? null,
+          threadId: input.triggerPayload?.threadId ?? null,
+        },
+      });
+      await appendAgentRunEvent({
+        workspaceId: input.workspaceId,
+        projectId: input.projectId,
+        agentId: input.agentId,
+        runId: run.id,
+        eventType: "approval_needed",
+        payload: { reason: "Send requires approval", draft },
+      });
+      const waiting = await completeAgentRun({
+        runId: run.id,
+        workspaceId: input.workspaceId,
+        status: "approval_needed",
+        summary,
+      });
+
+      // Keep schedules moving even when a draft is waiting on the user.
+      if (
+        input.triggerType === "schedule" &&
+        bundle.agent.trigger.type === "schedule"
+      ) {
+        const next = computeNextRunAt(bundle.agent.trigger, new Date());
+        await updateProjectAgent(
+          input.agentId,
+          input.workspaceId,
+          input.projectId,
+          {
+            lastTriggeredAt: nowIso,
+            nextRunAt: next ? next.toISOString() : null,
+          },
+        );
+      }
+
+      return {
+        run: waiting,
+        content: loop.content,
+        toolCount: loop.toolResults.length,
+      };
+    }
 
     const completed = await completeAgentRun({
       runId: run.id,
@@ -208,7 +368,15 @@ export async function runAgent(
       error: loop.pause ? loop.pause.message : undefined,
     });
 
-    // Advance schedule after a scheduled trigger
+    await appendAgentRunEvent({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      agentId: input.agentId,
+      runId: run.id,
+      eventType: loop.pause ? "error" : "completed",
+      payload: { summary: completed.summary },
+    });
+
     if (
       input.triggerType === "schedule" &&
       bundle.agent.trigger.type === "schedule"
@@ -223,7 +391,10 @@ export async function runAgent(
           nextRunAt: next ? next.toISOString() : null,
         },
       );
-    } else if (input.triggerType === "manual") {
+    } else if (
+      input.triggerType === "manual" ||
+      input.triggerType === "gmail_new_message"
+    ) {
       await updateProjectAgent(
         input.agentId,
         input.workspaceId,
@@ -239,6 +410,14 @@ export async function runAgent(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Agent run failed.";
+    await appendAgentRunEvent({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      agentId: input.agentId,
+      runId: run.id,
+      eventType: "error",
+      payload: { error: message },
+    });
     const failed = await completeAgentRun({
       runId: run.id,
       workspaceId: input.workspaceId,
@@ -257,6 +436,8 @@ export async function claimDueScheduledAgents(limit = 10): Promise<
     workspaceId: string;
     projectId: string;
     createdBy: string;
+    /** ISO next_run_at that was due — used for schedule idempotency slots. */
+    dueAt: string;
   }>
 > {
   const admin = createSupabaseAdminClient();
@@ -265,7 +446,9 @@ export async function claimDueScheduledAgents(limit = 10): Promise<
 
   const { data: due } = await admin
     .from("project_agents")
-    .select("id, workspace_id, project_id, created_by, trigger, schedule_claimed_at")
+    .select(
+      "id, workspace_id, project_id, created_by, trigger, schedule_claimed_at, next_run_at",
+    )
     .eq("status", "active")
     .not("next_run_at", "is", null)
     .lte("next_run_at", now)
@@ -277,17 +460,18 @@ export async function claimDueScheduledAgents(limit = 10): Promise<
     workspaceId: string;
     projectId: string;
     createdBy: string;
+    dueAt: string;
   }> = [];
 
   for (const row of due ?? []) {
     const trigger = row.trigger as { type?: string } | null;
     if (trigger?.type !== "schedule") continue;
-    // Skip if claimed recently (< 10 min) without clear
     const claimedAt = row.schedule_claimed_at
       ? new Date(String(row.schedule_claimed_at)).getTime()
       : 0;
     if (claimedAt && Date.now() - claimedAt < 10 * 60 * 1000) continue;
 
+    const dueAt = String(row.next_run_at ?? now);
     const { data: updated } = await admin
       .from("project_agents")
       .update({
@@ -306,6 +490,7 @@ export async function claimDueScheduledAgents(limit = 10): Promise<
       workspaceId: String(row.workspace_id),
       projectId: String(row.project_id),
       createdBy: String(row.created_by),
+      dueAt,
     });
   }
 

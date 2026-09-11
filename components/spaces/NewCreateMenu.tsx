@@ -34,7 +34,7 @@ export const CREATE_MENU_OPTIONS: CreateStart[] = [
     summary: item.summary,
     kind: item.kind,
     space: "build" as const,
-    title: `New ${item.label}`,
+    title: item.title ?? `New ${item.label}`,
     disabled: item.disabled,
   })),
 ];

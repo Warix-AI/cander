@@ -10,11 +10,17 @@ export const BUILD_CREATE_OPTIONS: {
   kind: ProjectKind;
   label: string;
   summary: string;
+  title?: string;
   disabled?: boolean;
 }[] = [
+  {
+    kind: "automation",
+    label: "Agent",
+    summary: "Automate work with connectors",
+    title: "Buddy",
+  },
   { kind: "app", label: "App", summary: "Interactive app or tool", disabled: true },
   { kind: "site", label: "Website", summary: "Marketing site or landing page", disabled: true },
-  // Agent create hidden for now — keep automation kind for existing projects.
 ];
 
 type NewBuildMenuProps = {
@@ -62,7 +68,7 @@ export function NewBuildMenu({ onCreated, icon = false }: NewBuildMenuProps) {
                   openCreate({
                     space: "build",
                     kind: item.kind,
-                    defaultTitle: `New ${item.label}`,
+                    defaultTitle: item.title ?? `New ${item.label}`,
                     summary: item.summary,
                   });
                 }}

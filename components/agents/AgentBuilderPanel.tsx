@@ -3,14 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
+  Check,
   LoaderCircle,
   Play,
-  Plus,
-  Sparkles,
+  X,
 } from "lucide-react";
 import {
   applyAgentConfigPatchClient,
+  approveAgentRunClient,
+  fetchAgentActivityClient,
   loadAgentBundleClient,
+  postAgentActivityMessageClient,
+  rejectAgentRunClient,
+  reviseAgentRunClient,
   runAgentClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
@@ -20,31 +25,29 @@ import {
 } from "@/lib/agents/cache";
 import {
   buildScheduleTrigger,
+  SCHEDULE_PRESET_LABELS,
   type SchedulePreset,
 } from "@/lib/agents/schedule";
 import type {
+  AgentApprovalMode,
   AgentConfigPatch,
   AgentRun,
+  AgentRunEvent,
   AgentStatus,
   AgentTrigger,
   ProjectAgentBundle,
 } from "@/lib/agents/types";
+import { defaultApprovalModeForTool } from "@/lib/agents/types";
 import { fetchConnectorConnections } from "@/lib/api/connector-client";
 import type { ConnectorConnection } from "@/lib/connectors/types";
-import { policyFor } from "@/lib/workspace-policy";
+import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
-import { AgentInspector } from "./builder/AgentInspector";
+import { humanizeConnectorId } from "./builder/humanize";
 import { Field, TextArea } from "./builder/fields";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
-type ConfigTab =
-  | "skills"
-  | "access"
-  | "knowledge"
-  | "trigger"
-  | "runs"
-  | "agent";
+type ConfigTab = "instructions" | "connections" | "schedule" | "activity";
 
 export function AgentBuilderPanel({
   workspaceId,
@@ -65,12 +68,23 @@ export function AgentBuilderPanel({
   const [loading, setLoading] = useState(() => !cachedBundle);
   const [error, setError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [tab, setTab] = useState<ConfigTab>("skills");
+  const [tab, setTab] = useState<ConfigTab>("instructions");
   const [runBusy, setRunBusy] = useState(false);
   const [runMessage, setRunMessage] = useState<string | null>(null);
+  const [activity, setActivity] = useState<{
+    runs: AgentRun[];
+    events: AgentRunEvent[];
+  } | null>(null);
   const savedClearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const knowledgeBases = policyFor(workspaceId).knowledgeBases;
+  const reloadActivity = async () => {
+    const next = await fetchAgentActivityClient({
+      workspaceId,
+      projectId,
+      agentId,
+    });
+    setActivity(next);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -83,9 +97,10 @@ export function AgentBuilderPanel({
       setBundle(null);
     }
     setError(null);
-    setTab("skills");
+    setTab("instructions");
     setSaveState("idle");
     setRunMessage(null);
+    setActivity(null);
 
     void loadAgentBundleClient({ workspaceId, projectId, agentId })
       .then((next) => {
@@ -107,6 +122,14 @@ export function AgentBuilderPanel({
       })
       .catch(() => {
         if (!cancelled) setConnections([]);
+      });
+
+    void fetchAgentActivityClient({ workspaceId, projectId, agentId })
+      .then((next) => {
+        if (!cancelled) setActivity(next);
+      })
+      .catch(() => {
+        if (!cancelled) setActivity({ runs: [], events: [] });
       });
 
     return () => {
@@ -133,9 +156,15 @@ export function AgentBuilderPanel({
   }, [workspaceId, projectId, agentId]);
 
   const toolMap = useMemo(() => {
-    const map = new Map<string, boolean>();
+    const map = new Map<
+      string,
+      { enabled: boolean; approvalMode: AgentApprovalMode }
+    >();
     for (const t of bundle?.tools ?? []) {
-      map.set(`${t.connectionId}:${t.toolId}`, t.enabled);
+      map.set(`${t.connectionId}:${t.toolId}`, {
+        enabled: t.enabled,
+        approvalMode: t.approvalMode,
+      });
     }
     return map;
   }, [bundle?.tools]);
@@ -211,11 +240,13 @@ export function AgentBuilderPanel({
         projectId,
         agentId,
       });
-      setRunMessage(
-        result.run.status === "completed"
-          ? result.run.summary || "Run completed."
-          : result.run.error || "Run finished with issues.",
-      );
+      const statusLabel =
+        result.run.status === "approval_needed"
+          ? "Draft ready — needs approval."
+          : result.run.status === "completed"
+            ? result.run.summary || "Run completed."
+            : result.run.error || "Run finished with issues.";
+      setRunMessage(statusLabel);
       const refreshed = await loadAgentBundleClient({
         workspaceId,
         projectId,
@@ -223,7 +254,8 @@ export function AgentBuilderPanel({
         force: true,
       });
       setBundle(refreshed);
-      setTab("runs");
+      await reloadActivity();
+      setTab("activity");
     } catch (err) {
       setRunMessage(err instanceof Error ? err.message : "Run failed.");
     } finally {
@@ -258,13 +290,6 @@ export function AgentBuilderPanel({
     );
   }
 
-  const inspectorTab =
-    tab === "trigger" || tab === "runs"
-      ? "skills"
-      : tab === "agent"
-        ? "agent"
-        : tab;
-
   return (
     <div className={cn("flex h-full min-h-0 flex-col", BROWSER_CHROME_BG)}>
       <header className="flex shrink-0 items-start gap-3 border-b border-border px-4 py-3">
@@ -293,7 +318,7 @@ export function AgentBuilderPanel({
           </div>
           <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
             {bundle.agent.description ||
-              "Skills define behavior · Tools define capability · Triggers wake the AI"}
+              "Instructions · Connections · Schedule · Activity"}
           </p>
         </div>
         <button
@@ -307,7 +332,7 @@ export function AgentBuilderPanel({
           ) : (
             <Play className="h-3.5 w-3.5" strokeWidth={1.8} />
           )}
-          Run
+          Run now
         </button>
       </header>
 
@@ -320,12 +345,10 @@ export function AgentBuilderPanel({
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-border px-3 py-2 [scrollbar-width:none]">
         {(
           [
-            ["skills", "Skills"],
-            ["access", "Access"],
-            ["knowledge", "Knowledge"],
-            ["trigger", "Trigger"],
-            ["runs", "Runs"],
-            ["agent", "Identity"],
+            ["instructions", "Instructions"],
+            ["connections", "Connections"],
+            ["schedule", "Schedule"],
+            ["activity", "Activity"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -344,54 +367,65 @@ export function AgentBuilderPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {tab === "trigger" ? (
+        {tab === "instructions" ? (
           <div className="h-full overflow-y-auto px-4 py-4">
-            <TriggerEditor
+            <InstructionsEditor
+              name={bundle.agent.name}
+              description={bundle.agent.description}
+              instructions={bundle.agent.instructions}
+              busy={saveState === "saving"}
+              onSaveIdentity={(patch) => void saveIdentity(patch)}
+              onSaveInstructions={(instructions) =>
+                void applyPatch({ instructions })
+              }
+            />
+          </div>
+        ) : null}
+        {tab === "connections" ? (
+          <div className="h-full overflow-y-auto px-4 py-4">
+            <ConnectionsEditor
+              connections={connections}
+              connectorEnabled={connectorEnabled}
+              toolMap={toolMap}
+              busy={saveState === "saving"}
+              onPatch={(patch) => void applyPatch(patch)}
+            />
+          </div>
+        ) : null}
+        {tab === "schedule" ? (
+          <div className="h-full overflow-y-auto px-4 py-4">
+            <ScheduleEditor
               trigger={bundle.agent.trigger}
               nextRunAt={bundle.agent.nextRunAt}
+              connections={connections}
               busy={saveState === "saving"}
-              onSave={(trigger) => void applyPatch({ trigger, status: "active" })}
-            />
-          </div>
-        ) : tab === "runs" ? (
-          <div className="h-full overflow-y-auto px-4 py-4">
-            <RunsList runs={bundle.runs ?? []} />
-          </div>
-        ) : tab === "skills" ? (
-          <div className="h-full overflow-y-auto px-4 py-4">
-            <SkillsConfig
-              skills={bundle.skills}
-              busy={saveState === "saving"}
-              onCreate={(name, markdown) =>
-                void applyPatch({ createSkill: { name, markdown } })
-              }
-              onUpdate={(skillId, markdown, name) =>
-                void applyPatch({
-                  updateSkill: { skillId, markdown, name },
-                })
-              }
-              onRemove={(skillId) =>
-                void applyPatch({ removeSkillIds: [skillId] })
+              onSave={(trigger) =>
+                void applyPatch({ trigger, status: "active" })
               }
             />
           </div>
-        ) : (
-          <AgentInspector
-            tab={inspectorTab as "agent" | "access" | "skills" | "knowledge"}
-            onTabChange={(next) => setTab(next)}
-            agent={bundle.agent}
-            skills={bundle.skills}
-            knowledge={bundle.knowledge}
-            knowledgeBases={knowledgeBases}
-            connections={connections}
-            connectorEnabled={connectorEnabled}
-            toolMap={toolMap}
-            busy={saveState === "saving"}
-            hideTabs
-            onSaveIdentity={(patch) => void saveIdentity(patch)}
-            onPatch={(patch) => void applyPatch(patch)}
-          />
-        )}
+        ) : null}
+        {tab === "activity" ? (
+          <div className="h-full overflow-hidden">
+            <ActivityPanel
+              workspaceId={workspaceId}
+              projectId={projectId}
+              agentId={agentId}
+              runs={activity?.runs ?? bundle.runs ?? []}
+              events={activity?.events ?? []}
+              onRefresh={async () => {
+                await reloadActivity();
+                const refreshed = await loadAgentBundleClient({
+                  workspaceId,
+                  projectId,
+                  agentId,
+                  force: true,
+                });
+                setBundle(refreshed);
+              }}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -420,125 +454,245 @@ function StatusSelect({
   );
 }
 
-function SkillsConfig({
-  skills,
+function InstructionsEditor({
+  name,
+  description,
+  instructions,
   busy,
-  onCreate,
-  onUpdate,
-  onRemove,
+  onSaveIdentity,
+  onSaveInstructions,
 }: {
-  skills: ProjectAgentBundle["skills"];
+  name: string;
+  description: string;
+  instructions: string;
   busy: boolean;
-  onCreate: (name: string, markdown: string) => void;
-  onUpdate: (skillId: string, markdown: string, name?: string) => void;
-  onRemove: (skillId: string) => void;
+  onSaveIdentity: (
+    patch: Partial<{ name: string; description: string }>,
+  ) => void;
+  onSaveInstructions: (instructions: string) => void;
 }) {
-  const primary = skills[0];
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <div>
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Skills</h2>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">
+          Instructions
+        </h2>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          The skill is the program. It tells the AI what to do; Access decides
-          what it can do.
+          Markdown that defines Buddy’s job. Saved into the agent and used in
+          every run.
         </p>
       </div>
-
-      {primary?.skill ? (
-        <div className="space-y-3 rounded-[12px] border border-border p-3">
-          <Field
-            label="Skill name"
-            defaultValue={primary.skill.name}
-            disabled={busy}
-            onCommit={(name) =>
-              onUpdate(primary.skillId, primary.skill!.markdown, name)
-            }
-          />
-          <TextArea
-            label="Skill markdown"
-            defaultValue={primary.skill.markdown}
-            disabled={busy}
-            rows={14}
-            placeholder="# Lead Follow-up&#10;&#10;When this skill runs:…"
-            onCommit={(markdown) => onUpdate(primary.skillId, markdown)}
-          />
-          {skills.length > 1 ? (
-            <p className="text-[12px] text-muted-foreground">
-              +{skills.length - 1} more attached skill
-              {skills.length > 2 ? "s" : ""}.
-            </p>
-          ) : null}
-          <button
-            type="button"
-            disabled={busy}
-            className="text-[12px] text-destructive hover:underline disabled:opacity-50"
-            onClick={() => onRemove(primary.skillId)}
-          >
-            Remove skill
-          </button>
-        </div>
-      ) : (
-        <div className="rounded-[12px] border border-dashed border-border px-4 py-8 text-center">
-          <p className="text-[13px] text-muted-foreground">
-            No skills yet. Create one to define this agent’s job.
-          </p>
-          <button
-            type="button"
-            disabled={busy}
-            className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-foreground px-3 py-1.5 text-[12.5px] font-medium text-background"
-            onClick={() =>
-              onCreate(
-                "Primary skill",
-                "# Skill\n\nWhen this skill runs:\n\n1. …\n",
-              )
-            }
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={1.8} />
-            Create skill
-          </button>
-        </div>
-      )}
-
-      <button
-        type="button"
+      <Field
+        label="Name"
+        defaultValue={name}
         disabled={busy}
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
-        onClick={() => {
-          const draft = window.prompt(
-            "Describe what this agent should do (we'll turn it into a skill):",
-          );
-          if (!draft?.trim()) return;
-          onCreate(
-            "Generated skill",
-            `# Skill\n\nWhen this skill runs:\n\n${draft.trim()}`,
-          );
-        }}
-      >
-        <Sparkles className="h-3.5 w-3.5" strokeWidth={1.6} />
-        Generate skill from description
-      </button>
+        onCommit={(value) => onSaveIdentity({ name: value })}
+      />
+      <Field
+        label="Description"
+        defaultValue={description}
+        disabled={busy}
+        onCommit={(value) => onSaveIdentity({ description: value })}
+      />
+      <TextArea
+        label="Instructions markdown"
+        defaultValue={instructions}
+        disabled={busy}
+        rows={16}
+        placeholder="# Buddy&#10;&#10;When a matching email arrives…"
+        onCommit={(value) => onSaveInstructions(value)}
+      />
     </div>
   );
 }
 
-function TriggerEditor({
+function ConnectionsEditor({
+  connections,
+  connectorEnabled,
+  toolMap,
+  busy,
+  onPatch,
+}: {
+  connections: ConnectorConnection[];
+  connectorEnabled: Map<string, boolean>;
+  toolMap: Map<string, { enabled: boolean; approvalMode: AgentApprovalMode }>;
+  busy: boolean;
+  onPatch: (patch: AgentConfigPatch) => void;
+}) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const gmail = connections.filter((c) => c.connectorId === "gmail");
+  const other = connections.filter((c) => c.connectorId !== "gmail");
+  const ordered = [...gmail, ...other];
+
+  if (!ordered.length) {
+    return (
+      <div className="mx-auto max-w-md py-10 text-center text-[13px] text-muted-foreground">
+        Connect Gmail (or other apps) under Connectors, then grant specific
+        accounts and tools here.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-xl space-y-3">
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">
+          Connections
+        </h2>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          Pick a specific account, enable tools, and set approval for sends.
+        </p>
+      </div>
+      {ordered.map((conn) => {
+        const enabled = connectorEnabled.get(conn.id) ?? false;
+        const open = expanded === conn.id || enabled;
+        const tools = toolsForConnector(conn.connectorId);
+        return (
+          <div key={conn.id} className="rounded-[12px] border border-border">
+            <div className="flex items-center gap-2 px-3 py-2.5">
+              <button
+                type="button"
+                className="min-w-0 flex-1 text-left"
+                onClick={() => setExpanded(open ? null : conn.id)}
+              >
+                <span className="block truncate text-[13px] font-medium">
+                  {humanizeConnectorId(conn.connectorId)}
+                </span>
+                <span className="block truncate text-[11.5px] text-muted-foreground">
+                  {conn.connectionMode === "workspace_shared"
+                    ? "Shared workspace connection"
+                    : "Personal connection"}{" "}
+                  · {conn.id.slice(0, 10)}
+                </span>
+              </button>
+              <input
+                type="checkbox"
+                checked={enabled}
+                disabled={busy}
+                onChange={(event) => {
+                  const on = event.target.checked;
+                  setExpanded(on ? conn.id : null);
+                  onPatch({
+                    setConnectorEnabled: [
+                      {
+                        connectionId: conn.id,
+                        connectorId: conn.connectorId,
+                        enabled: on,
+                      },
+                    ],
+                    ...(on && conn.connectorId === "gmail"
+                      ? {
+                          setToolPermissions: tools.map((tool) => ({
+                            connectionId: conn.id,
+                            toolId: tool.id,
+                            enabled:
+                              tool.access === "read" ||
+                              tool.id === "gmail.draft" ||
+                              tool.id === "gmail.reply" ||
+                              tool.id === "gmail.send",
+                            approvalMode: defaultApprovalModeForTool(tool.id),
+                          })),
+                        }
+                      : {}),
+                  });
+                }}
+              />
+            </div>
+            {open ? (
+              <div className="space-y-2 border-t border-border px-3 py-2.5">
+                {tools.map((tool) => {
+                  const state = toolMap.get(`${conn.id}:${tool.id}`);
+                  const on = state?.enabled ?? false;
+                  const mode =
+                    state?.approvalMode ?? defaultApprovalModeForTool(tool.id);
+                  return (
+                    <div
+                      key={tool.id}
+                      className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]"
+                    >
+                      <label className="flex min-w-0 items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          disabled={busy}
+                          onChange={(event) =>
+                            onPatch({
+                              setToolPermissions: [
+                                {
+                                  connectionId: conn.id,
+                                  toolId: tool.id,
+                                  enabled: event.target.checked,
+                                  approvalMode: mode,
+                                },
+                              ],
+                            })
+                          }
+                        />
+                        <span className="truncate">{tool.label}</span>
+                      </label>
+                      {on ? (
+                        <select
+                          value={mode}
+                          disabled={busy}
+                          className="h-7 rounded-[8px] border border-border bg-background px-1.5 text-[11px]"
+                          onChange={(event) =>
+                            onPatch({
+                              setToolPermissions: [
+                                {
+                                  connectionId: conn.id,
+                                  toolId: tool.id,
+                                  enabled: true,
+                                  approvalMode: event.target
+                                    .value as AgentApprovalMode,
+                                },
+                              ],
+                            })
+                          }
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="draft">Draft</option>
+                          <option value="require_approval">
+                            Require approval
+                          </option>
+                        </select>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScheduleEditor({
   trigger,
   nextRunAt,
+  connections,
   busy,
   onSave,
 }: {
   trigger: AgentTrigger;
   nextRunAt: string | null;
+  connections: ConnectorConnection[];
   busy: boolean;
   onSave: (trigger: AgentTrigger) => void;
 }) {
-  const [mode, setMode] = useState<"manual" | "schedule">(
-    trigger.type === "schedule" ? "schedule" : "manual",
+  const gmailConnections = connections.filter((c) => c.connectorId === "gmail");
+  const [mode, setMode] = useState<"manual" | "schedule" | "gmail_new_message">(
+    trigger.type === "schedule"
+      ? "schedule"
+      : trigger.type === "gmail_new_message"
+        ? "gmail_new_message"
+        : "manual",
   );
   const [preset, setPreset] = useState<SchedulePreset>(
     trigger.type === "schedule"
-      ? ((trigger.preset as SchedulePreset) ?? "weekday")
-      : "weekday",
+      ? ((trigger.preset as SchedulePreset) ?? "hourly")
+      : "hourly",
   );
   const [time, setTime] = useState(
     trigger.type === "schedule" ? (trigger.time ?? "09:00") : "09:00",
@@ -548,21 +702,35 @@ function TriggerEditor({
       ? trigger.timezone
       : Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Denver",
   );
+  const [gmailConnectionId, setGmailConnectionId] = useState(
+    trigger.type === "gmail_new_message"
+      ? trigger.connectionId
+      : (gmailConnections[0]?.id ?? ""),
+  );
+  const [fromContains, setFromContains] = useState(
+    trigger.type === "gmail_new_message"
+      ? (trigger.filter.fromContains ?? "")
+      : "",
+  );
+  const [query, setQuery] = useState(
+    trigger.type === "gmail_new_message" ? (trigger.filter.query ?? "") : "",
+  );
 
   return (
     <div className="mx-auto max-w-md space-y-4">
       <div>
-        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Trigger</h2>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Schedule</h2>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          When the agent wakes up. Active agents can always be run manually.
+          One active wake condition. You can always press Run now.
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(
           [
             ["manual", "Manual"],
-            ["schedule", "Schedule"],
+            ["schedule", "On a schedule"],
+            ["gmail_new_message", "New Gmail message"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -593,13 +761,16 @@ function TriggerEditor({
               onChange={(e) => setPreset(e.target.value as SchedulePreset)}
               className="mt-1 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-[13px]"
             >
-              <option value="hourly">Every hour</option>
-              <option value="daily">Every day</option>
-              <option value="weekday">Every weekday</option>
-              <option value="weekly">Every week</option>
+              {(Object.keys(SCHEDULE_PRESET_LABELS) as SchedulePreset[])
+                .filter((p) => p !== "custom")
+                .map((p) => (
+                  <option key={p} value={p}>
+                    {SCHEDULE_PRESET_LABELS[p]}
+                  </option>
+                ))}
             </select>
           </label>
-          {preset !== "hourly" ? (
+          {preset !== "hourly" && preset !== "every_few_hours" ? (
             <Field
               label="At"
               value={time}
@@ -620,65 +791,367 @@ function TriggerEditor({
             </p>
           ) : null}
         </div>
-      ) : (
+      ) : null}
+
+      {mode === "gmail_new_message" ? (
+        <div className="space-y-3 rounded-[12px] border border-border p-3">
+          {!gmailConnections.length ? (
+            <p className="text-[12.5px] text-muted-foreground">
+              Connect a Gmail account first, then enable it under Connections.
+            </p>
+          ) : (
+            <>
+              <label className="block">
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  Gmail account
+                </span>
+                <select
+                  value={gmailConnectionId}
+                  disabled={busy}
+                  onChange={(e) => setGmailConnectionId(e.target.value)}
+                  className="mt-1 h-9 w-full rounded-[10px] border border-border bg-background px-3 text-[13px]"
+                >
+                  {gmailConnections.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.connectionMode === "workspace_shared"
+                        ? "Shared"
+                        : "Personal"}{" "}
+                      · {c.id.slice(0, 12)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="From contains"
+                value={fromContains}
+                onChange={setFromContains}
+                disabled={busy}
+                placeholder="boss@company.com"
+              />
+              <Field
+                label="Extra Gmail query"
+                value={query}
+                onChange={setQuery}
+                disabled={busy}
+                placeholder="subject:invoice"
+              />
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {mode === "manual" ? (
         <p className="text-[12.5px] text-muted-foreground">
-          This agent only runs when you press Run (or ask in chat).
+          This agent only runs when you press Run now (or ask in Activity).
         </p>
-      )}
+      ) : null}
 
       <button
         type="button"
-        disabled={busy}
+        disabled={
+          busy ||
+          (mode === "gmail_new_message" &&
+            (!gmailConnectionId || !gmailConnections.length))
+        }
         className="rounded-full bg-foreground px-4 py-2 text-[12.5px] font-medium text-background disabled:opacity-50"
         onClick={() => {
           if (mode === "manual") {
             onSave({ type: "manual" });
             return;
           }
-          onSave(buildScheduleTrigger({ preset, time, timezone }));
+          if (mode === "schedule") {
+            onSave(buildScheduleTrigger({ preset, time, timezone }));
+            return;
+          }
+          onSave({
+            type: "gmail_new_message",
+            connectionId: gmailConnectionId,
+            filter: {
+              ...(fromContains.trim()
+                ? { fromContains: fromContains.trim() }
+                : {}),
+              ...(query.trim() ? { query: query.trim() } : {}),
+            },
+          });
         }}
       >
-        Save trigger
+        Save schedule
       </button>
     </div>
   );
 }
 
-function RunsList({ runs }: { runs: AgentRun[] }) {
-  if (!runs.length) {
-    return (
-      <div className="mx-auto max-w-md py-10 text-center text-[13px] text-muted-foreground">
-        No runs yet. Press Run or wait for a scheduled trigger.
-      </div>
-    );
-  }
+function ActivityPanel({
+  workspaceId,
+  projectId,
+  agentId,
+  runs,
+  events,
+  onRefresh,
+}: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  runs: AgentRun[];
+  events: AgentRunEvent[];
+  onRefresh: () => Promise<void>;
+}) {
+  const [composer, setComposer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [draftEdits, setDraftEdits] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const eventsByRun = useMemo(() => {
+    const map = new Map<string, AgentRunEvent[]>();
+    for (const ev of events) {
+      const list = map.get(ev.runId) ?? [];
+      list.push(ev);
+      map.set(ev.runId, list);
+    }
+    return map;
+  }, [events]);
+
+  const pending = runs.find((r) => r.status === "approval_needed");
+
+  const draftForRun = (runId: string) => {
+    if (draftEdits[runId] != null) return draftEdits[runId]!;
+    const list = eventsByRun.get(runId) ?? [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const ev = list[i]!;
+      if (
+        ev.eventType === "draft_created" ||
+        ev.eventType === "revised" ||
+        ev.eventType === "approval_needed"
+      ) {
+        const draft = String(ev.payload.draft ?? "");
+        if (draft) return draft;
+      }
+    }
+    return "";
+  };
+
+  const submitComposer = async () => {
+    const message = composer.trim();
+    if (!message || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await postAgentActivityMessageClient({
+        workspaceId,
+        projectId,
+        agentId,
+        message,
+      });
+      setComposer("");
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not send.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-lg space-y-2">
-      <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Runs</h2>
-      {runs.map((run) => (
-        <div
-          key={run.id}
-          className="rounded-[12px] border border-border px-3 py-2.5"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-[13px] font-medium capitalize">
-              {run.status}
-            </span>
-            <span className="text-[11.5px] text-muted-foreground">
-              {new Date(run.startedAt).toLocaleString()}
-            </span>
-          </div>
-          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            {run.triggerType}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
+        <div>
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em]">
+            Activity
+          </h2>
+          <p className="mt-1 text-[12.5px] text-muted-foreground">
+            Operational timeline — not a normal chat. Approve drafts here.
           </p>
-          {run.summary ? (
-            <p className="mt-1.5 text-[12.5px] text-foreground/90">{run.summary}</p>
-          ) : null}
-          {run.error ? (
-            <p className="mt-1 text-[12.5px] text-destructive">{run.error}</p>
-          ) : null}
         </div>
-      ))}
+
+        {!runs.length ? (
+          <p className="py-8 text-center text-[13px] text-muted-foreground">
+            No activity yet. Press Run now or wait for a trigger.
+          </p>
+        ) : (
+          runs.map((run) => {
+            const runEvents = eventsByRun.get(run.id) ?? [];
+            const needsApproval = run.status === "approval_needed";
+            const draft = draftForRun(run.id);
+            return (
+              <div
+                key={run.id}
+                className="rounded-[12px] border border-border px-3 py-2.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[13px] font-medium capitalize">
+                    {run.status.replace("_", " ")}
+                  </span>
+                  <span className="text-[11.5px] text-muted-foreground">
+                    {new Date(run.startedAt).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                  {run.triggerType}
+                </p>
+                {run.summary ? (
+                  <p className="mt-1.5 text-[12.5px] text-foreground/90">
+                    {run.summary}
+                  </p>
+                ) : null}
+
+                <ol className="mt-2 space-y-1 border-t border-border/70 pt-2">
+                  {runEvents.map((ev) => (
+                    <li
+                      key={ev.id}
+                      className="text-[11.5px] text-muted-foreground"
+                    >
+                      <span className="font-medium text-foreground/80">
+                        {ev.eventType}
+                      </span>
+                      {ev.eventType === "tool_called" ? (
+                        <span> · {String(ev.payload.tool ?? "")}</span>
+                      ) : null}
+                      {ev.eventType === "user_message" ? (
+                        <span> · {String(ev.payload.text ?? "")}</span>
+                      ) : null}
+                      {ev.eventType === "revised" && ev.payload.note ? (
+                        <span> · {String(ev.payload.note)}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ol>
+
+                {needsApproval && draft ? (
+                  <div className="mt-3 space-y-2">
+                    <textarea
+                      value={draft}
+                      onChange={(e) =>
+                        setDraftEdits((prev) => ({
+                          ...prev,
+                          [run.id]: e.target.value,
+                        }))
+                      }
+                      rows={6}
+                      className="w-full rounded-[10px] border border-border bg-background px-3 py-2 text-[12.5px] outline-none"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="inline-flex items-center gap-1 rounded-full bg-foreground px-3 py-1.5 text-[12px] font-medium text-background disabled:opacity-50"
+                        onClick={() => {
+                          setBusy(true);
+                          setError(null);
+                          void approveAgentRunClient({
+                            workspaceId,
+                            projectId,
+                            agentId,
+                            runId: run.id,
+                            draft,
+                          })
+                            .then(() => onRefresh())
+                            .catch((err) =>
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Approve failed.",
+                              ),
+                            )
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        Approve & send
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[12px] font-medium disabled:opacity-50"
+                        onClick={() => {
+                          setBusy(true);
+                          void reviseAgentRunClient({
+                            workspaceId,
+                            projectId,
+                            agentId,
+                            runId: run.id,
+                            draft,
+                          })
+                            .then(() => onRefresh())
+                            .catch((err) =>
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Revise failed.",
+                              ),
+                            )
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        Save revise
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-destructive disabled:opacity-50"
+                        onClick={() => {
+                          setBusy(true);
+                          void rejectAgentRunClient({
+                            workspaceId,
+                            projectId,
+                            agentId,
+                            runId: run.id,
+                          })
+                            .then(() => onRefresh())
+                            .catch((err) =>
+                              setError(
+                                err instanceof Error
+                                  ? err.message
+                                  : "Reject failed.",
+                              ),
+                            )
+                            .finally(() => setBusy(false));
+                        }}
+                      >
+                        <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+        {error ? (
+          <p className="text-[12.5px] text-destructive">{error}</p>
+        ) : null}
+      </div>
+
+      <div className="shrink-0 border-t border-border px-3 py-2">
+        {pending ? (
+          <p className="mb-1.5 text-[11px] text-muted-foreground">
+            Try “Send it”, “Make it more concise”, or “Pause Buddy”.
+          </p>
+        ) : null}
+        <div className="flex gap-2">
+          <input
+            value={composer}
+            onChange={(e) => setComposer(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void submitComposer();
+              }
+            }}
+            placeholder="Reply to pending activity…"
+            className="h-9 min-w-0 flex-1 rounded-full border border-border bg-background px-3 text-[12.5px] outline-none"
+            disabled={busy}
+          />
+          <button
+            type="button"
+            disabled={busy || !composer.trim()}
+            onClick={() => void submitComposer()}
+            className="h-9 shrink-0 rounded-full bg-foreground px-3 text-[12.5px] font-medium text-background disabled:opacity-50"
+          >
+            Send
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

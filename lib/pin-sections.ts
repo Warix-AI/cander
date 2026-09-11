@@ -21,9 +21,10 @@ export type PinSectionId =
   | "searches"
   | "chats";
 
-/** Agents section hidden for now — existing agent pins fold under Apps. */
+/** Agents section sits directly under Connectors. */
 export const PIN_SECTION_ORDER: PinSectionId[] = [
   "connectors",
+  "agents",
   "websites",
   "apps",
   "images",
@@ -66,8 +67,7 @@ export function pinSectionForItem(item: PinSectionItem): PinSectionId {
   if (item.kind === "thread") return "chats";
   switch (item.projectKind) {
     case "automation":
-      // Agents folder hidden — keep pins reachable under Apps.
-      return "apps";
+      return "agents";
     case "site":
       return "websites";
     case "app":

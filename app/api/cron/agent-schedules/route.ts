@@ -1,14 +1,19 @@
 /**
  * POST /api/cron/agent-schedules
- * Vercel cron tick — claim due agents and run them.
+ * Vercel cron tick — claim due scheduled agents + poll Gmail triggers.
  */
 
 import { NextResponse } from "next/server";
+import {
+  listActiveGmailTriggerAgents,
+  pollGmailTriggerAgent,
+} from "@/lib/agents/gmail-poll";
 import {
   claimDueScheduledAgents,
   clearScheduleClaim,
   runAgent,
 } from "@/lib/agents/runtime";
+import { scheduleIdempotencyKey } from "@/lib/agents/schedule";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -36,6 +41,7 @@ export async function POST(request: Request) {
     ok: boolean;
     runId?: string;
     error?: string;
+    kind: "schedule" | "gmail";
   }> = [];
 
   for (const row of claimed) {
@@ -46,26 +52,71 @@ export async function POST(request: Request) {
         projectId: row.projectId,
         profileId: row.createdBy,
         triggerType: "schedule",
+        idempotencyKey: scheduleIdempotencyKey(row.agentId, row.dueAt),
       });
       results.push({
         agentId: row.agentId,
-        ok: result.run.status === "completed",
+        ok:
+          result.run.status === "completed" ||
+          result.run.status === "approval_needed",
         runId: result.run.id,
         error: result.run.error ?? undefined,
+        kind: "schedule",
       });
     } catch (err) {
       results.push({
         agentId: row.agentId,
         ok: false,
         error: err instanceof Error ? err.message : "failed",
+        kind: "schedule",
       });
     } finally {
       await clearScheduleClaim(row.agentId, row.workspaceId);
     }
   }
 
+  const gmailAgents = await listActiveGmailTriggerAgents(6);
+  const gmailResults: Array<{
+    agentId: string;
+    checked: number;
+    createdRuns: string[];
+  }> = [];
+
+  for (const row of gmailAgents) {
+    try {
+      const polled = await pollGmailTriggerAgent({
+        agentId: row.agent.id,
+        workspaceId: row.agent.workspaceId,
+        projectId: row.agent.projectId,
+        profileId: row.createdBy,
+      });
+      gmailResults.push({
+        agentId: row.agent.id,
+        checked: polled.checked,
+        createdRuns: polled.createdRuns,
+      });
+      for (const runId of polled.createdRuns) {
+        results.push({
+          agentId: row.agent.id,
+          ok: true,
+          runId,
+          kind: "gmail",
+        });
+      }
+    } catch (err) {
+      results.push({
+        agentId: row.agent.id,
+        ok: false,
+        error: err instanceof Error ? err.message : "gmail poll failed",
+        kind: "gmail",
+      });
+    }
+  }
+
   return NextResponse.json({
     claimed: claimed.length,
+    gmailPolled: gmailAgents.length,
+    gmailResults,
     results,
   });
 }

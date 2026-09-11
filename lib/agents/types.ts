@@ -1,18 +1,26 @@
-/** Project Agent types — Skills + scoped tools + trigger (routes dormant). */
+/** Project Agent types — Instructions + Connections + Schedule + Activity. */
 
 export type AgentStatus = "draft" | "active" | "paused";
+
+export type AgentApprovalMode = "auto" | "draft" | "require_approval";
 
 export type AgentTrigger =
   | { type: "manual" }
   | {
       type: "schedule";
-      /** Friendly preset: hourly | daily | weekday | weekly | custom */
+      /** Friendly preset: hourly | every_few_hours | daily | weekday | weekly | custom */
       preset?: string;
       /** Derived cron expression */
       cron: string;
       timezone: string;
       /** Local time HH:mm when applicable */
       time?: string;
+    }
+  | {
+      type: "gmail_new_message";
+      connectionId: string;
+      filter: { fromContains?: string; query?: string };
+      cursor?: { lastCheckedAt?: string };
     };
 
 export type ProjectAgent = {
@@ -21,13 +29,16 @@ export type ProjectAgent = {
   projectId: string;
   name: string;
   description: string;
-  /** Legacy denormalized field — prefer Skills for behavior. */
+  /** Human-readable Markdown behavioral definition. */
   instructions: string;
   enabled: boolean;
   status: AgentStatus;
   trigger: AgentTrigger;
   nextRunAt: string | null;
   lastTriggeredAt: string | null;
+  icon: string | null;
+  color: string | null;
+  pinned: boolean;
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
@@ -75,6 +86,7 @@ export type AgentToolPermission = {
   connectionId: string;
   toolId: string;
   enabled: boolean;
+  approvalMode: AgentApprovalMode;
 };
 
 /** Dormant Zapier-style routes — kept for future deterministic workflows. */
@@ -113,7 +125,8 @@ export type AgentRunStatus =
   | "running"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "approval_needed";
 
 export type AgentRun = {
   id: string;
@@ -126,6 +139,33 @@ export type AgentRun = {
   completedAt: string | null;
   summary: string | null;
   error: string | null;
+  idempotencyKey: string | null;
+  triggerPayload: Record<string, unknown>;
+};
+
+export type AgentRunEventType =
+  | "trigger_received"
+  | "work_started"
+  | "tool_called"
+  | "draft_created"
+  | "approval_needed"
+  | "approved"
+  | "rejected"
+  | "revised"
+  | "completed"
+  | "error"
+  | "user_message";
+
+export type AgentRunEvent = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  runId: string;
+  seq: number;
+  eventType: AgentRunEventType | string;
+  payload: Record<string, unknown>;
+  createdAt: string;
 };
 
 export type ProjectAgentBundle = {
@@ -146,6 +186,9 @@ export type AgentConfigPatch = {
   enabled?: boolean;
   status?: AgentStatus;
   trigger?: AgentTrigger;
+  icon?: string | null;
+  color?: string | null;
+  pinned?: boolean;
   addSkills?: Array<{ skillId: string; skillLabel?: string }>;
   removeSkillIds?: string[];
   /** Create a new workspace skill and attach it. */
@@ -175,6 +218,7 @@ export type AgentConfigPatch = {
     connectionId: string;
     toolId: string;
     enabled: boolean;
+    approvalMode?: AgentApprovalMode;
   }>;
   /** @deprecated V1 product — routes dormant */
   upsertRoutes?: Array<Partial<AgentRoute> & { id?: string }>;
@@ -188,6 +232,23 @@ export type AgentConfigProposal = {
   requiresConfirmation: boolean;
   confirmationReasons: string[];
 };
+
+export const BUDDY_STARTER_INSTRUCTIONS = `# Buddy
+
+You watch Gmail for messages that need a reply.
+
+## Goals
+- Look for new messages matching the configured filter (e.g. from a specific person).
+- Decide whether they need a response.
+- Draft a concise, friendly reply.
+- Do **not** promise deadlines or make commitments the user did not authorize.
+- **Never send** email unless the user has approved the draft (or send is set to automatic).
+
+## Style
+- Short paragraphs.
+- Warm but professional.
+- Ask clarifying questions only when necessary.
+`;
 
 export function parseAgentTrigger(raw: unknown): AgentTrigger {
   if (!raw || typeof raw !== "object") return { type: "manual" };
@@ -204,6 +265,35 @@ export function parseAgentTrigger(raw: unknown): AgentTrigger {
       ...(typeof t.time === "string" ? { time: t.time } : {}),
     };
   }
+  if (t.type === "gmail_new_message" && typeof t.connectionId === "string") {
+    const filter =
+      t.filter && typeof t.filter === "object"
+        ? (t.filter as Record<string, unknown>)
+        : {};
+    const cursor =
+      t.cursor && typeof t.cursor === "object"
+        ? (t.cursor as Record<string, unknown>)
+        : undefined;
+    return {
+      type: "gmail_new_message",
+      connectionId: t.connectionId,
+      filter: {
+        ...(typeof filter.fromContains === "string"
+          ? { fromContains: filter.fromContains }
+          : {}),
+        ...(typeof filter.query === "string" ? { query: filter.query } : {}),
+      },
+      ...(cursor
+        ? {
+            cursor: {
+              ...(typeof cursor.lastCheckedAt === "string"
+                ? { lastCheckedAt: cursor.lastCheckedAt }
+                : {}),
+            },
+          }
+        : {}),
+    };
+  }
   return { type: "manual" };
 }
 
@@ -215,4 +305,29 @@ export function agentStatusFromRow(
     return status;
   }
   return enabled ? "active" : "paused";
+}
+
+export function parseApprovalMode(raw: unknown): AgentApprovalMode {
+  if (raw === "auto" || raw === "draft" || raw === "require_approval") {
+    return raw;
+  }
+  return "require_approval";
+}
+
+/** Tools that must never auto-run without explicit promotion. */
+export function isHighImpactTool(toolId: string): boolean {
+  const id = toolId.toLowerCase();
+  return (
+    /\.(send|reply|delete|archive|create|update|write|refund|charge|pay|purchase|transfer)/.test(
+      id,
+    ) ||
+    id.includes("gmail.send") ||
+    id.includes("gmail.reply")
+  );
+}
+
+export function defaultApprovalModeForTool(toolId: string): AgentApprovalMode {
+  if (isHighImpactTool(toolId)) return "require_approval";
+  if (/\.(search|list|read|get|fetch)/i.test(toolId)) return "auto";
+  return "draft";
 }

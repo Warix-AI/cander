@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AppWindow,
+  Bot,
   Image as ImageIcon,
   Layout,
   Search,
@@ -25,7 +26,6 @@ export type CanvasStartOption = {
 /**
  * Shared Canvas starts — right-panel “What would you like to do?”,
  * NewCanvasMenu, and orphan-recents Start in the composer +.
- * Agent create and Quick search are hidden for now.
  */
 export function canvasStartOptions(): CanvasStartOption[] {
   return [
@@ -48,6 +48,16 @@ export function canvasStartOptions(): CanvasStartOption[] {
       kind: "general",
       space: "studio",
       title: "Image project",
+    },
+    {
+      id: "agent",
+      label: "Agent",
+      summary: "Automate work with connectors",
+      action: "create-project",
+      icon: Bot,
+      kind: "automation",
+      space: "build",
+      title: "Buddy",
     },
     {
       id: "app",
