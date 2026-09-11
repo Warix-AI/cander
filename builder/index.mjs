@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { EventLog } from "./events.mjs";
 import { LlmClient } from "./llm.mjs";
 import { PreviewSupervisor } from "./preview.mjs";
-import { SandboxTools } from "./tools.mjs";
+import { SandboxTools, execShell } from "./tools.mjs";
 import { TwentyFirstClient } from "./twenty-first.mjs";
 import { runAgent } from "./agent.mjs";
 import { runAcceptance } from "./verify.mjs";
@@ -409,6 +409,10 @@ async function main() {
   } else if (realWrites > 0 && result.reason !== "verification_failed") {
     // Budget ran out but work exists — hand it over as a partial draft so the
     // user sees something and can iterate, instead of losing everything.
+    // The last edits may postdate the last acceptance run: typecheck the tree
+    // as it stands so a broken handoff is marked unverified (publish preflight
+    // then rebuilds instead of trusting "ready").
+    const partialCheck = await quickTypecheck(repoDir, log);
     const summary =
       result.lastText?.slice(0, 600) ||
       "I ran out of time before finishing every check, but the draft is in place — tell me what to fix next.";
@@ -420,8 +424,15 @@ async function main() {
       files,
       stats,
       recovery,
+      ...(partialCheck.ok
+        ? {}
+        : {
+            unverified: true,
+            classification: "app",
+            verification: partialCheck.report.slice(0, 3000),
+          }),
     });
-    finishFile("finished", { summary, partial: true, reason: result.reason, stats });
+    finishFile("finished", { summary, partial: true, reason: result.reason, stats, unverified: !partialCheck.ok });
   } else {
     const classification = classifyFailure(result.reason, recovery);
     const message =
@@ -444,6 +455,33 @@ async function main() {
 
   await log.close();
   process.exit(0);
+}
+
+/**
+ * Cheap tsc on the current tree for partial handoffs. Never throws; a missing
+ * tsconfig/typescript counts as ok (nothing to check).
+ */
+async function quickTypecheck(repoDir, log) {
+  if (!existsSync(join(repoDir, "tsconfig.json"))) return { ok: true, report: "" };
+  try {
+    log.emit("verify", "Typechecking the partial draft (tsc --noEmit)…");
+    const tsc = await execShell("npx --no-install tsc --noEmit --pretty false --skipLibCheck", {
+      cwd: repoDir,
+      timeoutMs: 180_000,
+    });
+    if (tsc.exitCode === 0) return { ok: true, report: "" };
+    if (/Cannot find module 'typescript'|not found/i.test(tsc.stderr || "")) return { ok: true, report: "" };
+    const lines = `${tsc.stdout}\n${tsc.stderr}`
+      .split("\n")
+      .filter((l) => /error TS\d+/.test(l))
+      .slice(0, 25);
+    const report = lines.length ? `TypeScript errors:\n${lines.join("\n")}` : `tsc exited ${tsc.exitCode}`;
+    log.emit("verify", `Partial draft has type errors (${lines.length || "?"}); handing off unverified.`);
+    return { ok: false, report };
+  } catch (err) {
+    log.emit("log", `Partial typecheck skipped: ${err?.message || err}`);
+    return { ok: true, report: "" };
+  }
 }
 
 /**

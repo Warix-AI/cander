@@ -22,7 +22,8 @@ Production build rules — the dev server is forgiving, Vercel's \`next build\` 
 - Nothing random or time-based (Math.random, Date.now, new Date()) in server-rendered markup — it causes prerender/hydration errors. Put it in a client component with useEffect, or use a constant.
 - Dynamic routes (app/[slug]/page.tsx) must read \`params\` (\`const { slug } = await params\`); prefer static pages for a marketing site.
 - Every import must resolve (case-sensitive paths — Vercel builds on Linux) and every component you reference must exist. Delete files you stop using.
-- Server actions need "use server" at the top of their file (or inside the function) and must be async.`;
+- Server actions need "use server" at the top of their file (or inside the function) and must be async.
+- Any file that calls a hook (useState, useEffect, useActionState, useFormStatus, usePathname, …) or wires an event handler (onClick/onChange/onSubmit) MUST start with "use client" and MUST import each hook explicitly (\`import { useActionState } from "react"\`, \`import { useFormStatus } from "react-dom"\`, \`import { usePathname } from "next/navigation"\`). The dev preview tolerates a missing directive; \`next build\` dies prerendering with "Cannot read properties of null (reading 'useOptimistic')". Forms with server actions: the action in its own "use server" file, the form component "use client".`;
 
 export const QUALITY_BAR = `Quality bar — this must look like a real, launch-ready website, not a template:
 - A real sitemap of pages (as many as the brief calls for; at least Home, plus About/Services/Contact style pages when relevant), each with distinct, specific copy written for THIS business. No lorem ipsum, no "Your headline here", no TODOs.

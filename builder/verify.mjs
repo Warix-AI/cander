@@ -594,6 +594,7 @@ export function vercelCompatIssues(repoDir, written) {
     if (/export\s+const\s+runtime\s*=\s*['"]edge['"]/.test(text)) {
       issues.push(`${rel} sets runtime = "edge" — remove it (Node runtime); edge builds reject many packages and fail on Vercel.`);
     }
+    for (const issue of clientBoundaryIssues(rel, text, client)) issues.push(issue);
     // `new Date().getFullYear()` in a footer is fine (stable for a year).
     const timeSensitive = text.split("\n").filter((l) => !/getFullYear\(\)/.test(l)).join("\n");
     if (!client && isPageOrLayout && /\b(Math\.random|Date\.now|new Date)\s*\(/.test(timeSensitive) && !/export\s+const\s+dynamic\s*=/.test(text) && !/generateMetadata|headers\(\)|cookies\(\)|searchParams/.test(text)) {
@@ -627,6 +628,82 @@ export function vercelCompatIssues(repoDir, written) {
     if (/generateStaticParams/.test(text) && /output\s*:\s*['"]export['"]/.test(cfg ? readFileSync(cfg, "utf8") : "")) continue;
     if (/await\s+params\b|params\.then|\bparams\b/.test(text)) continue;
     issues.push(`${rel} is a dynamic route that never reads params — either use params (await params in Next 15+/16) or replace it with static pages.`);
+  }
+  return issues;
+}
+
+/** React / react-dom / next hooks that only run in client components. */
+const CLIENT_HOOKS = [
+  "useState",
+  "useReducer",
+  "useEffect",
+  "useLayoutEffect",
+  "useRef",
+  "useCallback",
+  "useMemo",
+  "useContext",
+  "useTransition",
+  "useDeferredValue",
+  "useOptimistic",
+  "useActionState",
+  "useSyncExternalStore",
+  "useImperativeHandle",
+  "useFormStatus",
+  "useFormState",
+  "usePathname",
+  "useRouter",
+  "useSearchParams",
+  "useParams",
+  "useSelectedLayoutSegment",
+  "useSelectedLayoutSegments",
+];
+const CLIENT_HOOK_RE = new RegExp(`\\b(${CLIENT_HOOKS.join("|")})\\s*\\(`, "g");
+const HANDLER_RE = /\son(Click|Change|Submit|Input|KeyDown|KeyUp|Focus|Blur|MouseEnter|MouseLeave|Scroll|Toggle)=\{/;
+
+/**
+ * A file that uses client-only hooks or event handlers must start with
+ * "use client"; hooks must also be imported. Both slip past tsc when the hook
+ * comes from an untyped global or the boundary is only enforced at build:
+ * `next build` then dies prerendering with "Cannot read properties of null
+ * (reading 'useX')" and the preview (dev) still looks fine.
+ */
+export function clientBoundaryIssues(rel, text, isClientFile) {
+  const issues = [];
+  if (!/\.(tsx|jsx)$/.test(rel)) return issues;
+  if (/^\s*['"]use server['"]/m.test(text.slice(0, 400))) return issues;
+  const stripped = text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+  const hooksUsed = new Set();
+  for (const m of stripped.matchAll(CLIENT_HOOK_RE)) hooksUsed.add(m[1]);
+  const hasHandlers = HANDLER_RE.test(stripped);
+  if (!hooksUsed.size && !hasHandlers) return issues;
+
+  if (!isClientFile) {
+    const what = [...hooksUsed].slice(0, 3).join(", ") || "event handlers";
+    issues.push(
+      `${rel} uses ${what} but has no "use client" directive — the production build fails prerendering with "Cannot read properties of null". Add "use client" as the first line (or move the interactive part into a client component).`,
+    );
+  }
+  if (hooksUsed.size) {
+    const importBlock = stripped.match(/^import[\s\S]*?from\s+['"][^'"]+['"];?$/gm) || [];
+    const imported = new Set();
+    for (const imp of importBlock) {
+      for (const m of imp.matchAll(/\b(use[A-Z]\w*)\b/g)) imported.add(m[1]);
+      if (/import\s+\*\s+as\s+React\b|import\s+React\b/.test(imp)) imported.add("__React__");
+    }
+    const missing = [...hooksUsed].filter((h) => !imported.has(h) && !stripped.includes(`React.${h}(`) && !stripped.includes(`ReactDOM.${h}(`) && !new RegExp(`\\bfunction\\s+${h}\\b|\\bconst\\s+${h}\\s*=`).test(stripped));
+    if (missing.length) {
+      const src = (h) =>
+        h === "useFormStatus" || h === "useFormState"
+          ? "react-dom"
+          : /^use(Pathname|Router|SearchParams|Params|SelectedLayoutSegments?)$/.test(h)
+            ? "next/navigation"
+            : "react";
+      issues.push(
+        `${rel} calls ${missing.join(", ")} without importing it — add ${missing.map((h) => `import { ${h} } from "${src(h)}"`).join("; ")}.`,
+      );
+    }
   }
   return issues;
 }

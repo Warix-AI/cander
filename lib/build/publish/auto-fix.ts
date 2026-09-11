@@ -63,8 +63,19 @@ export async function schedulePublishFix(opts: {
       publishFix,
     });
     const { startBuildJob } = await import("@/lib/build/jobs/runner");
-    // Fire and forget: the runner owns the job from here.
-    void startBuildJob(job).catch((err) => console.warn("[cander:publish-fix] start failed", err instanceof Error ? err.message : err));
+    // Await the start: this runs inside the publish `after()` and the function
+    // is frozen the moment publish returns — a fire-and-forget start died
+    // mid-flight and left the job at "Preparing your workspace" forever.
+    // startBuildJob fails the job itself on error; a thrown error here means
+    // it never got that far, so mark it failed so the UI can offer Retry.
+    try {
+      await startBuildJob(job);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn("[cander:publish-fix] start failed", message);
+      const { markBuildJobStartFailed } = await import("@/lib/build/jobs/runner");
+      await markBuildJobStartFailed(job.id, message).catch(() => undefined);
+    }
     return { scheduled: true, jobId: job.id };
   } catch (err) {
     return { scheduled: false, reason: err instanceof Error ? err.message : String(err) };

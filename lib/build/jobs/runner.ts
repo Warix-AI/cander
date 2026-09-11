@@ -85,6 +85,12 @@ const STALL_GRACE_MS = 3 * 60 * 1000;
 const EVENT_STALL_MS = 10 * 60 * 1000;
 /** Completing (persist + preview) must not hang forever after the agent finished. */
 const VERIFY_STALL_MS = 8 * 60 * 1000;
+/**
+ * A job claimed `running` but whose start never attached a sandbox session
+ * (worker frozen/killed mid-start). Without a session nothing can be pulled,
+ * so it would sit at "Preparing your workspace" forever.
+ */
+const START_STALL_MS = 5 * 60 * 1000;
 /** Don't let finalizeBuildReady block the serverless worker indefinitely. */
 const FINALIZE_READY_TIMEOUT_MS = 4 * 60 * 1000;
 
@@ -637,10 +643,47 @@ async function reclaimStuckVerifyingJob(job: BuildJob): Promise<BuildJob> {
   );
 }
 
+/**
+ * Fail a job whose start threw before the runner could take over (used by
+ * callers that start jobs from a background context). Idempotent.
+ */
+export async function markBuildJobStartFailed(jobId: string, error: string): Promise<BuildJob | null> {
+  const job = await getBuildJob(jobId);
+  if (!job) return null;
+  if (job.status !== "running" && job.status !== "queued") return job;
+  if (job.status === "queued") {
+    await transitionBuildJob({ jobId, from: ["queued"], to: "running", progressNote: "Preparing your workspace…" });
+  }
+  return failBuildJob(job, error, {
+    kind: "infra",
+    reason: "start_failed",
+    phase: "start",
+    detail: error.slice(0, 1500),
+    at: new Date().toISOString(),
+  });
+}
+
 async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
   const sessionId = job.facts.sessionId;
   const userId = job.facts.userId;
-  if (!sessionId) return job;
+  if (!sessionId) {
+    // Start-stall: the worker that claimed this job died before attaching a
+    // sandbox. Give a real start time to finish, then fail so Retry appears.
+    const startedAt = Date.parse(job.facts.startedAt || job.updatedAt || job.createdAt);
+    const age = Date.now() - (Number.isFinite(startedAt) ? startedAt : Date.now());
+    if (age > START_STALL_MS) {
+      return (
+        (await failBuildJob(job, "The workspace never came up for this job.", {
+          kind: "infra",
+          reason: "start_stalled",
+          phase: "start",
+          detail: `No sandbox session ${Math.round(age / 1000)}s after start`,
+          at: new Date().toISOString(),
+        })) ?? job
+      );
+    }
+    return job;
+  }
 
   const offset = job.facts.eventOffset ?? 0;
   const eventsFile = `.cander/jobs/${job.id}/events.jsonl`;
