@@ -192,6 +192,7 @@ async function main() {
       productionBuild: config.productionBuild !== false,
       deadlineMs: budget.deadlineMs,
       writtenPaths: mode === "edit" ? [...tools.writtenPaths] : null,
+      tools,
     });
     lastVerification = result;
     try {

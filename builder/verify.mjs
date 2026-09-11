@@ -335,6 +335,14 @@ export async function runAcceptance(opts) {
   // checks in addition to build + browser verification.
   if (risk.tier === "backend") {
     for (const issue of backendSafetyIssues(repoDir, written).slice(0, 8)) issues.push(issue);
+    // Real RLS audit against the development database (when Cander tools are available).
+    if (opts.tools?.provider) {
+      const report = await opts.tools.providerTool("db.rls_check", {});
+      if (/ISSUES/.test(report)) {
+        for (const line of report.split("\n").filter((l) => l.startsWith("- ")).slice(0, 6)) issues.push(line.slice(2));
+      }
+      opts.log.emit("verify", report.split("\n")[0].slice(0, 160));
+    }
   }
 
   // 6c. Production build — the authoritative "will Vercel accept this" gate.
@@ -516,6 +524,10 @@ export function backendSafetyIssues(repoDir, written) {
     }
     if (client && /from\s+['"][^'"]*supabase\/(server|admin)['"]/.test(text)) {
       issues.push(`${rel} ("use client") imports a server-only Supabase client — use the browser client there.`);
+    }
+    // Hardcoded credentials: anything that looks like a live key in source.
+    if (/(sk-[A-Za-z0-9_-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{10,}|sb_secret_[A-Za-z0-9_-]{10,}|https:\/\/[a-z]{20}\.supabase\.co)/.test(text)) {
+      issues.push(`${rel} contains what looks like a hardcoded key or project URL — read it from process.env instead.`);
     }
   }
   const sqlFiles = (written && written.length ? written : listSqlFiles(repoDir)).filter((p) => /\.sql$/.test(p));

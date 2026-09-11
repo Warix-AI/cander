@@ -269,6 +269,44 @@ export class SandboxTools {
           description: "Current project state from Cander (database connection, preview, live site, recent changes). Use when unsure whether a database or env var exists.",
           parameters: { type: "object", properties: {} },
         },
+        {
+          name: "db_schema",
+          description: "Inspect the project's database: tables, columns, RLS state and policies. Call before writing queries or migrations.",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "db_sql",
+          description:
+            "Run SQL against the development database. SELECT/EXPLAIN and row writes (INSERT/UPDATE/DELETE with a WHERE) are allowed. Schema changes are refused — use db_write_migration. Destructive statements (DROP/TRUNCATE) are refused and need the user.",
+          parameters: {
+            type: "object",
+            properties: { sql: { type: "string" } },
+            required: ["sql"],
+          },
+        },
+        {
+          name: "db_write_migration",
+          description:
+            "Create a versioned migration file under supabase/migrations/ and apply it to the development database. Every new table must enable row level security and define policies in the same migration. Seeds go in supabase/seed.sql, not migrations. Production receives the migration automatically at publish.",
+          parameters: {
+            type: "object",
+            properties: {
+              name: { type: "string", description: "short_snake_case_name" },
+              sql: { type: "string", description: "Idempotent SQL (use if not exists / or replace)." },
+            },
+            required: ["name", "sql"],
+          },
+        },
+        {
+          name: "db_generate_types",
+          description: "Regenerate lib/database.types.ts from the current database schema. Call after applying a migration so the app's types match.",
+          parameters: { type: "object", properties: {} },
+        },
+        {
+          name: "db_rls_check",
+          description: "Audit row level security: every table must have RLS on with policies; flags public storage buckets. Run before finishing any database work.",
+          parameters: { type: "object", properties: {} },
+        },
       );
     }
     if (this.twentyFirst) {
@@ -340,6 +378,20 @@ export class SandboxTools {
           return { output: await this.providerTool("git.checkpoint", { message: String(a.message ?? "") }) };
         case "project_status":
           return { output: await this.providerTool("project.status", {}) };
+        case "db_schema":
+          return { output: await this.providerTool("db.schema", {}) };
+        case "db_sql":
+          return { output: await this.providerTool("db.sql", { sql: String(a.sql ?? "") }) };
+        case "db_write_migration":
+          return { output: await this.writeMigration(a.name, a.sql) };
+        case "db_generate_types": {
+          const out = await this.providerTool("db.types", {});
+          if (out.startsWith("ERROR") || out.startsWith("REFUSED") || !/export\s+type\s+Database/.test(out)) return { output: out };
+          this.writeFile("lib/database.types.ts", out.endsWith("\n") ? out : `${out}\n`);
+          return { output: "Wrote lib/database.types.ts from the current schema." };
+        }
+        case "db_rls_check":
+          return { output: await this.providerTool("db.rls_check", {}) };
         case "search_components":
           return { output: await this.searchComponents(a.query, a.limit) };
         case "get_component":
@@ -554,6 +606,29 @@ export class SandboxTools {
     };
     walk(this.repoDir);
     return hits.length ? hits.join("\n") : "(no matches)";
+  }
+
+  /**
+   * Write supabase/migrations/<version>_<name>.sql and apply it to the
+   * development database through Cander (which owns the credentials).
+   */
+  async writeMigration(name, sql) {
+    const slug = String(name ?? "")
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 48);
+    const body = String(sql ?? "").trim();
+    if (!slug) return "ERROR: name is required.";
+    if (!body) return "ERROR: sql is required.";
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const stamp = `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+    const version = `${stamp}_${slug}`;
+    const rel = `supabase/migrations/${version}.sql`;
+    this.writeFile(rel, `${body}\n`);
+    const out = await this.providerTool("db.migration", { version, name: slug, filePath: rel, sql: body });
+    return `${rel} written.\n${out}`;
   }
 
   /**

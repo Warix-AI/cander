@@ -115,6 +115,24 @@ export async function ensureBackendEnvVars(opts: { projectId: string; workspaceI
   return { names };
 }
 
+/** Resolved name/value pairs for one runtime scope (values decrypted in-process; never log). */
+export async function resolveEnvForScope(opts: { projectId: string; scope: Exclude<EnvScope, "all"> }): Promise<Array<{ name: string; value: string }>> {
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from("project_env_vars")
+    .select("id, name, scope, plain_value, secret_id, vercel_synced_hash, vercel_env_id")
+    .eq("project_id", opts.projectId)
+    .in("scope", ["all", opts.scope]);
+  const out = new Map<string, string>();
+  // Scoped rows win over "all".
+  const rows = ((data ?? []) as EnvRow[]).sort((a, b) => (a.scope === "all" ? -1 : 1) - (b.scope === "all" ? -1 : 1));
+  for (const row of rows) {
+    const value = await resolveValue(opts.projectId, row);
+    if (value !== null) out.set(row.name, value);
+  }
+  return [...out.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 const SCOPE_TARGETS: Record<EnvScope, string[]> = {
   all: ["production", "preview", "development"],
   development: ["development"],

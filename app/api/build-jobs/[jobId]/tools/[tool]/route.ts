@@ -8,8 +8,11 @@
  *   git.checkpoint   { message? }  → commit the sandbox state to the draft branch
  *   project.status   {}            → plain-English project state (ProjectRuntime)
  *   db.status        {}            → backend status for this project
- *
- * Phase 4 adds db.schema / db.sql / db.migration; Phase 3 adds deploy.status.
+ *   db.schema        {}            → tables, columns, RLS + policies (public schema)
+ *   db.sql           { sql }       → read/write SQL (DDL + destructive refused)
+ *   db.migration     { version, name?, filePath, sql } → apply to dev DB + ledger
+ *   db.types         {}            → TypeScript types for the schema
+ *   db.rls_check     {}            → RLS / public-bucket audit
  */
 
 import { NextResponse } from "next/server";
@@ -23,7 +26,16 @@ export const maxDuration = 300;
 
 type RouteCtx = { params: Promise<{ jobId: string; tool: string }> };
 
-const TOOLS = new Set(["git.checkpoint", "project.status", "db.status"]);
+const TOOLS = new Set([
+  "git.checkpoint",
+  "project.status",
+  "db.status",
+  "db.schema",
+  "db.sql",
+  "db.migration",
+  "db.types",
+  "db.rls_check",
+]);
 
 function text(output: string, status = 200) {
   return NextResponse.json({ ok: status < 400, output }, { status });
@@ -71,6 +83,41 @@ export async function POST(request: Request, ctx: RouteCtx) {
               : status === "creating"
                 ? "Database is being provisioned; keep the app working with demo data until env vars appear."
                 : "No database connected yet. Build with a demo-data fallback; Cander connects the database when the app is published or on request.",
+        );
+      }
+      case "db.schema": {
+        const { dbSchema } = await import("@/lib/build/supabase/db-tools");
+        return text(await dbSchema(scope));
+      }
+      case "db.sql": {
+        const { dbSql } = await import("@/lib/build/supabase/db-tools");
+        return text(await dbSql(scope, String(args.sql ?? "")));
+      }
+      case "db.migration": {
+        const { dbApplyMigration } = await import("@/lib/build/supabase/db-tools");
+        return text(
+          await dbApplyMigration(scope, {
+            version: String(args.version ?? ""),
+            name: args.name ? String(args.name) : undefined,
+            filePath: String(args.filePath ?? ""),
+            sql: String(args.sql ?? ""),
+            sha: null,
+          }),
+        );
+      }
+      case "db.types": {
+        const { dbTypes } = await import("@/lib/build/supabase/db-tools");
+        return text(await dbTypes(scope));
+      }
+      case "db.rls_check": {
+        const { dbRlsCheck } = await import("@/lib/build/supabase/db-tools");
+        const report = await dbRlsCheck(scope);
+        if ("error" in report) return text(report.error);
+        return text(
+          report.issues.length
+            ? `RLS audit (${report.tables} tables): ${report.ok ? "OK with notes" : "ISSUES"}
+- ${report.issues.join("\n- ")}`
+            : `RLS audit OK: ${report.tables} table(s), all protected with policies.`,
         );
       }
       case "git.checkpoint": {
