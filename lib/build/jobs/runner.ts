@@ -1488,6 +1488,22 @@ function userFacingFailure(kind: BuildJobFailureKind, draftSaved: boolean): stri
  *                                                   reusing the saved plan
  *  nothing written                               → build from scratch
  */
+/**
+ * True when the draft tip contains more than the boot skeleton — at least one
+ * page besides the root or a site component — i.e. there is a site to verify.
+ */
+async function draftTipHasSite(projectId: string, workspaceId: string): Promise<boolean> {
+  try {
+    const tip = await inspectProjectDraftTip({ projectId, workspaceId, maxPaths: 2000, pathsMode: "all" });
+    if (!tip.draftSha || !tip.paths.length) return false;
+    const pages = tip.paths.filter((p) => /^app\/.+\/page\.(tsx|jsx)$/.test(p));
+    const siteComponents = tip.paths.filter((p) => /^components\/(?!ui\/).+\.(tsx|jsx)$/.test(p));
+    return pages.length > 0 || siteComponents.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function retryBuildJob(opts: {
   projectId: string;
   workspaceId: string;
@@ -1501,7 +1517,11 @@ export async function retryBuildJob(opts: {
     }
   }
   const previous = await findLatestBuildJob({ projectId: opts.projectId, workspaceId: opts.workspaceId });
-  if (!previous || previous.status !== "failed" || previous.facts.mode !== "create") {
+  if (
+    !previous ||
+    (previous.status !== "failed" && previous.status !== "cancelled") ||
+    previous.facts.mode !== "create"
+  ) {
     return { ok: false, error: "There is no failed build to retry.", status: 404, job: previous };
   }
 
@@ -1509,9 +1529,17 @@ export async function retryBuildJob(opts: {
   const filesTouched =
     f?.filesTouched ??
     (typeof previous.facts.stats?.filesTouched === "number" ? (previous.facts.stats.filesTouched as number) : 0);
-  const hasWork = Boolean(previous.facts.draftSha) || filesTouched > 0;
+  // The draft tip is the source of truth for "is there a site to verify":
+  // a retried job that only ran verify/repair reports 0 files touched even
+  // though earlier attempts committed the whole site. Resuming at "build"
+  // would re-plan and rewrite it.
+  const tipHasSite = await draftTipHasSite(opts.projectId, opts.workspaceId);
+  const hasWork = tipHasSite || Boolean(previous.facts.draftSha) || filesTouched > 0;
   const kind = f?.kind ?? "unknown";
-  const phase: BuildJobResume["phase"] = hasWork && (kind === "infra" || kind === "app") ? "verify" : "build";
+  const phase: BuildJobResume["phase"] =
+    hasWork && (kind === "infra" || kind === "app" || kind === "budget" || previous.status === "cancelled")
+      ? "verify"
+      : "build";
   const attempt = (previous.facts.resume?.attempt ?? 0) + 1;
 
   // Routes the previous run reported (finish() / failed payload) so verify
