@@ -19,6 +19,13 @@ import { resolveSandboxForSession } from "@/lib/computer/session-runtime";
 import { runPrivilegedSandboxCommand } from "@/lib/build/sandbox/privileged";
 import { ensureProjectSandbox } from "@/lib/build/sandbox/lifecycle";
 import { persistSandboxToDraft } from "@/lib/build/sandbox/persist";
+import {
+  ensureBuildRun,
+  finishBuildRun,
+  recordRunToolCalls,
+  runStatusFromEvents,
+  setBuildRunStatus,
+} from "@/lib/build/runs/records";
 import { finalizeBuildReady } from "@/lib/build/preview/finalize-ready";
 import { setProjectBuildPhase, type BuildPhase } from "@/lib/build/build-phase";
 import { commitFilesToDraftBranch } from "@/lib/build/git/commit-draft";
@@ -245,9 +252,11 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   const admin = createSupabaseAdminClient();
   const { data: project } = await admin
     .from("projects")
-    .select("title, kind, cander_subdomain, custom_domain, published_url")
+    .select("title, kind, cander_subdomain, custom_domain, published_url, draft_sha")
     .eq("id", job.projectId)
     .maybeSingle();
+  await ensureBuildRun(job, project?.draft_sha ? String(project.draft_sha) : null).catch(() => undefined);
+  await setBuildRunStatus(job.id, job.facts.mode === "create" ? "planning" : "editing").catch(() => undefined);
   const projectName = String(project?.title ?? job.title ?? "New site");
   // The URL the site will live at, so metadataBase / canonical / OG image
   // URLs are right on the first publish instead of pointing at an invented
@@ -653,6 +662,9 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
   let current = job;
   if (fileBytesConsumed > 0) {
     await appendBuildJobEvents(job.id, events);
+    await recordRunToolCalls(job, events).catch(() => undefined);
+    const runStatus = runStatusFromEvents(events);
+    if (runStatus) await setBuildRunStatus(job.id, runStatus).catch(() => undefined);
     const lastProgress = [...events]
       .reverse()
       .find((e) => e.kind === "progress" || e.kind === "status");
@@ -774,6 +786,9 @@ export async function ingestPushedBuildJobEvents(
   const clean = events.filter((e) => typeof e.seq === "number" && e.kind);
   if (!clean.length) return;
   await appendBuildJobEvents(job.id, clean);
+  await recordRunToolCalls(job, clean).catch(() => undefined);
+  const runStatus = runStatusFromEvents(clean);
+  if (runStatus) await setBuildRunStatus(job.id, runStatus).catch(() => undefined);
   const lastProgress = [...clean]
     .reverse()
     .find((e) => e.kind === "progress" || e.kind === "status");
@@ -997,6 +1012,7 @@ async function completeBuildJob(
       },
     });
     console.info(LOG, "ready", { jobId: job.id, draftSha, unverified });
+    await finishBuildRun(job, { status: "complete", resultSha: draftSha, summary, stats }).catch(() => undefined);
     await startNextQueuedJob(job);
     if (job.facts.publishFix && !unverified) {
       // Publish auto-fix loop: the repair landed, so try going live again.
@@ -1161,6 +1177,56 @@ async function startNextQueuedJob(after: BuildJob): Promise<void> {
 }
 
 /**
+ * User-requested cancel. Stops the builder process in the sandbox, returns an
+ * edit's working tree to the draft tip, records the run as canceled and lets
+ * the next queued change start. Idempotent.
+ */
+export async function cancelBuildJob(opts: { jobId: string; userId: string }): Promise<BuildJob | null> {
+  const job = await getBuildJob(opts.jobId);
+  if (!job) return null;
+  if (!["queued", "running", "verifying"].includes(job.status)) return job;
+  const won = await transitionBuildJob({
+    jobId: job.id,
+    from: ["queued", "running", "verifying"],
+    to: "cancelled",
+    progressNote: "Stopped",
+  });
+  if (!won) return getBuildJob(job.id);
+
+  const sessionId = job.facts.sessionId;
+  if (sessionId) {
+    try {
+      await runPrivilegedSandboxCommand({
+        sessionId,
+        userId: opts.userId,
+        cmd: "sh",
+        args: ["-c", `if [ -f .cander/jobs/${job.id}/pid ]; then kill "$(cat .cander/jobs/${job.id}/pid)" 2>/dev/null || true; sleep 1; kill -9 "$(cat .cander/jobs/${job.id}/pid)" 2>/dev/null || true; fi`],
+      });
+    } catch (err) {
+      console.warn(LOG, "cancel: builder kill skipped", { jobId: job.id, error: err instanceof Error ? err.message : err });
+    }
+    if (job.facts.mode === "edit") {
+      await resetSandboxToDraftTip({ sessionId, userId: opts.userId, jobId: job.id }).catch(() => undefined);
+    }
+  }
+  await appendBuildJobEvents(job.id, [
+    { seq: 100008, kind: "cancelled", message: "Stopped at your request.", payload: { server: true } },
+  ]).catch(() => undefined);
+  if (job.facts.mode === "create") {
+    await setProjectBuildPhase({ projectId: job.projectId, workspaceId: job.workspaceId, phase: "failed" }).catch(() => undefined);
+  }
+  const updated = await updateBuildJob(job.id, {
+    status: "cancelled",
+    progressNote: "Stopped",
+    resultSummary: "Stopped at your request.",
+    facts: { finishedAt: new Date().toISOString() },
+  });
+  await finishBuildRun(job, { status: "canceled", resultSha: job.facts.draftSha ?? null, summary: "Stopped at your request." }).catch(() => undefined);
+  await startNextQueuedJob(job);
+  return updated;
+}
+
+/**
  * Terminal failure. `error` is the raw/internal message; users only ever see
  * the plain-English line derived from `failure.kind`. For create jobs the
  * sandbox working tree is committed first so nothing is lost and Retry can
@@ -1215,7 +1281,16 @@ async function failBuildJob(
     saved = true;
   }
 
+  // Atomic edits: a failed change never leaves the working tree half-applied.
+  // Put the sandbox back on the draft tip so the preview shows what is saved.
+  if (job.facts.mode === "edit" && job.facts.sessionId && job.facts.userId) {
+    await resetSandboxToDraftTip({ sessionId: job.facts.sessionId, userId: job.facts.userId, jobId: job.id }).catch((err) =>
+      console.warn(LOG, "reset after failed edit skipped", { jobId: job.id, error: err instanceof Error ? err.message : err }),
+    );
+  }
+
   const userCopy = userFacingFailure(f.kind, saved);
+  await finishBuildRun(job, { status: "failed", resultSha: draftSha, summary: userCopy, failure: f }).catch(() => undefined);
   await appendBuildJobEvents(job.id, [
     {
       seq: 100009,
@@ -1269,6 +1344,28 @@ async function failBuildJob(
   });
   await startNextQueuedJob(job);
   return failed;
+}
+
+/**
+ * Discard uncommitted work in the sandbox and return to the draft tip. Keeps
+ * ignored files (.env.local, node_modules, .next) and Cander's own job files.
+ */
+export async function resetSandboxToDraftTip(opts: { sessionId: string; userId: string; jobId?: string | null }): Promise<void> {
+  await runPrivilegedSandboxCommand({
+    sessionId: opts.sessionId,
+    userId: opts.userId,
+    cmd: "bash",
+    args: [
+      "-c",
+      `set -e
+if [ ! -d .git ]; then
+  git_dir=$(find . -maxdepth 3 -type d -name .git 2>/dev/null | head -1 || true)
+  if [ -n "\${git_dir}" ]; then cd "$(dirname "\${git_dir}")"; fi
+fi
+git reset --hard -q HEAD 2>/dev/null || true
+git clean -fdq -e .cander -e .env.local -e '.env*.local' 2>/dev/null || true`,
+    ],
+  });
 }
 
 /** The only failure text a user sees. No stacks, ports, HTTP codes or file names. */

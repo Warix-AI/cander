@@ -544,6 +544,25 @@ async function executeFrontAgentDecision(
     }
     case "publish":
       return runSitePublishCommandTurn(request, opts, ctx);
+    case "undo": {
+      const sha = (decision.instruction || "").trim();
+      if (!ctx.alreadyBuilt || !/^[0-9a-f]{7,40}$/i.test(sha)) {
+        return { ...base, content: reply || "There isn’t an earlier version to go back to yet.", toolResults: [] };
+      }
+      const { restoreProjectDraftShaClient } = await import("@/lib/api/project-git-client");
+      const restored = await restoreProjectDraftShaClient({ projectId: ctx.projectId, workspaceId: ctx.workspaceId, sha });
+      if (!restored?.ok) {
+        return { ...base, content: "I couldn’t restore that version just now. Try again in a moment.", toolResults: [] };
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("cander:draft-restored", { detail: { projectId: ctx.projectId, draftSha: restored.draftSha ?? sha } }));
+      }
+      return {
+        ...base,
+        content: restored.alreadyAtTip ? "Your draft is already at that version." : reply || "Done — your draft is back to the earlier version. The preview is refreshing.",
+        toolResults: [],
+      };
+    }
     case "edit": {
       if (!ctx.alreadyBuilt) return null;
       const result = await runBuildV2EditTurn(request, opts, {

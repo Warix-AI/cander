@@ -98,6 +98,8 @@ async function main() {
   const budget = {
     deadlineMs: Date.now() + Number(config.budget?.wallClockMs || (mode === "create" ? 75 : 25) * 60_000),
     maxLlmCalls: Number(config.budget?.maxLlmCalls || (mode === "create" ? 400 : 120)),
+    // Guardrail against tool-call loops (a model re-reading the same files forever).
+    maxToolCalls: Number(config.budget?.maxToolCalls || (mode === "create" ? 1500 : 400)),
   };
 
   log.emit(
@@ -429,7 +431,7 @@ function classifyFailure(reason, recovery) {
   if (reason === "verification_failed") {
     return recovery?.last && recovery.last.ok === false && recovery.last.kind === "infra" ? "infra" : "app";
   }
-  if (reason === "deadline" || reason === "llm_budget") return "budget";
+  if (reason === "deadline" || reason === "llm_budget" || reason === "tool_budget") return "budget";
   if (reason === "no_tool_calls") return "agent";
   return "unknown";
 }

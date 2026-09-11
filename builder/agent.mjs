@@ -229,6 +229,9 @@ export async function runAgent(opts) {
       if (remaining <= 0) {
         return { finished: false, summary: "", routes: [], reason: "llm_budget", lastText: state.lastText };
       }
+      if (budget.maxToolCalls && tools.toolCalls >= budget.maxToolCalls) {
+        return { finished: false, summary: "", routes: [], reason: "tool_budget", lastText: state.lastText };
+      }
 
       let result;
       try {

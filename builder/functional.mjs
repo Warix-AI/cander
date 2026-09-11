@@ -323,3 +323,66 @@ async function missingFeatureIssues(page, features, routes, base) {
   if (!merged.blog) fail("blog", "Feature “Blog / news” was requested but no blog section or route exists.");
   return issues;
 }
+
+/**
+ * Agent-facing page inspection: load one route in a real browser and return
+ * console/uncaught errors, horizontal overflow, and an accessibility outline
+ * (landmarks, headings, unlabeled controls). Used by the coder to debug what
+ * the HTML fetch in check_preview cannot show.
+ * @param {{ devServerUrl: string, route: string, width?: number, log: import("./events.mjs").EventLog }} opts
+ */
+export async function inspectPage(opts) {
+  const pw = await ensurePlaywright({ log: opts.log });
+  if (!pw) return "Browser inspection is unavailable in this sandbox; use check_preview.";
+  const width = Number(opts.width) >= 320 ? Number(opts.width) : 1280;
+  const browser = await pw.chromium.launch({ headless: true, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
+  try {
+    const context = await browser.newContext({ viewport: { width, height: 900 }, isMobile: width < 600, hasTouch: width < 600 });
+    const page = await context.newPage();
+    const errors = [];
+    page.on("console", (m) => {
+      if (m.type() === "error" && !CONSOLE_NOISE.test(m.text())) errors.push(m.text().slice(0, 240));
+    });
+    page.on("pageerror", (e) => errors.push(`Uncaught: ${String(e?.message || e).slice(0, 240)}`));
+    const route = String(opts.route || "/").startsWith("/") ? String(opts.route || "/") : `/${opts.route}`;
+    let status = 0;
+    try {
+      const resp = await page.goto(`${opts.devServerUrl}${route}`, { waitUntil: "networkidle", timeout: 60_000 });
+      status = resp ? resp.status() : 0;
+    } catch (err) {
+      return `${route} did not finish loading: ${String(err?.message || err).slice(0, 200)}`;
+    }
+    await page.waitForTimeout(400);
+    const summary = await page.evaluate(() => {
+      const doc = document;
+      const overflow = doc.documentElement.scrollWidth - doc.documentElement.clientWidth;
+      const landmarks = [...doc.querySelectorAll("header,nav,main,footer,aside,[role]")].map((el) => el.getAttribute("role") || el.tagName.toLowerCase());
+      const headings = [...doc.querySelectorAll("h1,h2,h3")].slice(0, 30).map((h) => `${h.tagName.toLowerCase()} ${(h.textContent || "").trim().slice(0, 60)}`);
+      const unlabeled = [...doc.querySelectorAll("input,select,textarea,button")]
+        .filter((el) => {
+          if (el.tagName === "BUTTON") return !(el.textContent || "").trim() && !el.getAttribute("aria-label");
+          const id = el.getAttribute("id");
+          return !el.getAttribute("aria-label") && !el.getAttribute("aria-labelledby") && !(id && doc.querySelector(`label[for="${id}"]`)) && !el.closest("label") && el.getAttribute("type") !== "hidden";
+        })
+        .slice(0, 10)
+        .map((el) => `${el.tagName.toLowerCase()}${el.getAttribute("name") ? `[name=${el.getAttribute("name")}]` : ""}`);
+      const imgsNoAlt = [...doc.querySelectorAll("img")].filter((i) => !i.hasAttribute("alt")).length;
+      const title = doc.title;
+      const overlay = doc.querySelector("nextjs-portal") ? "Next.js error overlay is showing" : null;
+      return { overflow, landmarks, headings, unlabeled, imgsNoAlt, title, overlay };
+    });
+    const lines = [
+      `${route} @ ${width}px → HTTP ${status}${summary.title ? ` · title "${summary.title.slice(0, 80)}"` : ""}`,
+      summary.overlay ? `!! ${summary.overlay}` : null,
+      errors.length ? `Console/runtime errors (${errors.length}):\n- ${[...new Set(errors)].slice(0, 6).join("\n- ")}` : "No console errors.",
+      summary.overflow > 2 ? `Horizontal overflow: ${summary.overflow}px wider than the viewport.` : "No horizontal overflow.",
+      `Landmarks: ${summary.landmarks.length ? [...new Set(summary.landmarks)].join(", ") : "(none)"}`,
+      `Headings: ${summary.headings.length ? summary.headings.join(" | ") : "(none)"}`,
+      summary.unlabeled.length ? `Unlabeled controls: ${summary.unlabeled.join(", ")}` : "All form controls labelled.",
+      summary.imgsNoAlt ? `${summary.imgsNoAlt} image(s) missing alt.` : null,
+    ].filter(Boolean);
+    return lines.join("\n").slice(0, 6000);
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}

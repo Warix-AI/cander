@@ -45,6 +45,7 @@ Actions:
 - edit: the user wants something changed in the existing draft (add/remove/replace/fix/restyle/rewrite…). Put a self-contained instruction in \`instruction\` (resolve pronouns and "same as" using the history; keep the user's words where possible). Reply with a one-line acknowledgement.
 - create: only when NO draft exists yet and the message describes what to build. \`instruction\` = the build spec in the user's words.
 - publish: the user wants to go live / republish / deploy. Reply with a one-line acknowledgement.
+- undo: the user wants to undo the last change or go back to an earlier version ("undo that", "go back to before the pricing page", "revert"). Call list_versions, choose the version that matches (the one BEFORE the change they want gone; "undo" alone = the previous version), put its id in \`instruction\`, and reply with one line saying what the draft will go back to (by description and time, never ids).
 
 Rules:
 - If a draft exists, "build it / go ahead / make it" refers to the last discussed change → edit.
@@ -58,7 +59,7 @@ const DECISION_SCHEMA = {
   schema: {
     type: "object" as const,
     properties: {
-      action: { type: "string", enum: ["answer", "plan", "edit", "create", "publish"] },
+      action: { type: "string", enum: ["answer", "plan", "edit", "create", "publish", "undo"] },
       reply: { type: "string" },
       instruction: { type: ["string", "null"] },
     },
@@ -108,7 +109,25 @@ function makeTools(rt: ProjectRuntime) {
       return content.length > MAX_FILE_CHARS ? `${content.slice(0, MAX_FILE_CHARS)}\n…(truncated)` : content;
     },
   });
-  return [listFiles, readFile];
+  const listVersions = tool({
+    name: "list_versions",
+    description: "Recent saved versions of the draft, newest first: id, when, and what changed. Use for undo / go back requests.",
+    parameters: { type: "object", properties: {}, additionalProperties: false, required: [] },
+    strict: true,
+    execute: async () => {
+      const { listDraftCommits } = await import("@/lib/build/git/draft-history");
+      const { commits, tipSha } = await listDraftCommits({ projectId: rt.projectId, workspaceId: rt.workspaceId, limit: 15 });
+      if (!commits.length) return "No saved versions yet.";
+      return commits
+        .map((c, i) => {
+          const when = c.authorDate ? new Date(c.authorDate).toISOString().replace("T", " ").slice(0, 16) : "unknown time";
+          const label = c.title.replace(/^Cander:\s*/i, "").replace(/^Cander checkpoint:\s*/i, "checkpoint: ");
+          return `${i === 0 && c.sha === tipSha ? "[current] " : ""}id=${c.sha} · ${when} · ${label}`;
+        })
+        .join("\n");
+    },
+  });
+  return [listFiles, readFile, listVersions];
 }
 
 let keyConfigured = false;
@@ -163,7 +182,7 @@ export async function runFrontAgentTurn(input: FrontAgentTurnInput): Promise<Fro
   const out = result.finalOutput as Partial<FrontAgentDecision> | string | undefined;
   const parsed: Partial<FrontAgentDecision> =
     typeof out === "string" ? (safeParse(out) ?? { action: "answer", reply: out }) : out ?? {};
-  const action: FrontAgentAction = (["answer", "plan", "edit", "create", "publish"] as const).includes(
+  const action: FrontAgentAction = (["answer", "plan", "edit", "create", "publish", "undo"] as const).includes(
     parsed.action as FrontAgentAction,
   )
     ? (parsed.action as FrontAgentAction)

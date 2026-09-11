@@ -212,6 +212,19 @@ export class SandboxTools {
         },
       },
       {
+        name: "inspect_page",
+        description:
+          "Open one route in a real browser and report console/runtime errors, the Next.js error overlay, horizontal overflow, landmarks, headings and unlabeled controls. Use when check_preview passes but something looks or behaves wrong, and for mobile checks (width 375).",
+        parameters: {
+          type: "object",
+          properties: {
+            route: { type: "string", description: "e.g. / or /pricing" },
+            width: { type: "integer", description: "Viewport width in px (375 mobile, 768 tablet, 1280 desktop). Default 1280." },
+          },
+          required: ["route"],
+        },
+      },
+      {
         name: "emit_progress",
         description:
           "Report a short, plain-English progress line for the user (no framework names, no npm/tsc/GitHub/Vercel). Call at each milestone.",
@@ -347,6 +360,26 @@ export class SandboxTools {
   async call(name, args) {
     this.toolCalls += 1;
     const a = args && typeof args === "object" ? args : {};
+    const startedAt = Date.now();
+    const result = await this.dispatch(name, a);
+    // Redacted run ledger entry: tool, paths, a short summary. Never file
+    // bodies, outputs or anything that could carry a secret.
+    try {
+      const out = String(result?.output ?? "");
+      this.log.emit("tool_call", name, {
+        tool: name,
+        ok: !/^(ERROR|REFUSED)\b/.test(out),
+        durationMs: Date.now() - startedAt,
+        paths: toolCallPaths(a),
+        summary: toolCallSummary(name, a),
+      });
+    } catch {
+      /* ledger is best-effort */
+    }
+    return result;
+  }
+
+  async dispatch(name, a) {
     try {
       switch (name) {
         case "list_tree":
@@ -369,6 +402,10 @@ export class SandboxTools {
           return { output: await this.checkPreview(a.paths) };
         case "download_image":
           return { output: await this.downloadImage(a.url, a.path) };
+        case "inspect_page": {
+          const { inspectPage } = await import("./functional.mjs");
+          return { output: await inspectPage({ devServerUrl: this.devServerUrl, route: a.route, width: a.width, log: this.log }) };
+        }
         case "emit_progress":
           this.log.emit("progress", String(a.message ?? "").slice(0, 200));
           return { output: "ok" };
@@ -912,4 +949,26 @@ function globToRegExp(glob) {
     .replace(/\*/g, "[^/]*")
     .replace(/\?/g, ".");
   return new RegExp(`^${esc}$`);
+}
+
+/** Paths a tool call touched, for the redacted run ledger. */
+function toolCallPaths(a) {
+  const out = [];
+  for (const key of ["path", "dir", "file"]) if (typeof a?.[key] === "string") out.push(a[key]);
+  if (Array.isArray(a?.paths)) for (const p of a.paths) if (typeof p === "string") out.push(p);
+  if (Array.isArray(a?.files)) for (const f of a.files) if (typeof f?.path === "string") out.push(f.path);
+  return out.slice(0, 20);
+}
+
+/** One safe line describing the call: commands with token-like values masked, queries elided. */
+function toolCallSummary(name, a) {
+  if (name === "run_command" && typeof a?.command === "string") {
+    return a.command.replace(/([A-Za-z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD)[A-Za-z0-9_]*=)\S+/gi, "$1[redacted]").slice(0, 200);
+  }
+  if (name === "db_sql" && typeof a?.sql === "string") return a.sql.trim().split(/\s+/).slice(0, 3).join(" ").toUpperCase().slice(0, 40);
+  if (name === "db_write_migration" && typeof a?.name === "string") return `migration ${a.name}`.slice(0, 120);
+  if ((name === "search_files" || name === "search_components") && typeof a?.query === "string") return a.query.slice(0, 120);
+  if (name === "emit_progress" && typeof a?.message === "string") return a.message.slice(0, 120);
+  if (name === "checkpoint" && typeof a?.message === "string") return a.message.slice(0, 120);
+  return null;
 }
