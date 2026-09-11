@@ -4,7 +4,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { execShell, fetchPreview, truncate } from "./tools.mjs";
+import { execShell, fetchPreview, isolatedBuildScript, truncate } from "./tools.mjs";
 import { runFunctionalChecks } from "./functional.mjs";
 
 /**
@@ -428,10 +428,10 @@ const BUILD_SIGNAL_RE =
  */
 export async function runProductionBuild(repoDir, timeoutMs) {
   const started = Date.now();
-  const res = await execShell(
-    "set -o pipefail; npx --no-install next build 2>&1 | tail -n 400",
-    { cwd: repoDir, timeoutMs: Math.min(Math.max(timeoutMs ?? 0, 420_000), 900_000) },
-  );
+  const res = await execShell(isolatedBuildScript(repoDir), {
+    cwd: repoDir,
+    timeoutMs: Math.min(Math.max(timeoutMs ?? 0, 420_000), 900_000),
+  });
   const seconds = Math.round((Date.now() - started) / 1000);
   const out = `${res.stdout || ""}\n${res.stderr || ""}`;
   const failed =

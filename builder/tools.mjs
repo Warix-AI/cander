@@ -33,6 +33,51 @@ const ALLOWED_COMMAND_PREFIX_RE =
   /^(npm|npx|pnpm|yarn|node|tsc|next|ls|cat|head|tail|wc|find|grep|rg|echo|printf|test|mkdir|cp|mv|rm|touch|curl|git\s+(status|diff|log|show|ls-files)|sed\s+-n|sort|uniq|tr|cut|jq|env|pwd|which|true|sleep|kill|pkill|ps)\b/;
 
 
+/**
+ * Shell snippet that mirrors the working tree into an isolated build dir and
+ * runs `next build` there. The dev server owns `<repo>/.next`; a production
+ * build in the same directory shares its Turbopack cache and dev-mode chunks,
+ * which surfaces as flaky prerender crashes ("Cannot read properties of null
+ * (reading 'useContext')" on /_global-error, React key warnings during a prod
+ * build) and knocks the preview over. Publish preflight already builds in a
+ * detached worktree; acceptance and the coder's own builds must match it.
+ * node_modules is symlinked (same deps, no reinstall).
+ */
+export const ISOLATED_BUILD_DIR = "/tmp/cander-verify-build";
+export function isolatedBuildScript(repoDir, buildCmd = "npx --no-install next build") {
+  const src = JSON.stringify(repoDir.replace(/\/$/, "") + "/");
+  const dst = JSON.stringify(ISOLATED_BUILD_DIR);
+  return [
+    "set -o pipefail",
+    `SRC=${src}; DST=${dst}`,
+    'mkdir -p "$DST"',
+    // Mirror sources; keep the destination's own .next (incremental) but never
+    // sandbox home-dir clutter.
+    "if command -v rsync >/dev/null 2>&1; then",
+    '  rsync -a --delete --exclude node_modules --exclude .next --exclude .git --exclude .cander --exclude .cache --exclude .codex --exclude .config --exclude .local --exclude .npm --exclude .global --exclude .npmrc --exclude tsconfig.tsbuildinfo "$SRC" "$DST/"',
+    "else",
+    '  find "$DST" -mindepth 1 -maxdepth 1 ! -name .next ! -name node_modules -exec rm -rf {} +',
+    '  (cd "$SRC" && tar cf - --exclude=./node_modules --exclude=./.next --exclude=./.git --exclude=./.cander --exclude=./.cache --exclude=./.codex --exclude=./.config --exclude=./.local --exclude=./.npm --exclude=./.global --exclude=./.npmrc .) | (cd "$DST" && tar xf -)',
+    "fi",
+    // Turbopack refuses a node_modules symlink that points outside its root,
+    // so mirror deps with hardlinks (falls back to a copy across filesystems).
+    // Refresh only when the dependency manifest changed.
+    'STAMP="$DST/.node_modules.stamp"',
+    'if [ ! -d "$DST/node_modules" ] || [ ! -f "$STAMP" ] || [ "$SRC"package.json -nt "$STAMP" ] || { [ -f "$SRC"package-lock.json ] && [ "$SRC"package-lock.json -nt "$STAMP" ]; }; then',
+    '  rm -rf "$DST/node_modules"',
+    '  cp -al "$SRC"node_modules "$DST/node_modules" 2>/dev/null || { rm -rf "$DST/node_modules"; cp -a "$SRC"node_modules "$DST/node_modules"; }',
+    '  touch "$STAMP"',
+    "fi",
+    // Dev-mode artifacts must never leak into the production build.
+    'rm -rf "$DST/.next/dev" 2>/dev/null || true',
+    `cd "$DST" && NEXT_TELEMETRY_DISABLED=1 CI=1 ${buildCmd} 2>&1 | tail -n 400`,
+  ].join("\n");
+}
+
+/** `next build` / `npm run build` typed by the coder — must not run beside the dev server. */
+const PRODUCTION_BUILD_CMD_RE =
+  /^(?:[A-Z_][A-Z0-9_]*=\S+\s+)*(?:npm\s+run\s+(?:-s\s+)?build|npx\s+(?:--no-install\s+|--yes\s+)?next\s+build|next\s+build|yarn\s+build|pnpm\s+(?:run\s+)?build)\b(.*)$/i;
+
 /** Detect foreground next/npm-dev and rewrite to a short detached start. */
 function autoDetachLongServer(cmd) {
   const looksLikeServer =
@@ -722,6 +767,26 @@ export class SandboxTools {
       return truncate(out, 20_000);
     }
     const timeoutMs = Math.min(Math.max(Number(timeoutSec) || 180, 5), 900) * 1000;
+    // A production build in the live repo dir fights the dev server over
+    // `.next` (flaky prerender crashes, preview restarts). Run it in the same
+    // isolated mirror acceptance uses so the coder sees what Vercel will see.
+    const buildMatch = segments.length === 1 ? PRODUCTION_BUILD_CMD_RE.exec(cmd) : null;
+    if (buildMatch) {
+      const flags = ((buildMatch[1] || "").match(/--(?:webpack|debug|turbopack)\b/g) || []).join(" ");
+      const buildCmd = `npx --no-install next build${flags ? ` ${flags}` : ""}`;
+      this.log.emit("tool", `$ ${cmd.slice(0, 160)}`, { command: cmd.slice(0, 500), isolated: true });
+      const result = await execShell(isolatedBuildScript(this.repoDir, buildCmd), {
+        cwd: this.repoDir,
+        timeoutMs: Math.max(timeoutMs, 420_000),
+      });
+      const out = [
+        result.stdout,
+        result.stderr ? `\n[stderr]\n${result.stderr}` : "",
+        "\n[production build ran in an isolated copy of the repo so it does not disturb the preview server — same sources, same node_modules]",
+        `\n[exit ${result.exitCode}${result.timedOut ? ", timed out" : ""}]`,
+      ].join("");
+      return truncate(out, 20_000);
+    }
     this.log.emit("tool", `$ ${cmd.slice(0, 160)}`, { command: cmd.slice(0, 500) });
     const result = await execShell(cmd, { cwd: this.repoDir, timeoutMs });
     const out = [
