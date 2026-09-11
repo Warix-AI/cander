@@ -384,6 +384,7 @@ function normalizeProjectSpecMemory(o: Record<string, unknown>): Partial<Project
             ),
           ) as Record<string, string>)
         : undefined,
+      provenance: asRecord(designSystem.provenance) || undefined,
       referenceRoutes: asStringArray(designSystem.referenceRoutes),
       fallbackReason: asString(designSystem.fallbackReason) || undefined,
       updatedAt: asString(designSystem.updatedAt) || undefined,

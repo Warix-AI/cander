@@ -24,6 +24,11 @@ export type BuilderFeatureFlags = {
    * with components. Apps ignore this (component-first remains).
    */
   websiteTemplateFirst: boolean;
+  /**
+   * Developer-only escape hatch: allow inventing website visual UI without 21st.
+   * Default OFF. Production website generation must not depend on this.
+   */
+  allowNativeSiteUi: boolean;
   /** AI visual QA after technical acceptance (create + visual edits). */
   visualQa: boolean;
   /** Bounded SDK-owned tool loop (no indefinite outer for-ever). */
@@ -40,6 +45,7 @@ export function resolveBuilderFeatureFlags(): BuilderFeatureFlags {
     improved,
     twentyFirstFetch: envOn("CANDER_BUILDER_21ST_FETCH", improved),
     websiteTemplateFirst: envOn("CANDER_WEBSITE_21ST_TEMPLATE_FIRST", improved),
+    allowNativeSiteUi: envOn("CANDER_ALLOW_NATIVE_SITE_UI", false),
     visualQa: envOn("CANDER_BUILDER_VISUAL_QA", improved),
     sdkOwnedLoop: envOn("CANDER_BUILDER_SDK_LOOP", improved),
     continuousRepair: envOn("CANDER_BUILDER_CONTINUOUS_REPAIR", improved),

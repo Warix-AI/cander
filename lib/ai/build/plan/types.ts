@@ -145,6 +145,8 @@ export type ProjectDesignSystem = {
   pagePatterns?: Record<string, string>;
   componentPatterns?: Record<string, string>;
   components?: Record<string, string>;
+  /** Provenance map for major UI surfaces (template / component / derived). */
+  provenance?: Record<string, unknown>;
   referenceRoutes?: string[];
   fallbackReason?: string;
   updatedAt?: string;

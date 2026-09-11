@@ -19,7 +19,7 @@ import {
 import { normalizeGet } from "../builder/twenty-first.mjs";
 
 describe("websiteTemplateFirst flag", () => {
-  const keys = ["CANDER_BUILDER_IMPROVED", "CANDER_WEBSITE_21ST_TEMPLATE_FIRST"];
+  const keys = ["CANDER_BUILDER_IMPROVED", "CANDER_WEBSITE_21ST_TEMPLATE_FIRST", "CANDER_ALLOW_NATIVE_SITE_UI"];
   const prev: Record<string, string | undefined> = {};
   beforeEach(() => {
     for (const k of keys) {
@@ -37,6 +37,7 @@ describe("websiteTemplateFirst flag", () => {
   it("defaults on with improved builder", () => {
     const f = resolveBuilderFeatureFlags();
     assert.equal(f.websiteTemplateFirst, true);
+    assert.equal(f.allowNativeSiteUi, false);
   });
 
   it("can be disabled independently", () => {

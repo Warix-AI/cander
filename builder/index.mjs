@@ -14,6 +14,7 @@ import { SandboxTools, execShell } from "./tools.mjs";
 import { TwentyFirstClient } from "./twenty-first.mjs";
 import { runAgent, normalizeAgentReason } from "./agent.mjs";
 import { runAcceptance } from "./verify.mjs";
+import { auditUiSource } from "./ui-source.mjs";
 import {
   createInstructions,
   createTask,
@@ -97,6 +98,7 @@ async function main() {
     improved: config.flags?.improved !== false,
     twentyFirstFetch: config.flags?.twentyFirstFetch !== false,
     websiteTemplateFirst: config.flags?.websiteTemplateFirst !== false,
+    allowNativeSiteUi: config.flags?.allowNativeSiteUi === true,
     visualQa: config.flags?.visualQa !== false,
     sdkOwnedLoop: config.flags?.sdkOwnedLoop !== false,
     continuousRepair: config.flags?.continuousRepair !== false,
@@ -140,6 +142,11 @@ async function main() {
     templateFetches: 0,
     templateSelected: 0,
     templateUsed: false,
+    templateFetched: false,
+    templateInstalled: false,
+    templateRendered: false,
+    nativeUiUsed: false,
+    uiSourceAcceptancePassed: false,
     componentsSelected: 0,
     acceptanceAttempts: 0,
     previewRestarts: 0,
@@ -213,8 +220,33 @@ async function main() {
         repoDir,
         fetchComponents: flags.twentyFirstFetch,
         templateFirst: flags.websiteTemplateFirst && projectKind === "site",
+        allowNativeSiteUi: flags.allowNativeSiteUi,
       });
       metrics.planningCalls += 1;
+      if (plan?.abort) {
+        const reason = plan.abortReason || "ui_source_unavailable";
+        log.emit("progress", "Design resources are temporarily unavailable. Try again.", {
+          phase: "twenty_first_template",
+          detail: reason,
+        });
+        if (plan.designSystem) {
+          log.emit("spec_update", "Recorded UI source unavailability", {
+            patch: { designSystem: plan.designSystem },
+            decision: `Website CREATE aborted — ${reason}`,
+          });
+        }
+        const message =
+          "Design resources are temporarily unavailable. Try again.";
+        log.emit("failed", message, {
+          reason,
+          classification: "infra",
+          stats: { ...metrics, ...(plan.stats || {}) },
+        });
+        finishFile("failed", { error: message, reason, stats: plan.stats || {} });
+        await log.close();
+        process.exit(1);
+        return;
+      }
       if (plan?.selectedComponents?.length) {
         selectedComponents = plan.selectedComponents;
         metrics.componentsSelected = selectedComponents.length;
@@ -226,6 +258,9 @@ async function main() {
         metrics.templateFetches = Number(plan.stats.templateFetches || 0);
         metrics.templateSelected = Number(plan.stats.templateSelected || 0);
         metrics.templateUsed = Boolean(plan.stats.templateUsed);
+        metrics.templateFetched = Boolean(plan.stats.templateFetched);
+        metrics.templateInstalled = Boolean(plan.stats.templateInstalled);
+        metrics.nativeUiUsed = Boolean(plan.stats.nativeUiUsed);
       }
       if (plan?.designDirection) designDirection = plan.designDirection;
       const specPatch = {};
@@ -255,7 +290,38 @@ async function main() {
       }
     } catch (err) {
       log.emit("log", `Planning skipped: ${err?.message || err}`);
+      if (projectKind === "site" && flags.websiteTemplateFirst && !flags.allowNativeSiteUi) {
+        const message = "Design resources are temporarily unavailable. Try again.";
+        log.emit("failed", message, {
+          reason: "ui_source_unavailable",
+          classification: "infra",
+          cause: String(err?.message || err),
+        });
+        finishFile("failed", { error: message, reason: "ui_source_unavailable" });
+        await log.close();
+        process.exit(1);
+        return;
+      }
     }
+  }
+  if (
+    mode === "create" &&
+    projectKind === "site" &&
+    flags.websiteTemplateFirst &&
+    !flags.allowNativeSiteUi &&
+    !plan?.selectedTemplate &&
+    !resume?.plan
+  ) {
+    // Planning returned without a template and without an explicit abort (e.g. null).
+    const message = "Design resources are temporarily unavailable. Try again.";
+    log.emit("failed", message, {
+      reason: "ui_source_unavailable",
+      classification: "infra",
+    });
+    finishFile("failed", { error: message, reason: "ui_source_unavailable" });
+    await log.close();
+    process.exit(1);
+    return;
   }
   if (plan?.markdown) {
     // Durable in the sandbox so a retry can skip planning.
@@ -305,6 +371,103 @@ async function main() {
     } catch {
       /* best-effort */
     }
+
+    // Website UI-source gate (CREATE): template must be installed+rendered;
+    // selected 21st components must be used; no unauthorized native visuals.
+    const enforceUiSource =
+      projectKind === "site" &&
+      flags.websiteTemplateFirst &&
+      !flags.allowNativeSiteUi &&
+      (mode === "create" ||
+        (mode === "edit" &&
+          config.projectSpec?.designSystem?.source === "21st"));
+    if (enforceUiSource) {
+      log.emit("progress", "Checking visual consistency…", { phase: "ui_source" });
+      const isLegacyNativeSite =
+        config.projectSpec?.designSystem?.source === "native" ||
+        config.projectSpec?.designSystem?.source === "derived";
+      const uiAudit = auditUiSource({
+        repoDir,
+        mode,
+        projectKind,
+        allowNativeSiteUi: flags.allowNativeSiteUi,
+        selectedTemplate: plan?.selectedTemplate || null,
+        selectedComponents,
+        designSystem: plan?.designSystem || config.projectSpec?.designSystem || null,
+        isLegacyNativeSite,
+      });
+      metrics.templateFetched = Boolean(uiAudit.metrics.templateFetched) || metrics.templateFetched;
+      metrics.templateInstalled = Boolean(uiAudit.metrics.templateInstalled) || metrics.templateInstalled;
+      metrics.templateRendered = Boolean(uiAudit.metrics.templateRendered);
+      metrics.nativeUiUsed = Boolean(uiAudit.metrics.nativeUiUsed);
+      metrics.uiSourceAcceptancePassed = uiAudit.ok;
+      if (selectedComponents.length) {
+        try {
+          log.emit("spec_update", "Recorded 21st component usage", {
+            patch: {
+              selectedComponents: selectedComponents.map((c) => ({
+                source: c.source || "21st",
+                componentId: c.componentId,
+                name: c.name,
+                purpose: c.purpose,
+                reason: c.reason,
+                localPath: c.localPath,
+                adaptationInstructions: c.adaptationInstructions,
+                imported: Boolean(c.imported),
+                usedInRender: Boolean(c.usedInRender),
+              })),
+              designBrief: {
+                twentyFirstStats: {
+                  searchCount: metrics.twentyFirstSearches,
+                  fetchCount: metrics.twentyFirstFetches,
+                  selectedIds: selectedComponents.map((c) => c.componentId),
+                  componentFilesWritten: selectedComponents.map((c) => c.localPath).filter(Boolean),
+                  componentFilesImported: selectedComponents.filter((c) => c.imported).map((c) => c.localPath),
+                  componentFilesUsedInRender: selectedComponents
+                    .filter((c) => c.usedInRender)
+                    .map((c) => c.localPath),
+                  templateFetched: metrics.templateFetched,
+                  templateInstalled: metrics.templateInstalled,
+                  templateRendered: metrics.templateRendered,
+                  uiSourceAcceptancePassed: uiAudit.ok,
+                  nativeUiUsed: metrics.nativeUiUsed,
+                  unauthorizedVisualComponents: uiAudit.metrics.unauthorizedVisualComponents,
+                },
+              },
+            },
+          });
+        } catch (err) {
+          log.emit("log", `21st usage audit persist skipped: ${err?.message || err}`);
+        }
+      }
+      if (!uiAudit.ok) {
+        const uiReport = [
+          result.report || "",
+          "",
+          "UI source issues:",
+          ...uiAudit.issues.map((i) => `- ${i}`),
+        ]
+          .filter(Boolean)
+          .join("\n");
+        lastVerification = {
+          ...result,
+          ok: false,
+          issues: [...(result.issues || []), ...uiAudit.issues],
+          report: uiReport,
+          classification: "app",
+        };
+        try {
+          writeFileSync(join(jobDir, "verify-report.txt"), uiReport);
+        } catch {
+          /* best-effort */
+        }
+        if (result.classification === "preview_unavailable") {
+          return { accept: false, infra: true, classification: "preview_unavailable", feedback: result.report };
+        }
+        return { accept: false, feedback: uiReport, classification: "app" };
+      }
+    }
+
     if (result.ok) return { accept: true };
     if (result.classification === "preview_unavailable") {
       // Not the coder's problem: accept unverified and let the server recover.
@@ -575,92 +738,6 @@ async function main() {
       } else {
         break;
       }
-    }
-  }
-
-  // Track whether selected 21st components were actually imported/used.
-  if (selectedComponents.length) {
-    try {
-      const { readFileSync: rf, readdirSync } = await import("node:fs");
-      const { join: j } = await import("node:path");
-      const walk = (dir, acc = []) => {
-        let ents = [];
-        try {
-          ents = readdirSync(dir, { withFileTypes: true });
-        } catch {
-          return acc;
-        }
-        for (const e of ents) {
-          const p = j(dir, e.name);
-          if (e.isDirectory() && e.name !== "node_modules" && e.name !== ".next" && e.name !== "twenty-first") {
-            walk(p, acc);
-          } else if (/\.(tsx?|jsx?)$/.test(e.name)) acc.push(p);
-        }
-        return acc;
-      };
-      const sources = walk(j(repoDir, "app")).concat(walk(j(repoDir, "components")));
-      const blob = sources
-        .map((p) => {
-          try {
-            return rf(p, "utf8");
-          } catch {
-            return "";
-          }
-        })
-        .join("\n");
-      let imported = 0;
-      let used = 0;
-      for (const c of selectedComponents) {
-        const local = String(c.localPath || "");
-        const base = local.split("/").pop()?.replace(/\.\w+$/, "") || "";
-        const hitImport =
-          (local && blob.includes(local.replace(/^components\//, "@/components/"))) ||
-          (base && new RegExp(`from\\s+["'][^"']*${base}["']`).test(blob)) ||
-          (local && blob.includes(local));
-        if (hitImport) {
-          imported += 1;
-          c.imported = true;
-        }
-        if (hitImport || (base && blob.includes(base))) {
-          used += 1;
-          c.usedInRender = Boolean(hitImport);
-        }
-      }
-      const ignored = imported === 0 && selectedComponents.length > 0;
-      if (ignored) {
-        log.emit("log", `21st: fetched ${selectedComponents.length} component(s) but none were imported into the app`);
-      } else {
-        log.emit("log", `21st usage: ${imported}/${selectedComponents.length} imported`);
-      }
-      log.emit("spec_update", "Recorded 21st component usage", {
-        patch: {
-          selectedComponents: selectedComponents.map((c) => ({
-            source: c.source || "21st",
-            componentId: c.componentId,
-            name: c.name,
-            purpose: c.purpose,
-            reason: c.reason,
-            localPath: c.localPath,
-            adaptationInstructions: c.adaptationInstructions,
-            imported: Boolean(c.imported),
-            usedInRender: Boolean(c.usedInRender),
-          })),
-          designBrief: {
-            twentyFirstStats: {
-              searchCount: metrics.twentyFirstSearches,
-              fetchCount: metrics.twentyFirstFetches,
-              selectedIds: selectedComponents.map((c) => c.componentId),
-              componentFilesWritten: selectedComponents.map((c) => c.localPath).filter(Boolean),
-              componentFilesImported: selectedComponents.filter((c) => c.imported).map((c) => c.localPath),
-              componentFilesUsedInRender: selectedComponents.filter((c) => c.usedInRender).map((c) => c.localPath),
-              ignoredByCoder: ignored,
-            },
-          },
-        },
-      });
-      void used;
-    } catch (err) {
-      log.emit("log", `21st usage audit skipped: ${err?.message || err}`);
     }
   }
 

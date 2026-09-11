@@ -404,6 +404,7 @@ export function renderDesignDoc(spec: ProjectSpec): string {
     if (d.source) lines.push(`- Source: ${d.source}`);
     if (d.templateId) lines.push(`- Template: ${d.templateName || d.templateId} (\`${d.templateId}\`)`);
     if (d.templateRoot) lines.push(`- Template root: ${d.templateRoot}`);
+    if (d.provenance) lines.push(`- Provenance: recorded (prefer reuse/derive over new 21st searches)`);
     if (d.fallbackReason) lines.push(`- Fallback: ${d.fallbackReason}`);
     if (d.components && Object.keys(d.components).length) {
       lines.push(

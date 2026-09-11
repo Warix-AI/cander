@@ -41,6 +41,7 @@ describe("builder feature flags", () => {
     assert.equal(f.improved, true);
     assert.equal(f.twentyFirstFetch, true);
     assert.equal(f.websiteTemplateFirst, true);
+    assert.equal(f.allowNativeSiteUi, false);
     assert.equal(f.visualQa, true);
     assert.equal(f.sdkOwnedLoop, true);
   });

@@ -13,8 +13,9 @@ import {
   runTemplateAgent,
   inferMissingComponentPurposes,
 } from "./template-agent.mjs";
+import { writeUiManifest } from "./ui-source.mjs";
 
-const PLANNER_INSTRUCTIONS = `You are Cander's website planner. A 21st.dev TEMPLATE will be the visual foundation — you do NOT invent the visual design from scratch.
+const PLANNER_INSTRUCTIONS = `You are Cander's website planner. A 21st.dev TEMPLATE is the REQUIRED visual foundation — you do NOT invent the visual design from scratch. Native/custom visual UI is forbidden for websites.
 
 Your job: turn the onboarding/design brief into a concrete adaptation plan for that template (content, routes, SEO, forms, missing sections).
 
@@ -26,9 +27,9 @@ Name/wordmark treatment, 3–5 color tokens as hex (primary, accent, background,
 ## Sitemap
 Table: route | page title | purpose | primary CTA. Always include /, and a contact route unless forbidden.
 ## Template adaptation
-What to KEEP from the template (shell, rhythm, hierarchy), REMOVE (demo sections), MODIFY (copy, CTAs, imagery), and CONTENT PLAN per major section.
+What to KEEP from the template (shell, rhythm, hierarchy), REMOVE (demo sections), MODIFY (copy, CTAs, imagery), and CONTENT PLAN per major section. Demo industry of the template may differ — still adapt it.
 ## Missing sections
-List any sections the business needs that a typical template may lack (FAQ, team, gallery, pricing…). Format each needed 21st search as: \`search: <query>\` (max 6). Prefer 21st components for gaps — never invent heroes/navs/footers when the template or 21st can supply them.
+List any sections the business needs that the selected template lacks (FAQ, team, gallery, pricing…). Format each needed 21st search as: \`search: <query>\` (max 6). Missing visual UI MUST come from 21st components — never invent heroes/navs/footers/cards/pricing/FAQ.
 ## Copy direction
 Tone, vocabulary to use/avoid, 3 hero headline options, tagline.
 ## SEO
@@ -71,13 +72,14 @@ const INSPIRATION_INSTRUCTIONS = `You are a senior web designer analysing a refe
 const RESEARCH_INSTRUCTIONS = `You are a market researcher for a web agency. Using web search, gather what a best-in-class website in this exact niche does today: 4–6 competitor or exemplar sites (name + URL + what they do well), typical page structure, trust signals customers expect (certifications, guarantees, reviews), pricing presentation norms, and 5 industry-specific phrases/terms to use. Output terse Markdown (max ~500 words). Cite URLs inline.`;
 
 /**
- * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number, repoDir?: string|null, fetchComponents?: boolean, templateFirst?: boolean }} opts
- * @returns {Promise<{ markdown: string, routes: string[], selectedComponents: Array<Record<string, unknown>>, selectedTemplate: Record<string, unknown>|null, designSystem: Record<string, unknown>|null, designDirection: string, stats: Record<string, number> }|null>}
+ * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number, repoDir?: string|null, fetchComponents?: boolean, templateFirst?: boolean, allowNativeSiteUi?: boolean }} opts
+ * @returns {Promise<{ markdown: string, routes: string[], selectedComponents: Array<Record<string, unknown>>, selectedTemplate: Record<string, unknown>|null, designSystem: Record<string, unknown>|null, designDirection: string, stats: Record<string, unknown>, abort?: boolean, abortReason?: string }|null>}
  */
 export async function runPlanningPhase(opts) {
   if (Date.now() > opts.deadlineMs - 5 * 60_000) return null;
   const isApp = opts.projectKind === "app";
   const templateFirst = !isApp && opts.templateFirst !== false && opts.fetchComponents !== false;
+  const allowNativeSiteUi = Boolean(opts.allowNativeSiteUi);
   opts.log.emit("status", isApp ? "Planning your app" : "Planning your site", { model: opts.model });
   opts.log.emit(
     "progress",
@@ -89,15 +91,51 @@ export async function runPlanningPhase(opts) {
 
   // ---- website: pick a 21st TEMPLATE before inventing layout ----------------
   let templateResult = null;
-  if (templateFirst && opts.twentyFirst) {
-    templateResult = await runTemplateAgent({
-      twentyFirst: opts.twentyFirst,
-      log: opts.log,
-      projectSpec: opts.projectSpec,
-      projectName: opts.projectName,
-      deadlineMs: opts.deadlineMs,
-      repoDir: opts.repoDir,
-    });
+  if (templateFirst) {
+    if (!opts.twentyFirst && !allowNativeSiteUi) {
+      opts.log.emit("progress", "Design resources are temporarily unavailable…", {
+        phase: "twenty_first_template",
+      });
+      return {
+        markdown: "",
+        routes: [],
+        selectedComponents: [],
+        selectedTemplate: null,
+        designSystem: {
+          source: "21st",
+          fallbackReason: "twenty_first_unavailable",
+          updatedAt: new Date().toISOString(),
+        },
+        designDirection: "",
+        stats: { templateUsed: false, nativeUiUsed: false },
+        abort: true,
+        abortReason: "ui_source_unavailable",
+      };
+    }
+    if (opts.twentyFirst) {
+      templateResult = await runTemplateAgent({
+        twentyFirst: opts.twentyFirst,
+        log: opts.log,
+        projectSpec: opts.projectSpec,
+        projectName: opts.projectName,
+        deadlineMs: opts.deadlineMs,
+        repoDir: opts.repoDir,
+        allowNativeSiteUi,
+      });
+    }
+    if (templateResult?.abort && !allowNativeSiteUi) {
+      return {
+        markdown: "",
+        routes: [],
+        selectedComponents: [],
+        selectedTemplate: null,
+        designSystem: templateResult.designSystem,
+        designDirection: "",
+        stats: templateResult.stats || {},
+        abort: true,
+        abortReason: templateResult.abortReason || "ui_source_unavailable",
+      };
+    }
   }
 
   const briefText = opts.projectSpec
@@ -107,7 +145,7 @@ export async function runPlanningPhase(opts) {
       : "(none provided)";
   const templateContext =
     templateResult?.selected
-      ? `\n\nSelected 21st template (REQUIRED visual foundation):\n${JSON.stringify(
+      ? `\n\nSelected 21st template (REQUIRED visual foundation — do NOT invent UI):\n${JSON.stringify(
           {
             id: templateResult.selected.componentId,
             name: templateResult.selected.name,
@@ -118,8 +156,8 @@ export async function runPlanningPhase(opts) {
           null,
           2,
         )}`
-      : templateResult?.fallbackReason
-        ? `\n\n(No 21st template available — fallback=${templateResult.fallbackReason}. Prefer 21st COMPONENTS for every major section; native UI only as last resort.)`
+      : allowNativeSiteUi && templateResult?.fallbackReason
+        ? `\n\n(DEV OVERRIDE allowNativeSiteUi — template unavailable: ${templateResult.fallbackReason})`
         : "";
 
   const input = [
@@ -164,7 +202,7 @@ export async function runPlanningPhase(opts) {
   }
 
   // ---- fan-out --------------------------------------------------------------
-  opts.log.emit("progress", templateResult?.selected ? "Applying your brand…" : "Writing copy and picking a look…");
+  opts.log.emit("progress", templateResult?.selected ? "Applying your brand…" : "Writing your copy…");
   const planContext = isApp
     ? `Project: ${opts.projectName || "Untitled"}\n\nRequest:\n${opts.instruction || "(none)"}\n\nApp plan:\n${plan}`
     : `Project: ${opts.projectName || "Untitled"}\n\nBrief:\n${briefText}\n\nSite plan:\n${plan}${templateContext}`;
@@ -209,26 +247,27 @@ export async function runPlanningPhase(opts) {
 
   const templateBlock = templateResult?.selected
     ? [
-        "## Selected 21st TEMPLATE (REQUIRED visual foundation — adapt; do not reinvent)",
+        "## Selected 21st TEMPLATE (REQUIRED visual foundation — adapt; NEVER invent parallel UI)",
         "```json",
         JSON.stringify({ template: templateResult.selected, designSystem: templateResult.designSystem }, null, 2),
         "```",
         templateResult.markdown || "",
-        "Coder rules: install/adapt files under components/twenty-first/template/ into app/ + components/site/*. Preserve template visual language. Replace demo content. Native visual UI only if template + 21st components cannot cover a need.",
+        "Coder rules: adapt files under components/twenty-first/template/ into app/ + components/site/*. Preserve template visual language. Replace demo content. Visual UI must originate from this template, approved 21st components, or derivations that keep provenance. Read .cander/ui-manifest.json.",
       ].join("\n")
-    : templateResult?.fallbackReason
-      ? `## Template fallback\nReason: ${templateResult.fallbackReason}. Compose from 21st COMPONENTS (search/fetch) before inventing native UI.`
+    : allowNativeSiteUi && templateResult?.fallbackReason
+      ? `## Template unavailable (DEV native override)\nReason: ${templateResult.fallbackReason}.`
       : "";
 
   const selectedBlock =
     selectedComponents.length > 0
       ? [
-          "## Selected components (REQUIRED for gaps — adapt these)",
+          "## Selected components (REQUIRED for gaps — adapt and RENDER these)",
           "```json",
           JSON.stringify(
             {
               selectedComponents: selectedComponents.map((c) => ({
                 source: c.source || "21st",
+                sourceType: "21st_component",
                 componentId: c.componentId,
                 name: c.name,
                 purpose: c.purpose,
@@ -241,9 +280,35 @@ export async function runPlanningPhase(opts) {
             2,
           ),
           "```",
-          "Each localPath (when present) already contains the retrieved source under components/twenty-first/. Rewrite into components/site using THIS project's / template tokens. Never paste verbatim with foreign colors/fonts.",
+          "Each localPath already contains retrieved source under components/twenty-first/. Rewrite into components/site using THIS project's / template tokens. Import and render them. Leaving them unused FAILS acceptance.",
         ].join("\n")
       : "";
+
+  if (templateResult?.selected || selectedComponents.length) {
+    writeUiManifest(opts.repoDir, {
+      template: templateResult?.selected
+        ? {
+            id: templateResult.selected.componentId,
+            name: templateResult.selected.name,
+            files: templateResult.selected.files,
+            root: templateResult.selected.localPath,
+            reason: templateResult.selected.reason,
+          }
+        : undefined,
+      approvedComponents: selectedComponents.map((c) => ({
+        id: c.componentId,
+        purpose: c.purpose,
+        path: c.localPath,
+        name: c.name,
+        sourceType: "21st_component",
+      })),
+      rules: {
+        noNativeVisualUi: !allowNativeSiteUi,
+        deriveBeforeSearch: true,
+        preserveTemplateDesign: true,
+      },
+    });
+  }
 
   const packet = [
     "# Build packet",
@@ -255,6 +320,9 @@ export async function runPlanningPhase(opts) {
     design ? `## Design system (implement exactly; adjust only for correctness)\n${design}` : "",
     copy ? `## Final copy (use verbatim; do not invent different copy)\n${copy}` : "",
     selectedBlock || (componentsMarkdown ? `## 21st.dev component shortlist\n${componentsMarkdown}` : ""),
+    !isApp
+      ? "## UI source rule (HARD)\nMeaningful visual UI must come from the selected template, approved 21st components, or derived project components. Glue/wiring is fine. Inventing heroes/navs/footers/cards/sections fails acceptance."
+      : "",
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -265,6 +333,10 @@ export async function runPlanningPhase(opts) {
     templateFetches: Number(templateResult?.stats?.fetches || 0),
     templateSelected: Number(templateResult?.stats?.selected || 0),
     templateUsed: Boolean(templateResult?.stats?.templateUsed),
+    templateFetched: Boolean(templateResult?.stats?.templateFetched),
+    templateInstalled: Boolean(templateResult?.stats?.templateInstalled),
+    templateRendered: Boolean(templateResult?.stats?.templateRendered),
+    nativeUiUsed: Boolean(templateResult?.stats?.nativeUiUsed),
     templateFallback: templateResult?.fallbackReason || null,
   };
 
@@ -382,7 +454,8 @@ function extractStructure(html) {
  * Spec-driven 21st.dev research. When `fetchComponents` is on, search then
  * fetch ~2–4 promising candidates per key purpose, compare, select best,
  * and materialize under components/twenty-first/. Search alone is not enough.
- * Failures return null / empty selected; never throws (build continues natively).
+ * Failures return null / empty selected; never throws. Website CREATE must already
+ * have a template installed — this agent only gap-fills approved 21st components.
  *
  * @returns {Promise<null | { markdown: string, selected: Array<Record<string, unknown>>, stats: { searches: number, fetches: number, selected: number } }>}
  */
