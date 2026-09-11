@@ -145,8 +145,9 @@ export async function runAcceptance(opts) {
   // Edits that only touched styles/content/assets can't change types — skip
   // the whole-repo tsc so a copy tweak doesn't pay for a full typecheck.
   const written = Array.isArray(opts.writtenPaths) ? opts.writtenPaths : null;
-  const codeTouched =
-    !written || written.length === 0 || written.some((p) => /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(p) || /(^|\/)(package\.json|tsconfig\.json|next\.config\.[a-z]+)$/.test(p));
+  const risk = classifyChangeRisk(written);
+  const codeTouched = risk.tier !== "content";
+  opts.log.emit("verify", `Change risk: ${risk.tier} — ${risk.reason}`);
   if (!codeTouched) {
     opts.log.emit("verify", "Only styles/content changed — skipping typecheck.");
   } else if (existsSync(join(repoDir, "tsconfig.json"))) {
@@ -330,6 +331,12 @@ export async function runAcceptance(opts) {
   // from client components, Node APIs in client code, next.config drift…).
   for (const issue of vercelCompatIssues(repoDir, written).slice(0, 12)) issues.push(issue);
 
+  // 6b'. Backend-tier changes (database, auth, server routes) get the security
+  // checks in addition to build + browser verification.
+  if (risk.tier === "backend") {
+    for (const issue of backendSafetyIssues(repoDir, written).slice(0, 8)) issues.push(issue);
+  }
+
   // 6c. Production build — the authoritative "will Vercel accept this" gate.
   // Only worth paying for once the cheap checks pass (the agent fixes those
   // first); skipped for style/content-only edits. Next 16 keeps dev output in
@@ -445,6 +452,87 @@ export async function runProductionBuild(repoDir, timeoutMs) {
  * @param {string[]|null} written repo-relative paths written this run (edit) or null (create = whole repo)
  * @returns {string[]}
  */
+/**
+ * Risk-tiered verification policy. The tier decides how much verification a
+ * change buys before it is accepted:
+ *   content → preview only (copy, styles, assets, markdown)
+ *   code    → typecheck + Vercel-compat lint + production build + browser
+ *   backend → code tier + backend safety checks (RLS, secrets, server-only keys)
+ * `written` is null for a create run (whole repo → backend tier when the repo
+ * has a backend surface, else code).
+ * @param {string[]|null} written
+ * @returns {{ tier: "content"|"code"|"backend", reason: string }}
+ */
+export function classifyChangeRisk(written) {
+  if (!written || written.length === 0) return { tier: "backend", reason: "full build — everything is verified" };
+  const backend = written.filter(
+    (p) =>
+      /^supabase\//.test(p) ||
+      /^lib\/supabase\//.test(p) ||
+      /^app\/api\//.test(p) ||
+      /^(middleware|proxy)\.(ts|js)$/.test(p) ||
+      /\.sql$/.test(p) ||
+      /(^|\/)\.env(\.|$)/.test(p) ||
+      /(^|\/)(auth|actions?)\//.test(p),
+  );
+  if (backend.length) return { tier: "backend", reason: `touches ${backend.slice(0, 3).join(", ")}${backend.length > 3 ? "…" : ""}` };
+  const code = written.filter(
+    (p) => /\.(tsx?|jsx?|mjs|cjs|mts|cts)$/.test(p) || /(^|\/)(package\.json|tsconfig\.json|next\.config\.[a-z]+)$/.test(p),
+  );
+  if (code.length) return { tier: "code", reason: `${code.length} code file(s) changed` };
+  return { tier: "content", reason: "styles/content/assets only" };
+}
+
+/**
+ * Backend safety checks for the backend tier. Cheap, static, high-signal:
+ *  - service-role key must never be referenced from client code or NEXT_PUBLIC_*
+ *  - new tables in SQL must enable row level security
+ *  - server-only Supabase client must not be imported from "use client" files
+ * @param {string} repoDir
+ * @param {string[]|null} written
+ * @returns {string[]}
+ */
+export function backendSafetyIssues(repoDir, written) {
+  const issues = [];
+  const read = (rel) => {
+    try {
+      return readFileSync(join(repoDir, rel), "utf8");
+    } catch {
+      return "";
+    }
+  };
+  const source = listSourceFiles(repoDir, ["app", "components", "lib", "middleware.ts", "proxy.ts"]);
+  const files = written && written.length ? source.filter((f) => written.includes(f)) : source;
+  for (const rel of files) {
+    if (!/\.(tsx|jsx|ts|js)$/.test(rel)) continue;
+    const text = read(rel);
+    if (!text) continue;
+    const client = /^\s*['"]use client['"]/m.test(text.slice(0, 400));
+    if (/NEXT_PUBLIC_[A-Z0-9_]*SERVICE_ROLE/.test(text)) {
+      issues.push(`${rel} exposes a service-role key through NEXT_PUBLIC_* — the service role must stay server-only.`);
+    }
+    if (client && /SUPABASE_SERVICE_ROLE_KEY|service_role/i.test(text)) {
+      issues.push(`${rel} is a client component that references the Supabase service role — use the anon key in the browser and keep privileged access in server code.`);
+    }
+    if (client && /from\s+['"][^'"]*supabase\/(server|admin)['"]/.test(text)) {
+      issues.push(`${rel} ("use client") imports a server-only Supabase client — use the browser client there.`);
+    }
+  }
+  const sqlFiles = (written && written.length ? written : listSqlFiles(repoDir)).filter((p) => /\.sql$/.test(p));
+  for (const rel of sqlFiles) {
+    const text = read(rel);
+    if (!text) continue;
+    const created = [...text.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi)].map((m) => m[1].toLowerCase());
+    for (const table of new Set(created)) {
+      const rls = new RegExp(`alter\\s+table\\s+(?:public\\.)?"?${table}"?\\s+enable\\s+row\\s+level\\s+security`, "i");
+      if (!rls.test(text)) {
+        issues.push(`${rel} creates table "${table}" without enabling row level security — add "alter table public.${table} enable row level security;" and a policy.`);
+      }
+    }
+  }
+  return issues;
+}
+
 export function vercelCompatIssues(repoDir, written) {
   const issues = [];
   const all = listSourceFiles(repoDir, ["app", "components", "lib", "middleware.ts", "proxy.ts"]);
@@ -772,6 +860,27 @@ function appScaffoldingIssues(repoDir, isCreate) {
  * @param {string[]} tops
  * @returns {string[]} repo-relative paths of .ts/.tsx files
  */
+function listSqlFiles(repoDir) {
+  const out = [];
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (out.length >= 200) return;
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (/\.sql$/.test(e.name)) out.push(p.slice(repoDir.length + 1));
+    }
+  };
+  const abs = join(repoDir, "supabase");
+  if (existsSync(abs)) walk(abs);
+  return out;
+}
+
 function listSourceFiles(repoDir, tops) {
   const out = [];
   const walk = (dir) => {
