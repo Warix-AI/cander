@@ -69,6 +69,12 @@ export async function inspectProjectDraftTip(opts: {
   workspaceId: string;
   /** Max paths returned (default 200). */
   maxPaths?: number;
+  /**
+   * `app` (default): package.json + app/components/lib/public — sized for prompts.
+   * `all`: every blob (needed for gap-fill like boot skeleton so we don't
+   * re-commit tsconfig/postcss/.gitignore that already exist at the tip).
+   */
+  pathsMode?: "app" | "all";
 }): Promise<DraftTipInspect> {
   const admin = createSupabaseAdminClient();
   const { data } = await admin
@@ -96,6 +102,9 @@ export async function inspectProjectDraftTip(opts: {
   try {
     const all = await listTipPaths({ fullName: githubFullName, draftSha });
     const max = opts.maxPaths ?? 200;
+    if (opts.pathsMode === "all") {
+      return { draftSha, draftBranch, githubFullName, paths: all.slice(0, max) };
+    }
     const preferred = all.filter(
       (p) =>
         p === "package.json" ||

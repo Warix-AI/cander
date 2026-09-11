@@ -164,11 +164,14 @@ async function ensureBootSkeleton(
   job: BuildJob,
   title: string,
   kind: "site" | "app",
-): Promise<{ paths: string[] }> {
+): Promise<{ paths: string[]; committed: boolean; draftSha: string | null }> {
+  // Full tree — config files (tsconfig, postcss, .gitignore) must count as
+  // present so a Retry never clobbers coder-tuned versions with the skeleton.
   const tip = await inspectProjectDraftTip({
     projectId: job.projectId,
     workspaceId: job.workspaceId,
     maxPaths: 2000,
+    pathsMode: "all",
   });
   const have = new Set(tip.paths);
   const skeleton = bootSkeletonFiles({ title, kind });
@@ -183,21 +186,29 @@ async function ensureBootSkeleton(
     rootPageOk;
   // Edit jobs work on an existing site: only touch the tip when it cannot
   // boot at all. Any commit here moves the tip and forces a sandbox rebuild.
-  if (job.facts.mode === "edit" && runnable) return { paths: tip.paths };
+  if (job.facts.mode === "edit" && runnable) {
+    return { paths: tip.paths, committed: false, draftSha: tip.draftSha };
+  }
   // Only fill gaps — never clobber existing work (or a retried create).
   const missing = skeleton.filter((f) => {
     if (have.has(f.path)) return false;
     if (/^app\/page\.tsx$/.test(f.path) && rootPageOk) return false;
     return true;
   });
-  if (missing.length === 0) return { paths: tip.paths };
-  await commitFilesToDraftBranch({
+  if (missing.length === 0) {
+    return { paths: tip.paths, committed: false, draftSha: tip.draftSha };
+  }
+  const committed = await commitFilesToDraftBranch({
     projectId: job.projectId,
     workspaceId: job.workspaceId,
     message: "Cander: boot skeleton for website build",
     files: missing.map((f) => ({ path: f.path, content: f.content })),
   });
-  return { paths: [...tip.paths, ...missing.map((f) => f.path)] };
+  return {
+    paths: [...tip.paths, ...missing.map((f) => f.path)],
+    committed: !committed.noop,
+    draftSha: committed.draftSha || tip.draftSha,
+  };
 }
 
 /**
@@ -300,12 +311,20 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
   ]);
 
   try {
-    const { paths: tipPaths } = await ensureBootSkeleton(job, projectName, projectKind);
+    const { paths: tipPaths, committed: skeletonCommitted } = await ensureBootSkeleton(
+      job,
+      projectName,
+      projectKind,
+    );
 
-    const sandbox = await ensureProjectSandbox({
+    // Skeleton commit moves the tip; any sandbox cloned before that is empty.
+    // forceRestart when we just committed so ensure syncs/recreates onto the
+    // new tip (Guard 1 tip-mismatch fallthrough also covers late opens).
+    let sandbox = await ensureProjectSandbox({
       userId,
       projectId: job.projectId,
       workspaceId: job.workspaceId,
+      ...(skeletonCommitted ? { forceRestart: true } : {}),
     });
     // "starting" is fine — the builder waits for the dev server itself.
     if (
@@ -315,6 +334,24 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       sandbox.status === "needs_repo"
     ) {
       throw new Error(sandbox.message || `Sandbox not available (${sandbox.status}).`);
+    }
+    // Tip may still lag a in-flight clone that finished after our restart
+    // request was refused (active-job guard). One more ensure without restart
+    // picks up the tip-mismatch sync path once the VM is ready.
+    if (skeletonCommitted && sandbox.status === "starting") {
+      sandbox = await ensureProjectSandbox({
+        userId,
+        projectId: job.projectId,
+        workspaceId: job.workspaceId,
+      });
+      if (
+        !sandbox.sessionId ||
+        sandbox.status === "error" ||
+        sandbox.status === "unavailable" ||
+        sandbox.status === "needs_repo"
+      ) {
+        throw new Error(sandbox.message || `Sandbox not available (${sandbox.status}).`);
+      }
     }
     const sessionId = sandbox.sessionId;
     const resolved = await resolveSandboxForSession(sessionId, userId);
@@ -763,6 +800,13 @@ function failureFromEvent(e: BuildJobEvent): BuildJobFailure {
     ? (kindRaw as BuildJobFailureKind)
     : "unknown";
   const stats = (p.stats ?? {}) as Record<string, unknown>;
+  const files = Array.isArray(p.files) ? (p.files as unknown[]) : [];
+  const filesTouched =
+    typeof stats.filesTouched === "number"
+      ? stats.filesTouched
+      : files.length > 0
+        ? files.length
+        : undefined;
   return {
     kind,
     reason: typeof p.reason === "string" ? p.reason : null,
@@ -772,7 +816,7 @@ function failureFromEvent(e: BuildJobEvent): BuildJobFailure {
     phase: "builder",
     at: new Date().toISOString(),
     recovery: p.recovery ?? null,
-    filesTouched: typeof stats.filesTouched === "number" ? stats.filesTouched : undefined,
+    filesTouched,
   };
 }
 

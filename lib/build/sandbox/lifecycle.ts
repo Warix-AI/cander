@@ -715,22 +715,44 @@ async function ensureProjectSandboxInner(
 
   if (existingIsBuild && existing && !opts.forceRestart) {
     // Guard 1: someone else is already creating this project's sandbox
-    // (cross-instance). Report "starting" instead of racing a second VM.
+    // (cross-instance). Report "starting" instead of racing a second VM —
+    // unless the tip moved (boot skeleton) while the clone was in flight.
+    // An empty README-only checkout must not be handed to the builder.
     const startedAt = Date.parse(existingState?.updatedAt || existing.createdAt || "") || 0;
     if (existingState?.status === "starting" && Date.now() - startedAt < STARTING_GRACE_MS) {
-      return publicResult({
+      const sandboxSha = String(existingState?.draftSha || "");
+      const tipSha = draftSha || "";
+      let tipMatches = !tipSha;
+      if (tipSha && sandboxSha) {
+        const { sandboxMatchesProjectTip } = await import("@/lib/build/build-phase");
+        tipMatches = sandboxMatchesProjectTip({
+          sandboxDraftSha: sandboxSha,
+          projectDraftSha: tipSha,
+        });
+      } else if (tipSha && !sandboxSha) {
+        tipMatches = false;
+      }
+      if (tipMatches) {
+        return publicResult({
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          status: "starting",
+          sessionId: existing.id,
+          subdomain: infra.subdomain,
+          draftBranch,
+          draftSha,
+          githubFullName: fullName,
+          previewUpstream: null,
+          reused: true,
+          message: existingState.message || "Starting preview…",
+        });
+      }
+      console.info("[cander:sandbox] tip moved during start; will sync/recreate", {
         projectId: opts.projectId,
-        workspaceId: opts.workspaceId,
-        status: "starting",
-        sessionId: existing.id,
-        subdomain: infra.subdomain,
-        draftBranch,
-        draftSha,
-        githubFullName: fullName,
-        previewUpstream: null,
-        reused: true,
-        message: existingState.message || "Starting preview…",
+        sandboxSha: (sandboxSha || "").slice(0, 12) || "(empty)",
+        tipSha: tipSha.slice(0, 12),
       });
+      // Fall through to tip-mismatch sync / recreate below.
     }
     // Guard 2: a build job is running inside this sandbox. The tip legitimately
     // moves mid-job (skeleton commit, persist), so a SHA mismatch here must not

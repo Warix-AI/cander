@@ -298,12 +298,14 @@ async function main() {
   // Verification failures after finish() are usually a handful of type errors
   // or one route that 500s. Grant a short, fresh-context repair pass with the
   // concrete report. Infrastructure failures never reach the coder.
-  const realWrites = [...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).length;
+  // Resumed verify→repair jobs need a larger budget: the first verify already
+  // spent the "easy" installs, and cutting at 40 calls discarded a working fix.
   if (!result.finished && result.reason === "verification_failed" && tools.writtenPaths.size > 0) {
-    log.emit("status", "Repairing build", { repair: true });
+    log.emit("status", "Repairing build", { repair: true, resumed: Boolean(resume) });
     const repairBudget = {
-      deadlineMs: Math.max(budget.deadlineMs, Date.now()) + Number(config.budget?.repairMs || 8 * 60_000),
-      maxLlmCalls: Number(config.budget?.repairLlmCalls || 40),
+      deadlineMs: Math.max(budget.deadlineMs, Date.now()) + Number(config.budget?.repairMs || (resume ? 12 : 8) * 60_000),
+      maxLlmCalls: Number(config.budget?.repairLlmCalls || (resume ? 80 : 40)),
+      maxToolCalls: Number(config.budget?.repairToolCalls || (resume ? 200 : 120)),
     };
     const repair = await runAgent({
       llm,
@@ -329,9 +331,32 @@ async function main() {
     if (repair.finished) {
       result = { ...repair, summary: result.summary || repair.summary };
     } else {
-      result = { ...result, reason: repair.reason === "preview_unavailable" ? repair.reason : result.reason, lastText: repair.lastText || result.lastText };
+      // Prefer the freshest acceptance report over the pre-repair snapshot
+      // (resume verify often reports a problem the repair already fixed).
+      const latestText =
+        (lastVerification && !lastVerification.ok && lastVerification.report) ||
+        repair.lastText ||
+        result.lastText ||
+        "";
+      const budgetish =
+        repair.reason === "deadline" ||
+        repair.reason === "llm_budget" ||
+        repair.reason === "tool_budget";
+      result = {
+        ...result,
+        reason:
+          repair.reason === "preview_unavailable" || budgetish
+            ? repair.reason
+            : result.reason,
+        lastText: latestText,
+        routes: lastVerification?.routes || repair.routes || result.routes,
+      };
     }
   }
+
+  // Count writes AFTER repair so resumed verify→repair jobs that only touch
+  // files in the repair pass still persist / hand off a partial draft.
+  const realWrites = [...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).length;
 
   // The coder gave up because the preview was down (not because of its code):
   // that is a handoff, not a failure, as long as there is a draft to hand over.
