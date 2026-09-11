@@ -35,13 +35,10 @@ const ALLOWED_COMMAND_PREFIX_RE =
 
 /**
  * Shell snippet that mirrors the working tree into an isolated build dir and
- * runs `next build` there. The dev server owns `<repo>/.next`; a production
- * build in the same directory shares its Turbopack cache and dev-mode chunks,
- * which surfaces as flaky prerender crashes ("Cannot read properties of null
- * (reading 'useContext')" on /_global-error, React key warnings during a prod
- * build) and knocks the preview over. Publish preflight already builds in a
- * detached worktree; acceptance and the coder's own builds must match it.
- * node_modules is symlinked (same deps, no reinstall).
+ * runs `next build` there with NODE_ENV=production. The dev server owns
+ * `<repo>/.next`; a production build in the same directory races it for the
+ * Turbopack cache and knocks the preview over. Publish preflight already builds
+ * in a detached worktree; acceptance and the coder's own builds must match it.
  */
 export const ISOLATED_BUILD_DIR = "/tmp/cander-verify-build";
 export function isolatedBuildScript(repoDir, buildCmd = "npx --no-install next build") {
@@ -70,7 +67,12 @@ export function isolatedBuildScript(repoDir, buildCmd = "npx --no-install next b
     "fi",
     // Dev-mode artifacts must never leak into the production build.
     'rm -rf "$DST/.next/dev" 2>/dev/null || true',
-    `cd "$DST" && NEXT_TELEMETRY_DISABLED=1 CI=1 ${buildCmd} 2>&1 | tail -n 400`,
+    // The builder process runs with NODE_ENV=development (for the preview
+    // server). Inheriting that into `next build` makes Next 16 bundle the
+    // development React and crash while prerendering /_global-error
+    // ("Cannot read properties of null (reading 'useContext')", React key
+    // warnings in a prod build — vercel/next.js#87719). Force production.
+    `cd "$DST" && NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 CI=1 ${buildCmd} 2>&1 | tail -n 400`,
   ].join("\n");
 }
 

@@ -461,9 +461,11 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       args: ["-c", `mkdir -p .git/info && grep -qx '.cander/' .git/info/exclude 2>/dev/null || echo '.cander/' >> .git/info/exclude`],
     });
 
+    // No NODE_ENV here: the preview server sets development itself, and any
+    // `next build` the builder or coder runs must not inherit development
+    // (Next 16 then bundles dev React and crashes prerendering /_global-error).
     const env: Record<string, string> = {
       CANDER_JOB_TOKEN: token,
-      NODE_ENV: "development",
       NEXT_TELEMETRY_DISABLED: "1",
     };
     if (transport === "direct") {
