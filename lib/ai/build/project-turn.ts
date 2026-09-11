@@ -399,7 +399,7 @@ export function formatConversationForBuilder(
 async function runBuildV2EditTurn(
   request: AiGenerateRequest,
   opts: AgentTurnOptions | undefined,
-  ctx: { projectId: string; workspaceId: string },
+  ctx: { projectId: string; workspaceId: string; instruction?: string | null },
 ): Promise<AgentTurnResult> {
   const report = opts?.onProgress ?? (() => {});
   report({
@@ -407,14 +407,19 @@ async function runBuildV2EditTurn(
     label: "Editing",
     detail: "Handing your change to the builder…",
   });
-  const instruction = request.content.trim();
+  const userText = request.content.trim();
+  // The front agent may hand over a self-contained instruction (pronouns and
+  // "same as before" resolved from the chat). The user's words stay first.
+  const clarified = ctx.instruction?.trim();
+  const instruction =
+    clarified && clarified !== userText ? `${userText}\n\n(Clarified from the conversation: ${clarified})` : userText;
   const { startBuildJobClient } = await import("@/lib/api/build-jobs-client");
   const started = await startBuildJobClient({
     projectId: ctx.projectId,
     workspaceId: ctx.workspaceId,
     mode: "edit",
     instruction,
-    conversation: formatConversationForBuilder(request.messages, instruction),
+    conversation: formatConversationForBuilder(request.messages, userText),
     threadId: request.aiChatId ?? null,
   });
   if (!started.ok) {
@@ -507,6 +512,63 @@ function parseSetupAnswersFromContent(
   }
   return Object.keys(answers).length ? answers : null;
 }
+/**
+ * Execute a front-agent decision with the existing job/publish plumbing so the
+ * preview panel, job events and Publish panel keep working exactly as before.
+ * Returns null when the decision cannot be honoured here (falls back to regex).
+ */
+async function executeFrontAgentDecision(
+  decision: import("@/lib/ai/agent/front-agent-types").FrontAgentDecision,
+  request: AiGenerateRequest,
+  opts: AgentTurnOptions | undefined,
+  ctx: {
+    projectId: string;
+    workspaceId: string;
+    websiteBrief: WebsiteSetupBrief | null;
+    isSiteProject: boolean;
+    alreadyBuilt: boolean;
+  },
+): Promise<AgentTurnResult | null> {
+  const reply = sanitizeAssistantVisibleText(decision.reply || "").trim();
+  const base = {
+    runtime: "cloud" as const,
+    offline: false,
+    condensationOccurred: false,
+    aiChatId: request.aiChatId ?? null,
+  };
+  switch (decision.action) {
+    case "answer":
+    case "plan": {
+      if (!reply || looksLikeCodeDump(reply)) return null;
+      return { ...base, content: reply, toolResults: [] };
+    }
+    case "publish":
+      return runSitePublishCommandTurn(request, opts, ctx);
+    case "edit": {
+      if (!ctx.alreadyBuilt) return null;
+      const result = await runBuildV2EditTurn(request, opts, {
+        projectId: ctx.projectId,
+        workspaceId: ctx.workspaceId,
+        instruction: decision.instruction,
+      });
+      // Prefer the agent's own acknowledgement when the job actually started.
+      if (reply && result.toolResults?.[0]?.ok) result.content = reply;
+      return result;
+    }
+    case "create": {
+      if (ctx.alreadyBuilt) return null;
+      if (ctx.isSiteProject) return null; // sites create through the guided setup card
+      return runBuildV2CreateTurn(request, opts, {
+        projectId: ctx.projectId,
+        workspaceId: ctx.workspaceId,
+        instruction: decision.instruction?.trim() || request.content.trim(),
+      });
+    }
+    default:
+      return null;
+  }
+}
+
 /** Chat-side entry for Build projects (sites and apps). */
 export async function runBuildProjectTurn(
   request: AiGenerateRequest,
@@ -640,6 +702,34 @@ export async function runBuildProjectTurn(
       // Apps have no guided brief: the message itself is the spec.
       instruction: isSiteProject ? undefined : request.content.trim(),
     });
+  }
+
+  // Cander front agent (server): one agent identity decides what the turn
+  // needs — answer, plan, edit, create or publish — with the trusted project
+  // runtime and read access to the draft. Cander executes the decision here.
+  // The regex router below stays as the offline / error fallback.
+  if (typeof window !== "undefined") {
+    const report = opts?.onProgress ?? (() => {});
+    report({ phase: "thinking", label: "Thinking", detail: "Looking at your project…" });
+    const { runProjectAgentTurnClient } = await import("@/lib/api/project-agent-client");
+    const decision = await runProjectAgentTurnClient({
+      projectId,
+      workspaceId,
+      message: request.content,
+      history: (request.messages ?? [])
+        .filter((m) => (m.role === "user" || m.role === "assistant") && m.content?.trim())
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    });
+    if (decision) {
+      const acted = await executeFrontAgentDecision(decision, request, opts, {
+        projectId,
+        workspaceId,
+        websiteBrief,
+        isSiteProject,
+        alreadyBuilt,
+      });
+      if (acted) return acted;
+    }
   }
 
   // Everything else: route by intent so questions and feedback never start
