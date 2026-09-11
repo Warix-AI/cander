@@ -864,6 +864,16 @@ async function completeBuildJob(
       throw new Error(persisted.error || "Draft commit saved but database sync failed.");
     }
     let draftSha = persisted.draftSha || null;
+    if (!draftSha && persisted.outcome === "noop") {
+      // The agent may have saved checkpoints mid-run (git.checkpoint tool), so
+      // "nothing left to commit" still means the draft tip moved this job.
+      const { data: tip } = await createSupabaseAdminClient()
+        .from("projects")
+        .select("draft_sha")
+        .eq("id", job.projectId)
+        .maybeSingle();
+      draftSha = tip?.draft_sha ? String(tip.draft_sha) : null;
+    }
     await updateBuildJob(job.id, {
       progressNote: job.facts.mode === "edit" ? "Saving your change…" : "Saving your draft…",
       facts: { draftSha },

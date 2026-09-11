@@ -82,7 +82,9 @@ async function main() {
     : null;
   const devServerUrl = config.devServerUrl || "http://localhost:3000";
   const preview = new PreviewSupervisor({ repoDir, devServerUrl, log });
-  const tools = new SandboxTools({ repoDir, devServerUrl, log, twentyFirst, preview });
+  const provider =
+    transport === "proxy" && config.apiBase && token ? { apiBase: config.apiBase, jobId, token } : null;
+  const tools = new SandboxTools({ repoDir, devServerUrl, log, twentyFirst, preview, provider });
 
   const mode = config.mode === "edit" ? "edit" : "create";
   const projectKind = config.projectKind === "app" ? "app" : "site";

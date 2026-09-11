@@ -60,6 +60,8 @@ export class SandboxTools {
     this.preview = opts.preview ?? null;
     this.writtenPaths = new Set();
     this.toolCalls = 0;
+    /** Cander provider tools (git/db/deploy) — server-side, job-token scoped. */
+    this.provider = opts.provider ?? null;
   }
 
   // ---- path safety ---------------------------------------------------------
@@ -250,6 +252,25 @@ export class SandboxTools {
         },
       },
     ];
+    if (this.provider) {
+      defs.push(
+        {
+          name: "checkpoint",
+          description:
+            "Save a checkpoint of the current work to the user's draft (a commit). Call after a meaningful, verified chunk of work — e.g. after each page or feature passes tsc and check_preview — so progress is never lost.",
+          parameters: {
+            type: "object",
+            properties: { message: { type: "string", description: "Short description of what was completed." } },
+            required: ["message"],
+          },
+        },
+        {
+          name: "project_status",
+          description: "Current project state from Cander (database connection, preview, live site, recent changes). Use when unsure whether a database or env var exists.",
+          parameters: { type: "object", properties: {} },
+        },
+      );
+    }
     if (this.twentyFirst) {
       defs.push(
         {
@@ -315,6 +336,10 @@ export class SandboxTools {
           return { output: "ok" };
         case "update_project_spec":
           return { output: this.updateProjectSpec(a.patch, a.decision) };
+        case "checkpoint":
+          return { output: await this.providerTool("git.checkpoint", { message: String(a.message ?? "") }) };
+        case "project_status":
+          return { output: await this.providerTool("project.status", {}) };
         case "search_components":
           return { output: await this.searchComponents(a.query, a.limit) };
         case "get_component":
@@ -529,6 +554,30 @@ export class SandboxTools {
     };
     walk(this.repoDir);
     return hits.length ? hits.join("\n") : "(no matches)";
+  }
+
+  /**
+   * Call a Cander provider tool. Credentials and ids stay on the server; the
+   * sandbox only presents its job token.
+   * @param {string} name e.g. "git.checkpoint"
+   * @param {Record<string, unknown>} args
+   */
+  async providerTool(name, args) {
+    if (!this.provider) return "ERROR: provider tools are not available in this run";
+    const { apiBase, jobId, token } = this.provider;
+    try {
+      const res = await fetch(`${apiBase}/api/build-jobs/${encodeURIComponent(jobId)}/tools/${encodeURIComponent(name)}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify(args ?? {}),
+        signal: AbortSignal.timeout(4 * 60_000),
+      });
+      const json = await res.json().catch(() => ({}));
+      const output = typeof json?.output === "string" ? json.output : `HTTP ${res.status}`;
+      return res.ok ? output : `ERROR: ${output}`;
+    } catch (err) {
+      return `ERROR: ${name} failed: ${String(err?.message || err).slice(0, 200)}`;
+    }
   }
 
   async runCommand(command, timeoutSec) {

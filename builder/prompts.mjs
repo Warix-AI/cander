@@ -48,6 +48,7 @@ export const WORKFLOW_CREATE = `Workflow:
 7. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Do not start or restart the preview server yourself. Repeat until clean.
 8. Call update_project_spec once with the final decisions (pages [{path,title,purpose}], visual {palette hex values, typography, components {radius, shadow, density, buttons, cards, nav}, layout, mood}, features, brand asset paths) so future edits inherit them. Do not commit any other plan files.
 9. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
+Checkpoints: when the checkpoint tool is available, call checkpoint(message) after each verified chunk (shell done; each batch of pages passing tsc + check_preview) so progress is saved even if the run is interrupted.
 Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
 
 export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usable product, not a mockup:
@@ -70,6 +71,7 @@ export const WORKFLOW_CREATE_APP = `Workflow:
 6. Optional: search_components / get_component for standout UI (data tables, dashboards, auth forms). Adapt into components/ — never paste code with unresolved imports; install deps you use.
 7. Write app/not-found.tsx. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Repeat until clean.
 8. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
+Checkpoints: when the checkpoint tool is available, call checkpoint(message) after each verified chunk (shell done; each batch of screens passing tsc + check_preview) so progress is saved even if the run is interrupted.
 Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
 
 export const WORKFLOW_EDIT = `Your job right now: apply ONE change the user asked for to their existing, already-built site. You are not rebuilding or redesigning it, not auditing SEO, not "improving" unrelated pages. Scope = the request (plus anything it directly breaks).
