@@ -46,7 +46,7 @@ Anti-patterns (do NOT default to these):
 - every section centered with the same three-column feature grid
 - fake testimonials unless the brief asks for social proof
 - decorative icons with no purpose
-Derive look from brief + industry + audience + selected 21st patterns + design packet.`;
+Derive look from the selected 21st TEMPLATE (when present) + design brief + audience + gap 21st components. Never invent a full visual system when a template was selected.`;
 
 export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usable product, not a mockup:
 - Every screen in the plan exists and does its job: real forms with validation, lists with empty/loading/error states, and working navigation (AppShell with sidebar or top nav, active-link styling, mobile nav).
@@ -63,18 +63,17 @@ export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usab
 - Responsive from 360px to 1440px. Test with check_preview after each batch of screens.
 - Prefer clear information density over sparse marketing-style cards for app surfaces.`;
 
-export const WORKFLOW_CREATE = `Workflow:
-1. list_tree, read package.json, app/layout.tsx, app/globals.css, and any components/twenty-first/* the plan already fetched.
-2. If a build packet is provided, it is the plan — implement its sitemap, sections, design CSS and copy. If "Selected components" JSON is present, adapt those retrieved sources first (localPath files) into components/site/* with project tokens — do not leave twenty-first files as the live UI and do not invent unrelated section templates when a selected component covers that purpose.
-3. Build shared pieces first: app/globals.css (paste the packet's CSS), components/site/Header.tsx, Footer.tsx, MobileNav.tsx (client), Section primitives — matching the design language.
-4. Write app/layout.tsx (metadata, fonts, JSON-LD, Header/Footer), then app/page.tsx, then every other page. emit_progress before each page. Follow the imagery plan: download_image into public/assets/* for generated photos, or intentional placeholders — never broken images.
-5. search_components / get_component only to fill gaps the selected list did not cover. Adapt into components/ — never paste unresolved imports.
-6. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx.
-7. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Do not start or restart the preview server yourself. Repeat until clean.
-8. Call update_project_spec once with the final decisions (pages, visual, features, brand, selectedComponents references) so future edits inherit them.
-9. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
-Checkpoints: when the checkpoint tool is available, call checkpoint(message) after each verified chunk so progress is saved.
-Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
+export const WORKFLOW_CREATE = `Workflow (TEMPLATE FIRST — do not invent the visual design from scratch):
+1. list_tree; read package.json, app/layout.tsx, app/globals.css, DESIGN.md / cander.spec.json, and especially components/twenty-first/template/* plus any gap components under components/twenty-first/*.
+2. If a Selected 21st TEMPLATE is in the build packet: that is the visual foundation. Adapt its real code into app/ + components/site/* — preserve proportions, section rhythm, hierarchy, nav/footer grammar, responsive behavior, and interaction patterns. Replace brand, copy, CTAs, colors (via tokens), imagery, routes, and forms. Remove demo leftovers.
+3. Before creating ANY meaningful visual UI from scratch, answer: (a) does the template already have it? (b) can a template piece be adapted? (c) is there a selected/gap 21st component? (d) can existing site primitives be reused? Only if all fail may you invent custom visual UI. Small glue (wrappers, handlers, route composition) is fine.
+4. For missing sections / Selected components JSON: adapt those retrieved sources into the template's design system (same tokens, spacing, radius, shadows, content width, buttons).
+5. Build shared pieces from the template language first (Header/Footer/MobileNav), then app/layout.tsx, then app/page.tsx from the template landing, then other routes by cloning the closest page pattern. emit_progress before each page.
+6. Imagery: download_image into public/assets/* or intentional placeholders — never broken/ephemeral URLs; replace unreliable template media.
+7. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx. Content audit: no template company names, fake testimonials, lorem, demo emails/links.
+8. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Do not start or restart the preview server yourself.
+9. update_project_spec with designSystem lineage + pages/visual/features/selectedComponents. finish(summary, routes).
+Checkpoints: checkpoint(message) after each verified chunk. Prefer adapt/compose/integrate/extend over invent.`;
 
 export const WORKFLOW_CREATE_APP = `Workflow (phased — stay in this job; checkpoint between phases):
 Phase A — Foundation: list_tree; globals.css + AppShell; overwrite app/page.tsx; .env.example; demo-data fallback.
@@ -88,18 +87,24 @@ export const WORKFLOW_DESIGN_REPAIR = `The site/app passed technical checks but 
 
 export const WORKFLOW_EDIT = `Your job right now: apply ONE change the user asked for to their existing, already-built site. You are not rebuilding or redesigning it, not auditing SEO, not "improving" unrelated pages. Scope = the request (plus anything it directly breaks).
 
-The project spec (cander.spec.json / DESIGN.md, also summarised in the task) is the site's durable memory: purpose, audience, pages, visual language, standing instructions. Respect it. Current filesystem + project spec + this instruction are the source of truth — older chat context never overrides code.
-Decide which kind of change this is:
-- LASTING decision ("make all cards more rounded", "use a warmer palette", "always write in British English", "the primary CTA is Book a call"): change the design tokens in app/globals.css (or the shared component), AND call update_project_spec with the new value + a one-line decision so future edits keep it.
-- CONTENT / one-off edit ("change the hero headline", "add a testimonial", "fix the typo on /about"): edit the files only. Do not touch the spec unless the request adds a page, feature or asset (then record it under pages/features/brand).
+The project spec (cander.spec.json / DESIGN.md) is durable memory — including designSystem lineage (templateId, tokens, components, pagePatterns). Respect it so new work looks like it always belonged. Current filesystem + project spec + this instruction are the source of truth.
 
-Workflow for a change request:
-1. Use the route map + component index in the task to go straight to the files involved (grep/read_file). Read them before editing. Do not open or rewrite files that the request doesn't touch.
-2. Make the smallest correct change with edit_file (write_file only for new files). Preserve the existing design language and structure unless asked otherwise. Copy/style-only requests should not touch TypeScript logic; token changes go in app/globals.css, not scattered class edits.
-3. If a change affects shared components (header, footer, theme tokens), check every page that uses them.
-4. Validate only what you changed: check_preview on the affected routes; run tsc ("npx --no-install tsc --noEmit --skipLibCheck") only when you edited .ts/.tsx files. Fix errors.
-5. finish(summary) — summary is shown to the user verbatim, so write it as a friendly one- or two-sentence confirmation of what changed (no file paths unless useful).
-Never ask clarifying questions; make the most reasonable interpretation and mention any assumption in the summary.`;
+Decide which kind of change this is:
+- LASTING decision ("make all cards more rounded", "use a warmer palette"): change tokens/shared components AND update_project_spec.
+- CONTENT / one-off ("change the hero headline", "fix the typo"): edit files only.
+- SECTION REPLACEMENT ("I don't like the hero"): identify the section → search_components for alternatives matching the CURRENT design language → get_component 2–4 candidates → replace → normalize to existing tokens → check_preview. Do not redesign the whole site.
+- NEW PAGE ("add a services page"): find the closest existing page structure → reuse navbar/footer/shell → search 21st only for missing patterns → build so it matches the site.
+- FULL REDESIGN only if the user explicitly asks to redesign the entire site.
+
+Before inventing visual UI: reuse existing/template components first; 21st second; native last.
+
+Workflow:
+1. Use the route map + component index; read files before editing. Do not rewrite unrelated files.
+2. Smallest correct change with edit_file (write_file only for new files). Preserve design language.
+3. If shared components change, check dependent pages.
+4. check_preview on affected routes; tsc when TS changed. Fix errors.
+5. finish(summary) — friendly one- or two-sentence confirmation (no file paths unless useful).
+Never ask clarifying questions; make the most reasonable interpretation and mention assumptions in the summary.`;
 
 export const WORKFLOW_REPAIR = `The site was just built but did not pass verification. Your only job now: fix the listed problems so tsc is clean and every route renders. Do not redesign, add pages, or rewrite copy. Read the failing files, make minimal fixes, re-run tsc and check_preview, then call finish(summary, routes) with the same routes.
 The report only lists application problems (compile errors, routes that 500, production build failures with the exact \`next build\` error, missing metadata, placeholder copy). A "Production build failed" item is the highest priority — that is exactly what would fail on Vercel; fix the named file/line, do not work around it with config flags. If check_preview ever says "PREVIEW UNAVAILABLE — INFRASTRUCTURE", that is not something you can fix: stop checking, make sure tsc is clean, and call finish.`;
@@ -117,7 +122,7 @@ export function createInstructions(ctx) {
     ].join("\n\n");
   }
   return [
-    `You are Cander Builder — an autonomous senior front-end engineer and designer. You are building a complete, production-ready marketing website for a real business, inside their Next.js repo, using the tools provided.`,
+    `You are Cander Builder — an autonomous senior front-end engineer. Find the best 21st.dev template for this project, install it, and transform it into the user's website. Adapt, compose, integrate, and extend — do not invent the full visual design from scratch.`,
     STACK_RULES,
     QUALITY_BAR,
     WORKFLOW_CREATE,
@@ -327,6 +332,13 @@ export function formatProjectSpec(spec) {
           .map(([k, x]) => `${k} ${x}`),
       );
     }
+  }
+  if (spec.designSystem && typeof spec.designSystem === "object") {
+    const d = spec.designSystem;
+    push("Design lineage source", d.source);
+    push("Design template", d.templateId ? `${d.templateName || ""} (${d.templateId})` : null);
+    push("Design template root", d.templateRoot);
+    push("Design fallback", d.fallbackReason);
   }
   if (Array.isArray(spec.primaryFlows) && spec.primaryFlows.length) {
     push(

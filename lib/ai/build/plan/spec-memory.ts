@@ -398,6 +398,22 @@ export function renderDesignDoc(spec: ProjectSpec): string {
     if (b.builderFreedom?.length) lines.push(`- AI freedom: ${b.builderFreedom.join(", ")}`);
     lines.push("");
   }
+  if (spec.designSystem) {
+    const d = spec.designSystem;
+    lines.push("## Design lineage");
+    if (d.source) lines.push(`- Source: ${d.source}`);
+    if (d.templateId) lines.push(`- Template: ${d.templateName || d.templateId} (\`${d.templateId}\`)`);
+    if (d.templateRoot) lines.push(`- Template root: ${d.templateRoot}`);
+    if (d.fallbackReason) lines.push(`- Fallback: ${d.fallbackReason}`);
+    if (d.components && Object.keys(d.components).length) {
+      lines.push(
+        `- Components: ${Object.entries(d.components)
+          .map(([k, v]) => `${k}=${v}`)
+          .join("; ")}`,
+      );
+    }
+    lines.push("");
+  }
   if (spec.tone) lines.push("## Copy tone", spec.tone, "");
   if (spec.technical?.length) lines.push("## Technical conventions", ...spec.technical.map((t) => `- ${t}`), "");
   if (spec.userInstructions?.length) {

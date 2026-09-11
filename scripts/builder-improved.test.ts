@@ -40,6 +40,7 @@ describe("builder feature flags", () => {
     const f = resolveBuilderFeatureFlags();
     assert.equal(f.improved, true);
     assert.equal(f.twentyFirstFetch, true);
+    assert.equal(f.websiteTemplateFirst, true);
     assert.equal(f.visualQa, true);
     assert.equal(f.sdkOwnedLoop, true);
   });
@@ -49,6 +50,7 @@ describe("builder feature flags", () => {
     const f = resolveBuilderFeatureFlags();
     assert.equal(f.improved, false);
     assert.equal(f.twentyFirstFetch, false);
+    assert.equal(f.websiteTemplateFirst, false);
     assert.equal(f.visualQa, false);
   });
 

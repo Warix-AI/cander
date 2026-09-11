@@ -21,8 +21,9 @@ import { ensurePlaywright } from "./functional.mjs";
 
 const SITE_CHECKLIST = `Review the attached screenshots (and DOM summary) for launch quality. Flag ONLY meaningful problems (not nitpicks). Look for:
 - broken images / alt-only placeholders where a hero photo should be
+- template/demo leftovers (unrelated company names, fake testimonials, lorem, demo logos)
 - weak or generic AI-looking hero (endless cards, purple gradients, badge pill spam, glassmorphism without reason)
-- bad spacing / hierarchy / typography inconsistency
+- bad spacing / hierarchy / typography inconsistency / design drift between sections
 - broken mobile layout, overflow, tiny text, low contrast
 - mismatched section styles (template collage / unrelated 21st components)
 - empty/dead sections, huge dead space, bad image crop/aspect

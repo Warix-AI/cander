@@ -9,26 +9,32 @@
 //                          build packet (markdown) → coder
 
 import { formatBrief, formatProjectSpec } from "./prompts.mjs";
+import {
+  runTemplateAgent,
+  inferMissingComponentPurposes,
+} from "./template-agent.mjs";
 
-const PLANNER_INSTRUCTIONS = `You are Cander's website planner. Turn a short onboarding brief into a concrete, opinionated site plan a senior front-end engineer will implement in one pass (Next.js App Router + Tailwind).
+const PLANNER_INSTRUCTIONS = `You are Cander's website planner. A 21st.dev TEMPLATE will be the visual foundation — you do NOT invent the visual design from scratch.
+
+Your job: turn the onboarding/design brief into a concrete adaptation plan for that template (content, routes, SEO, forms, missing sections).
 
 Output Markdown with these sections, terse and specific:
 ## Business
 One paragraph: what they do, who for, the single most important conversion.
 ## Brand
-Name/wordmark treatment, 3–5 color tokens as hex (primary, accent, background, foreground, muted) derived from the brief, type pairing (display + body, available via system stacks or a <link> to Google Fonts), radius, overall mood in 5 adjectives.
+Name/wordmark treatment, 3–5 color tokens as hex (primary, accent, background, foreground, muted) derived from the brief, type pairing, radius, mood in 5 adjectives. Prefer adapting the template's tokens rather than inventing a new system.
 ## Sitemap
-Table: route | page title | purpose | primary CTA. Include every page the brief's depth implies. Always include /, and a contact route unless the brief forbids it.
-## Page blueprints
-For EACH route: ordered list of sections with 1–2 lines describing content, layout, and imagery (Unsplash subject suggestions). Vary section layouts across the site.
+Table: route | page title | purpose | primary CTA. Always include /, and a contact route unless forbidden.
+## Template adaptation
+What to KEEP from the template (shell, rhythm, hierarchy), REMOVE (demo sections), MODIFY (copy, CTAs, imagery), and CONTENT PLAN per major section.
+## Missing sections
+List any sections the business needs that a typical template may lack (FAQ, team, gallery, pricing…). Format each needed 21st search as: \`search: <query>\` (max 6). Prefer 21st components for gaps — never invent heroes/navs/footers when the template or 21st can supply them.
 ## Copy direction
-Tone, vocabulary to use/avoid, 3 headline options for the hero, tagline.
-## Components
-Shared components to build (Header, MobileNav, Footer, Section, CTA band, Testimonial card, FAQ accordion, ContactForm…). Then a line per 21st.dev search worth running, formatted exactly: \`search: <query>\` (max 6).
+Tone, vocabulary to use/avoid, 3 hero headline options, tagline.
 ## SEO
-Title template, meta description per page (one line each), canonical = SITE_URL + route, OG image concept (headline + brand colors for the generated 1200×630 image), Organization/LocalBusiness JSON-LD fields using SITE_URL.
+Title template, meta description per page, canonical = SITE_URL + route, OG concept, JSON-LD fields using SITE_URL.
 
-When a project spec is provided it is authoritative: use its pages, CTA, palette hex values, typography, component language (radius/shadow/density/buttons/cards/nav), layout and standing instructions exactly, and honour its inspiration notes (structure only). Fill only the gaps the user left to you.
+When a project spec is provided it is authoritative. Fill only the gaps left to you.
 No code. No placeholders — invent realistic, specific details when the brief is thin, and mark them "(assumed)".`;
 
 const APP_PLANNER_INSTRUCTIONS = `You are Cander's product planner. Turn a short product request into a concrete, opinionated app plan a senior full-stack engineer will implement in one pass (Next.js App Router + Tailwind + Supabase when persistence/auth is needed).
@@ -65,12 +71,13 @@ const INSPIRATION_INSTRUCTIONS = `You are a senior web designer analysing a refe
 const RESEARCH_INSTRUCTIONS = `You are a market researcher for a web agency. Using web search, gather what a best-in-class website in this exact niche does today: 4–6 competitor or exemplar sites (name + URL + what they do well), typical page structure, trust signals customers expect (certifications, guarantees, reviews), pricing presentation norms, and 5 industry-specific phrases/terms to use. Output terse Markdown (max ~500 words). Cite URLs inline.`;
 
 /**
- * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number, repoDir?: string|null, fetchComponents?: boolean }} opts
- * @returns {Promise<{ markdown: string, routes: string[], selectedComponents: Array<Record<string, unknown>>, designDirection: string, stats: Record<string, number> }|null>}
+ * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number, repoDir?: string|null, fetchComponents?: boolean, templateFirst?: boolean }} opts
+ * @returns {Promise<{ markdown: string, routes: string[], selectedComponents: Array<Record<string, unknown>>, selectedTemplate: Record<string, unknown>|null, designSystem: Record<string, unknown>|null, designDirection: string, stats: Record<string, number> }|null>}
  */
 export async function runPlanningPhase(opts) {
   if (Date.now() > opts.deadlineMs - 5 * 60_000) return null;
   const isApp = opts.projectKind === "app";
+  const templateFirst = !isApp && opts.templateFirst !== false && opts.fetchComponents !== false;
   opts.log.emit("status", isApp ? "Planning your app" : "Planning your site", { model: opts.model });
   opts.log.emit(
     "progress",
@@ -80,15 +87,45 @@ export async function runPlanningPhase(opts) {
     { phase: "planning" },
   );
 
+  // ---- website: pick a 21st TEMPLATE before inventing layout ----------------
+  let templateResult = null;
+  if (templateFirst && opts.twentyFirst) {
+    templateResult = await runTemplateAgent({
+      twentyFirst: opts.twentyFirst,
+      log: opts.log,
+      projectSpec: opts.projectSpec,
+      projectName: opts.projectName,
+      deadlineMs: opts.deadlineMs,
+      repoDir: opts.repoDir,
+    });
+  }
+
   const briefText = opts.projectSpec
     ? formatProjectSpec(opts.projectSpec)
     : opts.brief
       ? formatBrief(opts.brief)
       : "(none provided)";
+  const templateContext =
+    templateResult?.selected
+      ? `\n\nSelected 21st template (REQUIRED visual foundation):\n${JSON.stringify(
+          {
+            id: templateResult.selected.componentId,
+            name: templateResult.selected.name,
+            root: templateResult.selected.localPath,
+            files: templateResult.selected.files,
+            reason: templateResult.selected.reason,
+          },
+          null,
+          2,
+        )}`
+      : templateResult?.fallbackReason
+        ? `\n\n(No 21st template available — fallback=${templateResult.fallbackReason}. Prefer 21st COMPONENTS for every major section; native UI only as last resort.)`
+        : "";
+
   const input = [
     `Project name: ${opts.projectName || "Untitled"}`,
     opts.siteUrl ? `SITE_URL: ${opts.siteUrl}` : "",
-    isApp ? "" : `${opts.projectSpec ? "Project spec (durable memory)" : "Onboarding brief"}:\n${briefText}`,
+    isApp ? "" : `${opts.projectSpec ? "Project spec (durable memory)" : "Onboarding brief"}:\n${briefText}${templateContext}`,
     opts.instruction
       ? `${isApp ? "Product request from the user" : "Extra instruction from the user"}:\n${opts.instruction}`
       : "",
@@ -110,11 +147,27 @@ export async function runPlanningPhase(opts) {
     opts.log.emit("progress", routes.length ? `Planning ${routes.length} pages…` : "Planning your pages…");
   }
 
+  // Prefer gap-fill component searches when a template is installed.
+  if (templateResult?.selected && opts.projectSpec) {
+    const blob = [
+      ...(templateResult.selected.files || []),
+      templateResult.markdown || "",
+    ].join("\n");
+    const missing = inferMissingComponentPurposes(opts.projectSpec, blob);
+    if (missing.length) {
+      opts._missingPurposes = missing;
+      opts.log.emit("progress", "Adding the sections you need…", {
+        phase: "twenty_first",
+        detail: missing.join(", "),
+      });
+    }
+  }
+
   // ---- fan-out --------------------------------------------------------------
-  opts.log.emit("progress", "Writing copy and picking a look…");
+  opts.log.emit("progress", templateResult?.selected ? "Applying your brand…" : "Writing copy and picking a look…");
   const planContext = isApp
     ? `Project: ${opts.projectName || "Untitled"}\n\nRequest:\n${opts.instruction || "(none)"}\n\nApp plan:\n${plan}`
-    : `Project: ${opts.projectName || "Untitled"}\n\nBrief:\n${briefText}\n\nSite plan:\n${plan}`;
+    : `Project: ${opts.projectName || "Untitled"}\n\nBrief:\n${briefText}\n\nSite plan:\n${plan}${templateContext}`;
 
   const tasks = [
     subAgent(opts, "copy", isApp ? "Writing your screens" : "Writing your copy", {
@@ -129,8 +182,6 @@ export async function runPlanningPhase(opts) {
     }),
     componentAgent(opts, plan),
     inspirationAgent(opts),
-    // Research only when web search is on and fetch-components (improved) is off —
-    // the improved path prefers fewer planning calls for cost/latency.
     opts.webSearch && !isApp && opts.fetchComponents === false
       ? subAgent(opts, "research", "Learning about your industry", {
           instructions: RESEARCH_INSTRUCTIONS,
@@ -156,10 +207,23 @@ export async function runPlanningPhase(opts) {
       ? componentsResult.stats
       : { searches: 0, fetches: 0, selected: 0 };
 
+  const templateBlock = templateResult?.selected
+    ? [
+        "## Selected 21st TEMPLATE (REQUIRED visual foundation — adapt; do not reinvent)",
+        "```json",
+        JSON.stringify({ template: templateResult.selected, designSystem: templateResult.designSystem }, null, 2),
+        "```",
+        templateResult.markdown || "",
+        "Coder rules: install/adapt files under components/twenty-first/template/ into app/ + components/site/*. Preserve template visual language. Replace demo content. Native visual UI only if template + 21st components cannot cover a need.",
+      ].join("\n")
+    : templateResult?.fallbackReason
+      ? `## Template fallback\nReason: ${templateResult.fallbackReason}. Compose from 21st COMPONENTS (search/fetch) before inventing native UI.`
+      : "";
+
   const selectedBlock =
     selectedComponents.length > 0
       ? [
-          "## Selected components (REQUIRED — adapt these; do not invent unrelated section templates)",
+          "## Selected components (REQUIRED for gaps — adapt these)",
           "```json",
           JSON.stringify(
             {
@@ -177,7 +241,7 @@ export async function runPlanningPhase(opts) {
             2,
           ),
           "```",
-          "Each localPath (when present) already contains the retrieved source under components/twenty-first/. Rewrite into components/site (or components/app) using THIS project's tokens, copy, and spacing. Never paste verbatim with foreign colors/fonts.",
+          "Each localPath (when present) already contains the retrieved source under components/twenty-first/. Rewrite into components/site using THIS project's / template tokens. Never paste verbatim with foreign colors/fonts.",
         ].join("\n")
       : "";
 
@@ -185,6 +249,7 @@ export async function runPlanningPhase(opts) {
     "# Build packet",
     isApp ? "## App plan" : "## Site plan",
     plan,
+    templateBlock,
     inspiration ? `## Inspiration (structure only — never copy content)\n${inspiration}` : "",
     research ? `## Market research\n${research}` : "",
     design ? `## Design system (implement exactly; adjust only for correctness)\n${design}` : "",
@@ -194,23 +259,35 @@ export async function runPlanningPhase(opts) {
     .filter(Boolean)
     .join("\n\n");
 
+  const stats = {
+    ...componentStats,
+    templateSearches: Number(templateResult?.stats?.searches || 0),
+    templateFetches: Number(templateResult?.stats?.fetches || 0),
+    templateSelected: Number(templateResult?.stats?.selected || 0),
+    templateUsed: Boolean(templateResult?.stats?.templateUsed),
+    templateFallback: templateResult?.fallbackReason || null,
+  };
+
   opts.log.emit("plan", "Build packet ready", {
     chars: packet.length,
     parts: {
       copy: Boolean(copy),
       design: Boolean(design),
       components: Boolean(componentsMarkdown || selectedComponents.length),
+      template: Boolean(templateResult?.selected),
       research: Boolean(research),
       selected: selectedComponents.length,
     },
-    stats: componentStats,
+    stats,
   });
   return {
     markdown: truncateMiddle(packet, 90_000),
     routes,
     selectedComponents,
+    selectedTemplate: templateResult?.selected || null,
+    designSystem: templateResult?.designSystem || null,
     designDirection: String(design || "").slice(0, 4000),
-    stats: componentStats,
+    stats,
   };
 }
 
@@ -368,11 +445,24 @@ async function componentAgent(opts, plan) {
     }
   }
 
+  // When a template was selected, only fetch gap-fill purposes unless none inferred.
+  const missingPurposes = Array.isArray(opts._missingPurposes) ? opts._missingPurposes : null;
+  let baseCatalog = catalog;
+  if (!isApp && missingPurposes?.length) {
+    const allowed = new Set(missingPurposes);
+    baseCatalog = catalog.filter((c) => allowed.has(c.purpose));
+    for (const purpose of missingPurposes) {
+      if (!baseCatalog.some((c) => c.purpose === purpose)) {
+        baseCatalog.push({ query: `${mood} ${purpose} section`, purpose });
+      }
+    }
+  }
+
   const planQueries = [...plan.matchAll(/^\s*[-*]?\s*`?search:\s*([^`\n]+)`?\s*$/gim)].map((m) => ({
     query: m[1].trim(),
     purpose: "section",
   }));
-  const queries = uniqBy([...catalog, ...planQueries], (x) => x.query).slice(0, opts.fetchComponents ? 8 : 10);
+  const queries = uniqBy([...baseCatalog, ...planQueries], (x) => x.query).slice(0, opts.fetchComponents ? 8 : 10);
   if (!queries.length) return null;
 
   opts.log.emit("progress", "Finding design components…", { phase: "twenty_first" });

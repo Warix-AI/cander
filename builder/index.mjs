@@ -96,6 +96,7 @@ async function main() {
   const flags = {
     improved: config.flags?.improved !== false,
     twentyFirstFetch: config.flags?.twentyFirstFetch !== false,
+    websiteTemplateFirst: config.flags?.websiteTemplateFirst !== false,
     visualQa: config.flags?.visualQa !== false,
     sdkOwnedLoop: config.flags?.sdkOwnedLoop !== false,
     continuousRepair: config.flags?.continuousRepair !== false,
@@ -135,6 +136,10 @@ async function main() {
     visualQaAttempts: 0,
     twentyFirstSearches: 0,
     twentyFirstFetches: 0,
+    templateSearches: 0,
+    templateFetches: 0,
+    templateSelected: 0,
+    templateUsed: false,
     componentsSelected: 0,
     acceptanceAttempts: 0,
     previewRestarts: 0,
@@ -207,6 +212,7 @@ async function main() {
         deadlineMs: budget.deadlineMs,
         repoDir,
         fetchComponents: flags.twentyFirstFetch,
+        templateFirst: flags.websiteTemplateFirst && projectKind === "site",
       });
       metrics.planningCalls += 1;
       if (plan?.selectedComponents?.length) {
@@ -214,24 +220,37 @@ async function main() {
         metrics.componentsSelected = selectedComponents.length;
       }
       if (plan?.stats) {
-        metrics.twentyFirstSearches = Number(plan.stats.searches || 0);
-        metrics.twentyFirstFetches = Number(plan.stats.fetches || 0);
+        metrics.twentyFirstSearches = Number(plan.stats.searches || 0) + Number(plan.stats.templateSearches || 0);
+        metrics.twentyFirstFetches = Number(plan.stats.fetches || 0) + Number(plan.stats.templateFetches || 0);
+        metrics.templateSearches = Number(plan.stats.templateSearches || 0);
+        metrics.templateFetches = Number(plan.stats.templateFetches || 0);
+        metrics.templateSelected = Number(plan.stats.templateSelected || 0);
+        metrics.templateUsed = Boolean(plan.stats.templateUsed);
       }
       if (plan?.designDirection) designDirection = plan.designDirection;
+      const specPatch = {};
       if (selectedComponents.length) {
-        log.emit("spec_update", "Recorded selected design components", {
-          patch: {
-            selectedComponents: selectedComponents.map((c) => ({
-              source: c.source || "21st",
-              componentId: c.componentId,
-              name: c.name,
-              purpose: c.purpose,
-              reason: c.reason,
-              localPath: c.localPath,
-              adaptationInstructions: c.adaptationInstructions,
-            })),
-          },
-          decision: `Selected ${selectedComponents.length} design component(s) from 21st.dev for adaptation`,
+        specPatch.selectedComponents = selectedComponents.map((c) => ({
+          source: c.source || "21st",
+          componentId: c.componentId,
+          name: c.name,
+          purpose: c.purpose,
+          reason: c.reason,
+          localPath: c.localPath,
+          adaptationInstructions: c.adaptationInstructions,
+        }));
+      }
+      if (plan?.designSystem) {
+        specPatch.designSystem = plan.designSystem;
+      }
+      if (Object.keys(specPatch).length) {
+        log.emit("spec_update", "Recorded design lineage", {
+          patch: specPatch,
+          decision: plan?.selectedTemplate
+            ? `Selected 21st template ${plan.selectedTemplate.name || plan.selectedTemplate.componentId} as visual foundation`
+            : selectedComponents.length
+              ? `Selected ${selectedComponents.length} design component(s) from 21st.dev for adaptation`
+              : "Recorded design system lineage",
         });
       }
     } catch (err) {

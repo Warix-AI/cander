@@ -1,8 +1,17 @@
-// 21st.dev component retrieval.
+// 21st.dev catalog retrieval (components, templates, themes).
 //  proxy  → Cander /api/build-jobs/{jobId}/twenty-first (server holds API_KEY_21ST)
 //  direct → https://21st.dev/api/mcp JSON-RPC with API_KEY_21ST (local dev only)
+//
+// MCP search supports type filters: "component" | "template" | "theme".
+// Retrieval uses get_component with the search id (works for templates too).
 
 const MCP_URL = "https://21st.dev/api/mcp";
+
+/**
+ * @typedef {{ id: string, name: string, category?: string, description?: string, type?: string }} TwentyFirstHit
+ * @typedef {{ path: string, content: string }} TwentyFirstFile
+ * @typedef {{ id: string, name: string, code: string, dependencies: string[], files?: TwentyFirstFile[], type?: string }} TwentyFirstArtifact
+ */
 
 export class TwentyFirstClient {
   /**
@@ -25,45 +34,65 @@ export class TwentyFirstClient {
     return Boolean(process.env.API_KEY_21ST?.trim() || process.env.TWENTY_FIRST_API_KEY?.trim());
   }
 
-  async search(query, limit) {
+  /**
+   * @param {string} query
+   * @param {number} [limit]
+   * @param {{ type?: "component"|"template"|"theme" }} [opts]
+   * @returns {Promise<TwentyFirstHit[]>}
+   */
+  async search(query, limit, opts = {}) {
     const q = String(query ?? "").trim();
     if (!q) return [];
     const n = Math.min(Math.max(Number(limit) || 5, 1), 5);
-    const key = `${q}::${n}`;
+    const type = opts.type === "template" || opts.type === "theme" ? opts.type : "component";
+    const key = `${type}::${q}::${n}`;
     if (this.searchCache.has(key)) return this.searchCache.get(key);
     let hits = [];
     try {
       hits =
         this.transport === "proxy"
-          ? await this.proxy({ action: "search", query: q, limit: n })
-          : normalizeSearch(await this.rpcTool("search", { query: q, limit: n, type: "component" }));
+          ? await this.proxy({ action: "search", query: q, limit: n, type })
+          : normalizeSearch(await this.rpcTool("search", { query: q, limit: n, type }), type);
     } catch (err) {
       this.log.emit("log", `21st search failed: ${err?.message || err}`);
       hits = [];
     }
     hits = Array.isArray(hits) ? hits.slice(0, n) : [];
     this.searchCache.set(key, hits);
-    this.log.emit("tool", `21st search "${q}" → ${hits.length} result(s)`, { query: q, n: hits.length });
+    this.log.emit("tool", `21st search [${type}] "${q}" → ${hits.length} result(s)`, {
+      query: q,
+      n: hits.length,
+      type,
+    });
     return hits;
   }
 
-  async get(id) {
+  /**
+   * @param {string} id
+   * @param {{ type?: string }} [opts]
+   * @returns {Promise<TwentyFirstArtifact|null>}
+   */
+  async get(id, opts = {}) {
     const key = String(id ?? "").trim();
     if (!key) return null;
-    if (this.getCache.has(key)) return this.getCache.get(key);
+    const cacheKey = `${opts.type || "any"}::${key}`;
+    if (this.getCache.has(cacheKey)) return this.getCache.get(cacheKey);
     let component = null;
     try {
       component =
         this.transport === "proxy"
-          ? await this.proxy({ action: "get", id: key })
-          : normalizeGet(await this.rpcTool("get_component", { id: key }), key);
+          ? await this.proxy({ action: "get", id: key, type: opts.type })
+          : normalizeGet(await this.rpcTool("get_component", { id: key, searchId: key, componentId: key }), key);
     } catch (err) {
       this.log.emit("log", `21st get ${key} failed: ${err?.message || err}`);
       component = null;
     }
-    this.getCache.set(key, component);
+    this.getCache.set(cacheKey, component);
     if (component) {
-      this.log.emit("tool", `21st fetched ${component.name || key}`, { id: key });
+      this.log.emit("tool", `21st fetched ${component.name || key}`, {
+        id: key,
+        files: component.files?.length || 0,
+      });
     }
     return component;
   }
@@ -128,7 +157,6 @@ function parseMcpBody(text) {
       return null;
     }
   }
-  // SSE: take the last data: line that parses.
   let last = null;
   for (const line of t.split("\n")) {
     if (line.startsWith("data:")) {
@@ -159,36 +187,81 @@ function unwrap(result) {
   return result;
 }
 
-function normalizeSearch(raw) {
+function normalizeSearch(raw, type = "component") {
   const list = Array.isArray(raw)
     ? raw
     : Array.isArray(raw?.results)
       ? raw.results
       : Array.isArray(raw?.components)
         ? raw.components
-        : Array.isArray(raw?.items)
-          ? raw.items
-          : [];
+        : Array.isArray(raw?.templates)
+          ? raw.templates
+          : Array.isArray(raw?.items)
+            ? raw.items
+            : [];
   return list
     .map((r) => ({
-      id: String(r?.id ?? r?.component_id ?? r?.slug ?? ""),
-      name: String(r?.name ?? r?.title ?? r?.id ?? "Component"),
+      id: String(r?.id ?? r?.component_id ?? r?.searchId ?? r?.slug ?? ""),
+      name: String(r?.name ?? r?.title ?? r?.id ?? "Item"),
       category: r?.category ? String(r.category) : undefined,
       description: r?.description ? String(r.description) : undefined,
+      type: String(r?.type ?? type),
     }))
     .filter((r) => r.id);
 }
 
-function normalizeGet(raw, id) {
+/**
+ * Normalize get_component payload for components OR templates.
+ * Templates often include a `files` array; components usually a single `code`.
+ */
+export function normalizeGet(raw, id) {
   if (!raw) return null;
-  if (typeof raw === "string") return { id, name: id, code: raw, dependencies: [] };
+  if (typeof raw === "string") return { id, name: id, code: raw, dependencies: [], files: [] };
+  const inner =
+    raw.component && typeof raw.component === "object"
+      ? raw.component
+      : raw.template && typeof raw.template === "object"
+        ? raw.template
+        : raw.data && typeof raw.data === "object"
+          ? raw.data
+          : raw;
+  const files = extractFiles(inner) || extractFiles(raw) || [];
   const code =
-    raw.code ?? raw.source ?? raw.content ?? raw.files?.[0]?.content ?? raw.component?.code ?? "";
-  const deps = raw.dependencies ?? raw.npmDependencies ?? raw.component?.dependencies ?? [];
+    inner.code ??
+    inner.source ??
+    inner.content ??
+    files[0]?.content ??
+    raw.code ??
+    raw.source ??
+    "";
+  const deps = inner.dependencies ?? raw.dependencies ?? raw.npmDependencies ?? [];
   return {
-    id: String(raw.id ?? id),
-    name: String(raw.name ?? raw.title ?? id),
+    id: String(inner.id ?? raw.id ?? id),
+    name: String(inner.name ?? inner.title ?? raw.name ?? id),
     code: typeof code === "string" ? code : JSON.stringify(code),
     dependencies: Array.isArray(deps) ? deps.map(String) : Object.keys(deps || {}),
+    files,
+    type: String(inner.type ?? raw.type ?? (files.length > 1 ? "template" : "component")),
   };
+}
+
+function extractFiles(obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const rawFiles = obj.files ?? obj.fileTree ?? obj.sources;
+  if (!Array.isArray(rawFiles) || !rawFiles.length) return null;
+  const out = [];
+  for (const f of rawFiles) {
+    if (!f || typeof f !== "object") continue;
+    const path = String(f.path ?? f.name ?? f.filename ?? f.file ?? "").replace(/^\/+/, "");
+    const content =
+      typeof f.content === "string"
+        ? f.content
+        : typeof f.code === "string"
+          ? f.code
+          : typeof f.source === "string"
+            ? f.source
+            : "";
+    if (path && content) out.push({ path, content });
+  }
+  return out.length ? out : null;
 }

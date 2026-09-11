@@ -337,12 +337,14 @@ export class TwentyFirstMcpClient {
     query: string;
     limit?: number;
     role?: string;
+    type?: "component" | "template" | "theme";
   }): Promise<RetrievedComponentRef[]> {
     const limit = Math.min(opts.limit ?? 5, 5);
-    const cacheKey = `${opts.role ?? ""}::${opts.query}::${limit}`;
+    const type = opts.type === "template" || opts.type === "theme" ? opts.type : "component";
+    const cacheKey = `${type}::${opts.role ?? ""}::${opts.query}::${limit}`;
     const cached = this.searchCache.get(cacheKey);
     if (cached) {
-      logInfo("search cache hit", { query: opts.query, role: opts.role, n: cached.length });
+      logInfo("search cache hit", { query: opts.query, role: opts.role, type, n: cached.length });
       return cached;
     }
 
@@ -350,14 +352,14 @@ export class TwentyFirstMcpClient {
       query: opts.query,
       ...(opts.role ? { role: opts.role } : {}),
       limit,
-      // Common 21st search filters
-      type: "component",
+      type,
     });
-    const hits = normalizeSearchResults(raw, opts.query).slice(0, limit);
+    const hits = normalizeSearchResults(raw, opts.query, type).slice(0, limit);
     this.searchCache.set(cacheKey, hits);
     logInfo("search results", {
       query: opts.query,
       role: opts.role,
+      type,
       count: hits.length,
       ids: hits.map((h) => h.id),
     });
@@ -392,6 +394,7 @@ export class TwentyFirstMcpClient {
 function normalizeSearchResults(
   raw: unknown,
   fallbackQuery: string,
+  typeHint = "component",
 ): RetrievedComponentRef[] {
   const list = Array.isArray(raw)
     ? raw
@@ -400,9 +403,11 @@ function normalizeSearchResults(
         ? (raw as { results: unknown[] }).results
         : Array.isArray((raw as { components?: unknown }).components)
           ? (raw as { components: unknown[] }).components
-          : Array.isArray((raw as { items?: unknown }).items)
-            ? (raw as { items: unknown[] }).items
-            : []
+          : Array.isArray((raw as { templates?: unknown }).templates)
+            ? (raw as { templates: unknown[] }).templates
+            : Array.isArray((raw as { items?: unknown }).items)
+              ? (raw as { items: unknown[] }).items
+              : []
       : [];
 
   return list.slice(0, 8).map((item, i) => {
@@ -415,8 +420,8 @@ function normalizeSearchResults(
     );
     return {
       id,
-      name: String(o.name ?? o.title ?? `Component ${i + 1}`),
-      category: String(o.category ?? o.role ?? o.type ?? "section"),
+      name: String(o.name ?? o.title ?? `Item ${i + 1}`),
+      category: String(o.category ?? o.role ?? o.type ?? typeHint),
       source: "twenty_first",
       codeSnippet: pickCode(o),
       dependencies: Array.isArray(o.dependencies)
@@ -433,10 +438,26 @@ function pickCode(o: Record<string, unknown>): string | undefined {
     "tsx",
     "jsx",
     "componentCode",
-    "files",
   ]) {
     const v = o[key];
     if (typeof v === "string" && v.trim()) return v;
+  }
+  if (Array.isArray(o.files) && o.files.length) {
+    const parts: string[] = [];
+    for (const f of o.files) {
+      if (!f || typeof f !== "object") continue;
+      const file = f as Record<string, unknown>;
+      const path = String(file.path ?? file.name ?? file.filename ?? "");
+      const content =
+        typeof file.content === "string"
+          ? file.content
+          : typeof file.code === "string"
+            ? file.code
+            : "";
+      if (path && content) parts.push(`// FILE: ${path}\n${content}`);
+      else if (content) parts.push(content);
+    }
+    if (parts.length) return parts.join("\n\n");
   }
   if (o.demo && typeof o.demo === "object") {
     const demo = o.demo as Record<string, unknown>;

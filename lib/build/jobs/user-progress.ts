@@ -11,6 +11,8 @@ const RULES: { re: RegExp; out: string | null }[] = [
   { re: /\bcoder:\s*\d+\s*tool/i, out: null },
   { re: /\bchain.?of.?thought\b|\bprivate reasoning\b|\bOPENAI_API_KEY\b|\bBearer\s+[A-Za-z0-9._-]+/i, out: null },
   { re: /\bPID\s*\d+|process\s+\d+|stack trace|Error:\s*ENOENT/i, out: null },
+  { re: /finding the right design|reviewing website templates|preparing your design|customizing the template/i, out: "Finding the right design…" },
+  { re: /adding the sections you need/i, out: "Adding the sections you need…" },
   { re: /\b21st\.dev\b|searching 21st|search_components|get_component|design component/i, out: "Finding design components…" },
   { re: /reviewing\s+\d+\s+(design )?component|comparing component|pulling in design/i, out: "Reviewing component options…" },
   { re: /studying\s+\d+\s+reference|inspiration|reference (site|url)/i, out: "Looking at sites you liked…" },

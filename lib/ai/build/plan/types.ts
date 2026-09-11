@@ -117,8 +117,36 @@ export type ProjectSpec = {
     strengths?: Record<string, string>;
     updatedAt?: string;
   };
+  /**
+   * Design lineage for websites — usually a 21st.dev template foundation.
+   * Future edits and new pages must respect this language.
+   */
+  designSystem?: ProjectDesignSystem;
   /** App: ordered primary user flows the create job should implement. */
   primaryFlows?: Array<{ id: string; title: string; steps?: string[] }>;
+  updatedAt?: string;
+};
+
+export type ProjectDesignSystem = {
+  source?: "21st" | "native" | "derived";
+  templateId?: string;
+  templateName?: string;
+  templateReason?: string;
+  templateFiles?: string[];
+  templateRoot?: string;
+  dependencies?: string[];
+  selectedComponents?: Array<{
+    componentId: string;
+    purpose: string;
+    localPath?: string;
+  }>;
+  designTokens?: Record<string, string>;
+  layoutRules?: Record<string, string>;
+  pagePatterns?: Record<string, string>;
+  componentPatterns?: Record<string, string>;
+  components?: Record<string, string>;
+  referenceRoutes?: string[];
+  fallbackReason?: string;
   updatedAt?: string;
 };
 

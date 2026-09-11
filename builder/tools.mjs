@@ -374,12 +374,16 @@ export class SandboxTools {
         {
           name: "search_components",
           description:
-            "Search 21st.dev for production-quality React/Tailwind components (hero, pricing, testimonials, navbar, footer, features…). Returns ids + names + previews.",
+            "Search 21st.dev for production-quality React/Tailwind UI. Use type=template for complete website templates, type=component (default) for section widgets (hero, pricing, navbar, faq…). Returns ids + names.",
           parameters: {
             type: "object",
             properties: {
               query: { type: "string" },
               limit: { type: "integer", description: "1–5" },
+              type: {
+                type: "string",
+                description: "component | template | theme (default component)",
+              },
             },
             required: ["query"],
           },
@@ -387,7 +391,7 @@ export class SandboxTools {
         {
           name: "get_component",
           description:
-            "Fetch a 21st.dev component's source code and dependencies by id. Adapt it into components/ and install any listed packages.",
+            "Fetch a 21st.dev component or template's source by search id. Adapt into the project design system; templates belong under components/twenty-first/template/ then app/.",
           parameters: {
             type: "object",
             properties: { id: { type: "string" } },
@@ -477,7 +481,7 @@ export class SandboxTools {
         case "db_rls_check":
           return { output: await this.providerTool("db.rls_check", {}) };
         case "search_components":
-          return { output: await this.searchComponents(a.query, a.limit) };
+          return { output: await this.searchComponents(a.query, a.limit, a.type) };
         case "get_component":
           return { output: await this.getComponent(a.id) };
         case "finish":
@@ -879,14 +883,16 @@ export class SandboxTools {
     return `Saved ${rel} (${Math.round(buf.length / 1024)} KB, ${type}). Use src="/${rel.slice("public/".length)}".`;
   }
 
-  async searchComponents(query, limit) {
+  async searchComponents(query, limit, type) {
     if (!this.twentyFirst) return "21st.dev is not configured for this job.";
-    const hits = await this.twentyFirst.search(String(query ?? ""), limit);
-    if (!hits.length) return "(no components found)";
+    const kind =
+      type === "template" || type === "theme" ? type : "component";
+    const hits = await this.twentyFirst.search(String(query ?? ""), limit, { type: kind });
+    if (!hits.length) return `(no ${kind}s found)`;
     return hits
       .map(
         (h) =>
-          `- id=${h.id} name=${JSON.stringify(h.name)}${h.category ? ` category=${h.category}` : ""}${h.description ? `\n  ${h.description.slice(0, 200)}` : ""}`,
+          `- id=${h.id} name=${JSON.stringify(h.name)}${h.category ? ` category=${h.category}` : ""}${h.type ? ` type=${h.type}` : ""}${h.description ? `\n  ${h.description.slice(0, 200)}` : ""}`,
       )
       .join("\n");
   }

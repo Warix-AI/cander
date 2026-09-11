@@ -323,6 +323,78 @@ function normalizeProjectSpecMemory(o: Record<string, unknown>): Partial<Project
     if (!designBriefNorm.referenceTraits?.length) delete designBriefNorm.referenceTraits;
     out.designBrief = designBriefNorm;
   }
+  const designSystem = asRecord(o.designSystem);
+  if (designSystem) {
+    const src = asString(designSystem.source);
+    const selected = Array.isArray(designSystem.selectedComponents)
+      ? designSystem.selectedComponents
+          .map((c) => asRecord(c))
+          .filter(Boolean)
+          .map((c) => ({
+            componentId: asString(c!.componentId),
+            purpose: asString(c!.purpose) || "section",
+            localPath: asString(c!.localPath) || undefined,
+          }))
+          .filter((c) => c.componentId)
+      : [];
+    const ds: NonNullable<ProjectSpec["designSystem"]> = {
+      source: (src === "native" || src === "derived" || src === "21st" ? src : "21st") as
+        | "21st"
+        | "native"
+        | "derived",
+      templateId: asString(designSystem.templateId) || undefined,
+      templateName: asString(designSystem.templateName) || undefined,
+      templateReason: asString(designSystem.templateReason) || undefined,
+      templateFiles: asStringArray(designSystem.templateFiles),
+      templateRoot: asString(designSystem.templateRoot) || undefined,
+      dependencies: asStringArray(designSystem.dependencies),
+      selectedComponents: selected.length ? selected.slice(0, 24) : undefined,
+      designTokens: asStringMap(designSystem.designTokens)
+        ? (Object.fromEntries(
+            Object.entries(asStringMap(designSystem.designTokens)!).filter(
+              ([, v]) => typeof v === "string" && v,
+            ),
+          ) as Record<string, string>)
+        : undefined,
+      layoutRules: asStringMap(designSystem.layoutRules)
+        ? (Object.fromEntries(
+            Object.entries(asStringMap(designSystem.layoutRules)!).filter(
+              ([, v]) => typeof v === "string" && v,
+            ),
+          ) as Record<string, string>)
+        : undefined,
+      pagePatterns: asStringMap(designSystem.pagePatterns)
+        ? (Object.fromEntries(
+            Object.entries(asStringMap(designSystem.pagePatterns)!).filter(
+              ([, v]) => typeof v === "string" && v,
+            ),
+          ) as Record<string, string>)
+        : undefined,
+      componentPatterns: asStringMap(designSystem.componentPatterns)
+        ? (Object.fromEntries(
+            Object.entries(asStringMap(designSystem.componentPatterns)!).filter(
+              ([, v]) => typeof v === "string" && v,
+            ),
+          ) as Record<string, string>)
+        : undefined,
+      components: asStringMap(designSystem.components)
+        ? (Object.fromEntries(
+            Object.entries(asStringMap(designSystem.components)!).filter(
+              ([, v]) => typeof v === "string" && v,
+            ),
+          ) as Record<string, string>)
+        : undefined,
+      referenceRoutes: asStringArray(designSystem.referenceRoutes),
+      fallbackReason: asString(designSystem.fallbackReason) || undefined,
+      updatedAt: asString(designSystem.updatedAt) || undefined,
+    };
+    if (!ds.templateFiles?.length) delete ds.templateFiles;
+    if (!ds.dependencies?.length) delete ds.dependencies;
+    if (!ds.referenceRoutes?.length) delete ds.referenceRoutes;
+    if (ds.templateId || ds.templateName || ds.fallbackReason || ds.source === "derived") {
+      out.designSystem = ds;
+    }
+  }
   if (Array.isArray(o.primaryFlows)) {
     const flows = o.primaryFlows
       .map((f) => asRecord(f))
