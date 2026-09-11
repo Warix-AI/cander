@@ -40,6 +40,13 @@ import {
   resolveOpenAIModel,
 } from "@/lib/ai/raw-openai/web-search";
 import { isTwentyFirstConfigured } from "@/lib/ai/build/twenty-first-mcp";
+import { resolveBuilderFeatureFlags } from "@/lib/build/jobs/builder-flags";
+import {
+  classifyEditComplexity,
+  editNeedsVisualQa,
+  pickCoderModel,
+  resolveBuilderModels,
+} from "@/lib/build/jobs/builder-models";
 import { BUILD_APP_PORT } from "@/lib/build/sandbox/constants";
 import { signBuildJobToken } from "@/lib/build/jobs/token";
 import { slugFromProjectName } from "@/lib/publish-domain";
@@ -378,10 +385,32 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       workspaceId: job.workspaceId,
       exp: Math.floor((Date.now() + JOB_SANDBOX_EXTEND_MS + 30 * 60 * 1000) / 1000),
     });
-    const models = {
-      planner: resolveOpenAIModel(),
-      coder: resolveOpenAICodingModel(),
-    };
+    const flags = resolveBuilderFeatureFlags();
+    const modelBundle = resolveBuilderModels();
+    const editComplexity =
+      job.facts.mode === "edit" ? classifyEditComplexity(job.facts.instruction) : "standard";
+    const coderModel = pickCoderModel({
+      models: modelBundle,
+      mode: job.facts.mode === "edit" ? "edit" : "create",
+      projectKind,
+      editComplexity,
+      routingEnabled: flags.modelRouting,
+    });
+    const models = flags.modelRouting
+      ? {
+          planner: modelBundle.planner,
+          fast: modelBundle.fast,
+          coder: modelBundle.coder,
+          strongCoder: modelBundle.strongCoder,
+          visualReview: modelBundle.visualReview,
+        }
+      : {
+          planner: resolveOpenAIModel(),
+          fast: resolveOpenAIModel(),
+          coder: resolveOpenAICodingModel(),
+          strongCoder: resolveOpenAICodingModel(),
+          visualReview: resolveOpenAIModel(),
+        };
     const twentyFirstEnabled = isTwentyFirstConfigured();
 
     const pwd = await runPrivilegedSandboxCommand({ sessionId, userId, cmd: "pwd" });
@@ -433,10 +462,19 @@ export async function startBuildJob(job: BuildJob): Promise<BuildJob> {
       webSearch: isOpenAIWebSearchEnabled(),
       functionalChecks: process.env.CANDER_FUNCTIONAL_CHECKS?.trim() !== "0",
       models,
+      coderModel,
+      editComplexity,
+      flags,
+      visualQaForEdit:
+        job.facts.mode === "edit" && flags.visualQa && editNeedsVisualQa(job.facts.instruction),
       // Edits are small, targeted changes — low effort keeps them snappy.
       reasoning:
         process.env.CANDER_BUILDER_REASONING?.trim() ||
-        (job.facts.mode === "edit" ? "low" : "medium"),
+        (job.facts.mode === "edit"
+          ? editComplexity === "trivial"
+            ? "low"
+            : "medium"
+          : "medium"),
       devServerUrl: `http://localhost:${BUILD_APP_PORT}`,
       budget: {
         wallClockMs: job.facts.mode === "create" ? CREATE_WALL_CLOCK_MS : EDIT_WALL_CLOCK_MS,

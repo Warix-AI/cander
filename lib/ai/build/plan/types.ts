@@ -60,6 +60,28 @@ export type ProjectSpec = {
   decisions?: ProjectSpecDecision[];
   /** Friendly summary of the most recent edit job. */
   lastEditSummary?: string;
+  /**
+   * 21st.dev (or other) components selected at plan time for the coder to adapt.
+   * Code snippets may be truncated; full source is written under components/twenty-first/ when fetched.
+   */
+  selectedComponents?: Array<{
+    source: "21st" | "native";
+    componentId: string;
+    name?: string;
+    purpose: string;
+    reason?: string;
+    adaptationInstructions?: string;
+    /** Repo-relative path when source was materialized for the coder. */
+    localPath?: string;
+  }>;
+  /** Imagery direction for heroes/sections (subjects, mood) — not raw URLs. */
+  imagery?: {
+    heroSubject?: string;
+    sectionSubjects?: string[];
+    avoid?: string[];
+  };
+  /** App: ordered primary user flows the create job should implement. */
+  primaryFlows?: Array<{ id: string; title: string; steps?: string[] }>;
   updatedAt?: string;
 };
 

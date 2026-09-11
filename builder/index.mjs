@@ -12,7 +12,7 @@ import { LlmClient } from "./llm.mjs";
 import { PreviewSupervisor } from "./preview.mjs";
 import { SandboxTools, execShell } from "./tools.mjs";
 import { TwentyFirstClient } from "./twenty-first.mjs";
-import { runAgent } from "./agent.mjs";
+import { runAgent, normalizeAgentReason } from "./agent.mjs";
 import { runAcceptance } from "./verify.mjs";
 import {
   createInstructions,
@@ -21,8 +21,10 @@ import {
   editTask,
   STACK_RULES,
   WORKFLOW_REPAIR,
+  WORKFLOW_DESIGN_REPAIR,
 } from "./prompts.mjs";
 import { runPlanningPhase } from "./planner.mjs";
+import { captureVisualEvidence, runVisualQa, writeVisualReport } from "./visual-qa.mjs";
 
 function arg(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
@@ -91,15 +93,55 @@ async function main() {
   // Retry of a failed create: resume from the last good phase in the SAME
   // sandbox (files, plan and logs are still here) instead of starting over.
   const resume = normalizeResume(config.resume, repoDir);
+  const flags = {
+    improved: config.flags?.improved !== false,
+    twentyFirstFetch: config.flags?.twentyFirstFetch !== false,
+    visualQa: config.flags?.visualQa !== false,
+    sdkOwnedLoop: config.flags?.sdkOwnedLoop !== false,
+    continuousRepair: config.flags?.continuousRepair !== false,
+    modelRouting: config.flags?.modelRouting !== false,
+  };
   const models = {
     planner: config.models?.planner || "gpt-5.6-luna",
+    fast: config.models?.fast || config.models?.planner || "gpt-5.6-luna",
     coder: config.models?.coder || "gpt-5.3-codex",
+    strongCoder: config.models?.strongCoder || config.models?.coder || "gpt-5.3-codex",
+    visualReview: config.models?.visualReview || config.models?.planner || "gpt-5.6-luna",
   };
+  const editComplexity = config.editComplexity || "standard";
+  const coderModel =
+    config.coderModel ||
+    (flags.modelRouting
+      ? mode === "edit" && editComplexity === "trivial"
+        ? models.fast
+        : mode === "create" && projectKind === "app"
+          ? models.strongCoder
+          : mode === "edit" && editComplexity === "complex"
+            ? models.strongCoder
+            : models.coder
+      : models.coder);
   const budget = {
     deadlineMs: Date.now() + Number(config.budget?.wallClockMs || (mode === "create" ? 75 : 25) * 60_000),
     maxLlmCalls: Number(config.budget?.maxLlmCalls || (mode === "create" ? 400 : 120)),
     // Guardrail against tool-call loops (a model re-reading the same files forever).
     maxToolCalls: Number(config.budget?.maxToolCalls || (mode === "create" ? 1500 : 400)),
+  };
+  const jobAbort = new AbortController();
+  const metrics = {
+    modelsUsed: /** @type {string[]} */ ([]),
+    planningCalls: 0,
+    coderCalls: 0,
+    repairCalls: 0,
+    visualQaAttempts: 0,
+    twentyFirstSearches: 0,
+    twentyFirstFetches: 0,
+    componentsSelected: 0,
+    acceptanceAttempts: 0,
+    previewRestarts: 0,
+    startedAt: Date.now(),
+  };
+  const noteModel = (m) => {
+    if (m && !metrics.modelsUsed.includes(m)) metrics.modelsUsed.push(m);
   };
 
   log.emit(
@@ -115,6 +157,8 @@ async function main() {
       models,
       transport,
       twentyFirst: Boolean(twentyFirst),
+      flags,
+      coderModel,
     },
   );
 
@@ -139,11 +183,15 @@ async function main() {
 
   // ---- phase: plan (create only; reused on resume) ----------------------------
   let plan = null;
+  /** @type {Array<Record<string, unknown>>} */
+  let selectedComponents = [];
+  let designDirection = "";
   if (mode === "create" && resume?.plan) {
     plan = resume.plan;
     log.emit("plan", "Reusing the plan from the previous attempt", { resumed: true, chars: plan.markdown.length });
   } else if (mode === "create" && resume?.phase !== "verify") {
     try {
+      noteModel(models.planner);
       plan = await runPlanningPhase({
         llm,
         log,
@@ -157,7 +205,35 @@ async function main() {
         twentyFirst,
         webSearch: Boolean(config.webSearch),
         deadlineMs: budget.deadlineMs,
+        repoDir,
+        fetchComponents: flags.twentyFirstFetch,
       });
+      metrics.planningCalls += 1;
+      if (plan?.selectedComponents?.length) {
+        selectedComponents = plan.selectedComponents;
+        metrics.componentsSelected = selectedComponents.length;
+      }
+      if (plan?.stats) {
+        metrics.twentyFirstSearches = Number(plan.stats.searches || 0);
+        metrics.twentyFirstFetches = Number(plan.stats.fetches || 0);
+      }
+      if (plan?.designDirection) designDirection = plan.designDirection;
+      if (selectedComponents.length) {
+        log.emit("spec_update", "Recorded selected design components", {
+          patch: {
+            selectedComponents: selectedComponents.map((c) => ({
+              source: c.source || "21st",
+              componentId: c.componentId,
+              name: c.name,
+              purpose: c.purpose,
+              reason: c.reason,
+              localPath: c.localPath,
+              adaptationInstructions: c.adaptationInstructions,
+            })),
+          },
+          decision: `Selected ${selectedComponents.length} design component(s) from 21st.dev for adaptation`,
+        });
+      }
     } catch (err) {
       log.emit("log", `Planning skipped: ${err?.message || err}`);
     }
@@ -166,7 +242,14 @@ async function main() {
     // Durable in the sandbox so a retry can skip planning.
     try {
       writeFileSync(join(jobDir, "plan.md"), plan.markdown);
-      writeFileSync(join(jobDir, "plan.json"), JSON.stringify({ routes: plan.routes || [] }));
+      writeFileSync(
+        join(jobDir, "plan.json"),
+        JSON.stringify({
+          routes: plan.routes || [],
+          selectedComponents,
+          designDirection: designDirection.slice(0, 2000),
+        }),
+      );
     } catch {
       /* best-effort */
     }
@@ -175,6 +258,7 @@ async function main() {
   // ---- acceptance ------------------------------------------------------------
   let lastVerification = null;
   const acceptance = async (finish) => {
+    metrics.acceptanceAttempts += 1;
     log.emit("status", projectKind === "app" ? "Verifying the app" : "Verifying the site", { routes: finish.routes });
     const result = await runAcceptance({
       repoDir,
@@ -215,7 +299,22 @@ async function main() {
     projectName: config.projectName || "",
     siteUrl: config.siteUrl || null,
     brief: config.brief || null,
-    projectSpec: config.projectSpec || null,
+    projectSpec: config.projectSpec
+      ? {
+          ...config.projectSpec,
+          ...(selectedComponents.length
+            ? { selectedComponents: selectedComponents.map((c) => ({
+                source: c.source || "21st",
+                componentId: c.componentId,
+                name: c.name,
+                purpose: c.purpose,
+                reason: c.reason,
+                localPath: c.localPath,
+                adaptationInstructions: c.adaptationInstructions,
+              })) }
+            : {}),
+        }
+      : null,
     instruction: config.instruction || null,
     conversation: config.conversation || null,
     condensedContext: config.condensedContext || null,
@@ -280,38 +379,53 @@ async function main() {
           : "Building pages and components"
         : "Making the change",
     );
+    noteModel(coderModel);
+    const callsBefore = llm.calls;
     result = await runAgent({
       llm,
       tools,
       log,
-      model: models.coder,
-      reasoning: config.reasoning || "medium",
+      model: coderModel,
+      reasoning: config.reasoning || (mode === "edit" && editComplexity === "trivial" ? "low" : "medium"),
       instructions: mode === "create" ? createInstructions(ctx) : editInstructions(ctx),
       task: mode === "create" ? createTask(ctx) : editTask({ ...ctx, instruction: config.instruction || "" }),
       budget,
       onFinishRequested: acceptance,
       label: "coder",
+      sdkOwnedLoop: flags.sdkOwnedLoop,
+      signal: jobAbort.signal,
     });
+    metrics.coderCalls += Math.max(0, llm.calls - callsBefore);
+    result = { ...result, reason: normalizeAgentReason(result.reason) };
   }
 
   // ---- phase: repair (bounded; application failures only) --------------------
   // Verification failures after finish() are usually a handful of type errors
-  // or one route that 500s. Grant a short, fresh-context repair pass with the
-  // concrete report. Infrastructure failures never reach the coder.
-  // Resumed verify→repair jobs need a larger budget: the first verify already
-  // spent the "easy" installs, and cutting at 40 calls discarded a working fix.
-  if (!result.finished && result.reason === "verification_failed" && tools.writtenPaths.size > 0) {
+  // or one route that 500s. Grant a short repair pass with the concrete report.
+  // With continuousRepair, the coder already had multiple finish attempts in the
+  // same conversation; this second agent is escalation with a stronger model.
+  if (
+    !result.finished &&
+    (result.reason === "acceptance_failed" || result.reason === "verification_failed") &&
+    tools.writtenPaths.size > 0
+  ) {
     log.emit("status", "Repairing build", { repair: true, resumed: Boolean(resume) });
+    const repairModel =
+      flags.modelRouting && (metrics.acceptanceAttempts >= 2 || projectKind === "app")
+        ? models.strongCoder
+        : coderModel;
+    noteModel(repairModel);
     const repairBudget = {
       deadlineMs: Math.max(budget.deadlineMs, Date.now()) + Number(config.budget?.repairMs || (resume ? 12 : 8) * 60_000),
       maxLlmCalls: Number(config.budget?.repairLlmCalls || (resume ? 80 : 40)),
       maxToolCalls: Number(config.budget?.repairToolCalls || (resume ? 200 : 120)),
     };
+    const callsBefore = llm.calls;
     const repair = await runAgent({
       llm,
       tools,
       log,
-      model: models.coder,
+      model: repairModel,
       reasoning: "medium",
       instructions: [
         `You are Cander Builder — an autonomous senior front-end engineer fixing a Next.js repo so it passes verification.`,
@@ -320,37 +434,128 @@ async function main() {
       ].join("\n\n"),
       task: [
         `Project: ${config.projectName || "Untitled"}`,
+        `Original ${mode} task (for context — do not expand scope):\n${(config.instruction || "").slice(0, 1500) || "(create job)"}`,
         `Routes that must render: ${(result.routes || []).join(", ") || "(see report)"}`,
+        `Files touched this job: ${[...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).slice(0, 40).join(", ") || "(unknown)"}`,
         `Verification report:\n${(result.lastText || "").slice(0, 6000)}`,
         "Fix these problems now, re-run tsc and check_preview, then call finish.",
       ].join("\n\n"),
       budget: repairBudget,
       onFinishRequested: acceptance,
       label: "repair",
+      sdkOwnedLoop: flags.sdkOwnedLoop,
+      signal: jobAbort.signal,
     });
-    if (repair.finished) {
-      result = { ...repair, summary: result.summary || repair.summary };
+    metrics.repairCalls += Math.max(0, llm.calls - callsBefore);
+    const repairNorm = { ...repair, reason: normalizeAgentReason(repair.reason) };
+    if (repairNorm.finished) {
+      result = { ...repairNorm, summary: result.summary || repairNorm.summary };
     } else {
       // Prefer the freshest acceptance report over the pre-repair snapshot
       // (resume verify often reports a problem the repair already fixed).
       const latestText =
         (lastVerification && !lastVerification.ok && lastVerification.report) ||
-        repair.lastText ||
+        repairNorm.lastText ||
         result.lastText ||
         "";
       const budgetish =
-        repair.reason === "deadline" ||
-        repair.reason === "llm_budget" ||
-        repair.reason === "tool_budget";
+        repairNorm.reason === "timeout" ||
+        repairNorm.reason === "budget_exceeded" ||
+        repairNorm.reason === "deadline" ||
+        repairNorm.reason === "llm_budget" ||
+        repairNorm.reason === "tool_budget";
       result = {
         ...result,
         reason:
-          repair.reason === "preview_unavailable" || budgetish
-            ? repair.reason
+          repairNorm.reason === "preview_infrastructure_failure" ||
+          repairNorm.reason === "preview_unavailable" ||
+          budgetish
+            ? repairNorm.reason
             : result.reason,
         lastText: latestText,
-        routes: lastVerification?.routes || repair.routes || result.routes,
+        routes: lastVerification?.routes || repairNorm.routes || result.routes,
       };
+    }
+  }
+
+  // ---- phase: visual QA (after technical pass; create + visual edits) -------
+  const wantVisualQa =
+    flags.visualQa &&
+    result.finished &&
+    !result.unverified &&
+    (mode === "create" || Boolean(config.visualQaForEdit));
+  if (wantVisualQa && !jobAbort.signal.aborted) {
+    const maxVisualRepairs = Number(config.budget?.maxVisualRepairs || 2);
+    let visualAttempt = 0;
+    while (visualAttempt <= maxVisualRepairs && result.finished && !result.unverified) {
+      visualAttempt += 1;
+      metrics.visualQaAttempts += 1;
+      const routes =
+        result.routes?.length
+          ? result.routes
+          : lastVerification?.routes?.length
+            ? lastVerification.routes
+            : ["/"];
+      const evidence = await captureVisualEvidence({
+        devServerUrl,
+        routes,
+        log,
+        repoDir,
+        projectKind,
+      });
+      noteModel(models.visualReview);
+      const visual = await runVisualQa({
+        llm,
+        model: models.visualReview,
+        log,
+        projectKind,
+        projectName: config.projectName,
+        designDirection: designDirection || String(config.projectSpec?.visual?.direction || ""),
+        evidence,
+      });
+      writeVisualReport(jobDir, visual);
+      if (visual.ok || visual.skipped) break;
+      if (visualAttempt > maxVisualRepairs) {
+        // Soft-fail: keep technical success; attach visual notes for the user.
+        result = {
+          ...result,
+          summary: `${result.summary || "Draft ready."} (Visual polish still open: ${visual.issues.slice(0, 2).join("; ")})`,
+        };
+        break;
+      }
+      log.emit("status", "Polishing the design", { visualRepair: true, attempt: visualAttempt });
+      const designRepair = await runAgent({
+        llm,
+        tools,
+        log,
+        model: coderModel,
+        reasoning: "low",
+        instructions: [
+          `You are Cander Builder — fixing visual quality issues only.`,
+          STACK_RULES,
+          WORKFLOW_DESIGN_REPAIR,
+        ].join("\n\n"),
+        task: [
+          `Project: ${config.projectName || "Untitled"}`,
+          `Routes: ${routes.join(", ")}`,
+          visual.report,
+          "Fix only these visual issues, then finish.",
+        ].join("\n\n"),
+        budget: {
+          deadlineMs: Math.min(budget.deadlineMs, Date.now() + 6 * 60_000),
+          maxLlmCalls: 24,
+          maxToolCalls: 80,
+        },
+        onFinishRequested: acceptance,
+        label: "design-repair",
+        sdkOwnedLoop: flags.sdkOwnedLoop,
+        signal: jobAbort.signal,
+      });
+      if (designRepair.finished) {
+        result = { ...designRepair, summary: result.summary || designRepair.summary };
+      } else {
+        break;
+      }
     }
   }
 
@@ -360,7 +565,11 @@ async function main() {
 
   // The coder gave up because the preview was down (not because of its code):
   // that is a handoff, not a failure, as long as there is a draft to hand over.
-  if (!result.finished && result.reason === "preview_unavailable" && realWrites > 0) {
+  if (
+    !result.finished &&
+    (result.reason === "preview_infrastructure_failure" || result.reason === "preview_unavailable") &&
+    realWrites > 0
+  ) {
     result = {
       ...result,
       finished: true,
@@ -373,14 +582,28 @@ async function main() {
     };
   }
 
+  const recovery = preview.summary();
+  metrics.previewRestarts = Number(recovery?.recoveries ?? preview.recoveries ?? 0);
   const stats = {
     llmCalls: llm.calls,
     inputTokens: llm.inputTokens,
     outputTokens: llm.outputTokens,
     toolCalls: tools.toolCalls,
     filesTouched: realWrites,
+    durationMs: Date.now() - metrics.startedAt,
+    modelsUsed: metrics.modelsUsed,
+    planningCalls: metrics.planningCalls,
+    coderCalls: metrics.coderCalls,
+    repairCalls: metrics.repairCalls,
+    visualQaAttempts: metrics.visualQaAttempts,
+    twentyFirstSearches: metrics.twentyFirstSearches,
+    twentyFirstFetches: metrics.twentyFirstFetches,
+    componentsSelected: metrics.componentsSelected,
+    acceptanceAttempts: metrics.acceptanceAttempts,
+    previewRestarts: metrics.previewRestarts,
+    coderModel,
+    flags,
   };
-  const recovery = preview.summary();
   const files = [...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).slice(0, 200);
 
   if (result.finished) {
@@ -406,7 +629,7 @@ async function main() {
         : {}),
     });
     finishFile("finished", { summary: result.summary, routes: result.routes, stats, unverified, recovery });
-  } else if (realWrites > 0 && result.reason !== "verification_failed") {
+  } else if (realWrites > 0 && result.reason !== "acceptance_failed" && result.reason !== "verification_failed") {
     // Budget ran out but work exists — hand it over as a partial draft so the
     // user sees something and can iterate, instead of losing everything.
     // The last edits may postdate the last acceptance run: typecheck the tree
@@ -436,7 +659,7 @@ async function main() {
   } else {
     const classification = classifyFailure(result.reason, recovery);
     const message =
-      result.reason === "verification_failed"
+      result.reason === "acceptance_failed" || result.reason === "verification_failed"
         ? `The site did not pass verification:\n${result.lastText?.slice(0, 1500) || ""}`
         : `Builder stopped (${result.reason}).${result.lastText ? ` ${result.lastText.slice(0, 500)}` : ""}`;
     log.emit("failed", message, {
@@ -490,12 +713,16 @@ async function quickTypecheck(repoDir, log) {
  * model stopped cooperating.
  */
 function classifyFailure(reason, recovery) {
-  if (reason === "preview_unavailable") return "infra";
-  if (reason === "verification_failed") {
+  const r = normalizeAgentReason(reason);
+  if (r === "preview_infrastructure_failure" || r === "preview_unavailable") return "infra";
+  if (r === "acceptance_failed" || r === "verification_failed") {
     return recovery?.last && recovery.last.ok === false && recovery.last.kind === "infra" ? "infra" : "app";
   }
-  if (reason === "deadline" || reason === "llm_budget" || reason === "tool_budget") return "budget";
-  if (reason === "no_tool_calls") return "agent";
+  if (r === "timeout" || r === "deadline" || r === "budget_exceeded" || r === "llm_budget" || r === "tool_budget") {
+    return "budget";
+  }
+  if (r === "no_tool_calls" || r === "model_failure") return "agent";
+  if (r === "cancelled") return "infra";
   return "unknown";
 }
 

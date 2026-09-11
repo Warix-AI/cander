@@ -224,6 +224,45 @@ function normalizeProjectSpecMemory(o: Record<string, unknown>): Partial<Project
   }
   const lastEditSummary = asString(o.lastEditSummary);
   if (lastEditSummary) out.lastEditSummary = lastEditSummary;
+  if (Array.isArray(o.selectedComponents)) {
+    const selected = o.selectedComponents
+      .map((c) => asRecord(c))
+      .filter(Boolean)
+      .map((c) => ({
+        source: (asString(c!.source) === "native" ? "native" : "21st") as "21st" | "native",
+        componentId: asString(c!.componentId),
+        name: asString(c!.name) || undefined,
+        purpose: asString(c!.purpose) || "section",
+        reason: asString(c!.reason) || undefined,
+        adaptationInstructions: asString(c!.adaptationInstructions) || undefined,
+        localPath: asString(c!.localPath) || undefined,
+      }))
+      .filter((c) => c.componentId);
+    if (selected.length) out.selectedComponents = selected.slice(0, 12);
+  }
+  const imagery = asRecord(o.imagery);
+  if (imagery) {
+    const img: NonNullable<ProjectSpec["imagery"]> = {
+      heroSubject: asString(imagery.heroSubject) || undefined,
+      sectionSubjects: asStringArray(imagery.sectionSubjects),
+      avoid: asStringArray(imagery.avoid),
+    };
+    if (!img.sectionSubjects?.length) delete img.sectionSubjects;
+    if (!img.avoid?.length) delete img.avoid;
+    if (img.heroSubject || img.sectionSubjects || img.avoid) out.imagery = img;
+  }
+  if (Array.isArray(o.primaryFlows)) {
+    const flows = o.primaryFlows
+      .map((f) => asRecord(f))
+      .filter(Boolean)
+      .map((f) => ({
+        id: asString(f!.id),
+        title: asString(f!.title),
+        steps: asStringArray(f!.steps),
+      }))
+      .filter((f) => f.id && f.title);
+    if (flows.length) out.primaryFlows = flows.slice(0, 12);
+  }
   const updatedAt = asString(o.updatedAt);
   if (updatedAt) out.updatedAt = updatedAt;
   return out;

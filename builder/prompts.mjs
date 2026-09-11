@@ -29,7 +29,7 @@ export const QUALITY_BAR = `Quality bar — this must look like a real, launch-r
 - A real sitemap of pages (as many as the brief calls for; at least Home, plus About/Services/Contact style pages when relevant), each with distinct, specific copy written for THIS business. No lorem ipsum, no "Your headline here", no TODOs.
 - Global header with logo/wordmark, nav links to every page, and a primary CTA; sticky on scroll. Mobile nav that actually works (client component).
 - Footer with nav, contact details from the brief, social links (if given), copyright.
-- Sections with visual rhythm: hero, social proof / stats, features or services, process, testimonials, FAQ, CTA band, contact form (server action or mailto fallback). Vary layouts — do not stack identical three-column grids.
+- Sections with visual rhythm derived from the brief/industry — not a generic SaaS collage. Vary layouts; do not stack identical three-column card grids.
 - Design system in app/globals.css: CSS variables for brand colors from the brief, typography scale, radius. Tailwind utilities everywhere else.
 - Accessible: semantic landmarks, one h1 per page, focus styles, alt text, sufficient contrast.
 - SEO: export metadata from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (SITE_URL is given in the task — never invent a domain), title template, description, openGraph + twitter (with images), and per page \`alternates: { canonical: "<route>" }\` plus its own title/description. app/robots.ts and app/sitemap.ts must use SITE_URL and list every route (robots returns \`sitemap: \`\${SITE_URL}/sitemap.xml\`\`). JSON-LD (Organization/LocalBusiness) in the root layout using SITE_URL, rendered with JSON.stringify. Every page gets a UNIQUE title (≤ 60 chars) and description (≤ 160 chars); <html lang="en">; every <img> has alt text.
@@ -37,20 +37,16 @@ export const QUALITY_BAR = `Quality bar — this must look like a real, launch-r
 - Favicon & app icon (required): if the spec's brand has a logo/favicon URL, download_image it into public/brand/ and create app/icon.png (512×512 or the original) and app/apple-icon.png from it; otherwise create app/icon.tsx and app/apple-icon.tsx with \`ImageResponse\` (brand mark or initials on the primary color, export size/contentType). Never leave the default Next favicon; the HTML must carry <link rel="icon"> and apple-touch-icon.
 - Brand logo: when a logo URL is provided, download it to public/brand/logo.<ext> and use it in the header/footer (with alt text) instead of a text-only wordmark.
 - Routing: the home page MUST be app/page.tsx (the boot skeleton file — overwrite it). Route groups like app/(marketing)/... are fine for other pages, but never create a second page that resolves to "/" and never leave the skeleton placeholder.
-- Responsive from 360px to 1440px. Test with check_preview after each batch of pages.`;
+- Responsive from 360px to 1440px. Test with check_preview after each batch of pages.
 
-export const WORKFLOW_CREATE = `Workflow:
-1. list_tree, read package.json, app/layout.tsx, app/globals.css to see the boot skeleton.
-2. If a build packet is provided, it is the plan — implement its sitemap, sections, design CSS and copy. Otherwise decide pages, sections, brand tokens from the brief yourself. Do not write plan files into the repo.
-3. Build shared pieces first: app/globals.css (paste the packet's CSS), components/site/Header.tsx, Footer.tsx, MobileNav.tsx (client), Section primitives.
-4. Write app/layout.tsx (metadata, fonts, JSON-LD, Header/Footer), then app/page.tsx, then every other page. emit_progress before each page.
-5. Optional: search_components / get_component for standout sections (hero, pricing, testimonials). Adapt into components/ — never paste code with unresolved imports; install deps you use.
-6. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx.
-7. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Do not start or restart the preview server yourself. Repeat until clean.
-8. Call update_project_spec once with the final decisions (pages [{path,title,purpose}], visual {palette hex values, typography, components {radius, shadow, density, buttons, cards, nav}, layout, mood}, features, brand asset paths) so future edits inherit them. Do not commit any other plan files.
-9. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
-Checkpoints: when the checkpoint tool is available, call checkpoint(message) after each verified chunk (shell done; each batch of pages passing tsc + check_preview) so progress is saved even if the run is interrupted.
-Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
+Anti-patterns (do NOT default to these):
+- purple/indigo gradient themes, glow blobs, glassmorphism for everything
+- endless rounded cards with identical padding
+- giant gradient headline text, badge-pill clusters, fake charts
+- every section centered with the same three-column feature grid
+- fake testimonials unless the brief asks for social proof
+- decorative icons with no purpose
+Derive look from brief + industry + audience + selected 21st patterns + design packet.`;
 
 export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usable product, not a mockup:
 - Every screen in the plan exists and does its job: real forms with validation, lists with empty/loading/error states, and working navigation (AppShell with sidebar or top nav, active-link styling, mobile nav).
@@ -64,23 +60,36 @@ export const APP_QUALITY_BAR = `Quality bar — this must work like a real, usab
 - Accessible: semantic landmarks, one h1 per screen, labelled inputs, focus styles, keyboard-usable menus.
 - Metadata: export title/description from app/layout.tsx with \`metadataBase: new URL(SITE_URL)\` (given in the task) and per screen; app/opengraph-image.tsx via ImageResponse from "next/og"; app/not-found.tsx exists.
 - Routing: the root screen MUST be app/page.tsx (overwrite the boot skeleton). Route groups like app/(app)/... are fine for other screens, but never create a second page that resolves to "/".
-- Responsive from 360px to 1440px. Test with check_preview after each batch of screens.`;
+- Responsive from 360px to 1440px. Test with check_preview after each batch of screens.
+- Prefer clear information density over sparse marketing-style cards for app surfaces.`;
 
-export const WORKFLOW_CREATE_APP = `Workflow:
-1. list_tree, read package.json, app/layout.tsx, app/globals.css to see the boot skeleton.
-2. If a build packet is provided, it is the plan — implement its sitemap, data model, screens, design CSS and UI text. Otherwise decide screens, data model, and brand from the request yourself. Do not write plan files into the repo.
-3. Scaffolding first: .env.example, lib/supabase/* (if persistence/auth), supabase/schema.sql, lib/demo-data.ts fallback, lib/types.ts.
-4. Shared shell next: app/globals.css (paste the packet's CSS), components/app/AppShell.tsx, Sidebar/TopBar, EmptyState, forms.
-5. Write app/layout.tsx (metadata, fonts, providers), then app/page.tsx, then every other screen (auth routes, (app) group). emit_progress before each screen.
-6. Optional: search_components / get_component for standout UI (data tables, dashboards, auth forms). Adapt into components/ — never paste code with unresolved imports; install deps you use.
-7. Write app/not-found.tsx. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Repeat until clean.
-8. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
-Checkpoints: when the checkpoint tool is available, call checkpoint(message) after each verified chunk (shell done; each batch of screens passing tsc + check_preview) so progress is saved even if the run is interrupted.
+export const WORKFLOW_CREATE = `Workflow:
+1. list_tree, read package.json, app/layout.tsx, app/globals.css, and any components/twenty-first/* the plan already fetched.
+2. If a build packet is provided, it is the plan — implement its sitemap, sections, design CSS and copy. If "Selected components" JSON is present, adapt those retrieved sources first (localPath files) into components/site/* with project tokens — do not leave twenty-first files as the live UI and do not invent unrelated section templates when a selected component covers that purpose.
+3. Build shared pieces first: app/globals.css (paste the packet's CSS), components/site/Header.tsx, Footer.tsx, MobileNav.tsx (client), Section primitives — matching the design language.
+4. Write app/layout.tsx (metadata, fonts, JSON-LD, Header/Footer), then app/page.tsx, then every other page. emit_progress before each page. Use download_image for hero/section photography when the plan calls for imagery.
+5. search_components / get_component only to fill gaps the selected list did not cover. Adapt into components/ — never paste unresolved imports.
+6. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx.
+7. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Do not start or restart the preview server yourself. Repeat until clean.
+8. Call update_project_spec once with the final decisions (pages, visual, features, brand, selectedComponents references) so future edits inherit them.
+9. finish(summary, routes). finish is verified automatically; if rejected, fix the listed issues and call finish again.
+Checkpoints: when the checkpoint tool is available, call checkpoint(message) after each verified chunk so progress is saved.
 Work autonomously — never ask the user questions. Prefer many small, correct files over one giant file.`;
+
+export const WORKFLOW_CREATE_APP = `Workflow (phased — stay in this job; checkpoint between phases):
+Phase A — Foundation: list_tree; globals.css + AppShell; overwrite app/page.tsx; .env.example; demo-data fallback.
+Phase B — Data/auth (when needed): supabase clients, migrations via db_* tools, RLS, types; /login /signup + session layout.
+Phase C — Core flows: implement primaryFlows from the plan/spec (screens, forms, lists with empty/loading/error).
+Phase D — UI polish: adapt any selected 21st components; responsive shell; not-found; metadata.
+Phase E — Acceptance: tsc + check_preview every route; update_project_spec; finish.
+Do not attempt an entire SaaS in one uncontrolled dump — finish each phase cleanly. Never paste unresolved 21st imports.`;
+
+export const WORKFLOW_DESIGN_REPAIR = `The site/app passed technical checks but failed visual review. Fix ONLY the listed visual issues with the smallest correct changes (spacing, hierarchy, typography, mobile layout, hero composition, inconsistent tokens). Do not redesign the whole site, add pages, or rewrite unrelated copy. Re-check affected routes with check_preview, then finish(summary, routes).`;
 
 export const WORKFLOW_EDIT = `Your job right now: apply ONE change the user asked for to their existing, already-built site. You are not rebuilding or redesigning it, not auditing SEO, not "improving" unrelated pages. Scope = the request (plus anything it directly breaks).
 
-The project spec (cander.spec.json / DESIGN.md, also summarised in the task) is the site's durable memory: purpose, audience, pages, visual language, standing instructions. Respect it. Decide which kind of change this is:
+The project spec (cander.spec.json / DESIGN.md, also summarised in the task) is the site's durable memory: purpose, audience, pages, visual language, standing instructions. Respect it. Current filesystem + project spec + this instruction are the source of truth — older chat context never overrides code.
+Decide which kind of change this is:
 - LASTING decision ("make all cards more rounded", "use a warmer palette", "always write in British English", "the primary CTA is Book a call"): change the design tokens in app/globals.css (or the shared component), AND call update_project_spec with the new value + a one-line decision so future edits keep it.
 - CONTENT / one-off edit ("change the hero headline", "add a testimonial", "fix the typo on /about"): edit the files only. Do not touch the spec unless the request adds a page, feature or asset (then record it under pages/features/brand).
 
@@ -278,6 +287,25 @@ export function formatProjectSpec(spec) {
   }
   if (Array.isArray(spec.inspiration) && spec.inspiration.length) {
     push("Inspiration", spec.inspiration.map((i) => `${i.url}${i.summary ? ` — ${i.summary}` : ""}`));
+  }
+  if (Array.isArray(spec.selectedComponents) && spec.selectedComponents.length) {
+    push(
+      "Selected design components",
+      spec.selectedComponents.map(
+        (c) =>
+          `${c.purpose}:${c.componentId}${c.localPath ? ` @ ${c.localPath}` : ""}${c.reason ? ` (${c.reason})` : ""}`,
+      ),
+    );
+  }
+  if (spec.imagery && typeof spec.imagery === "object") {
+    push("Imagery hero", spec.imagery.heroSubject);
+    push("Imagery sections", spec.imagery.sectionSubjects);
+  }
+  if (Array.isArray(spec.primaryFlows) && spec.primaryFlows.length) {
+    push(
+      "Primary flows",
+      spec.primaryFlows.map((f) => `${f.id}: ${f.title}${f.steps?.length ? ` [${f.steps.join(" → ")}]` : ""}`),
+    );
   }
   push("Contact", [spec.location, spec.phone, spec.email].filter(Boolean));
   push("Technical conventions", spec.technical);

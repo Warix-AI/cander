@@ -65,8 +65,8 @@ const INSPIRATION_INSTRUCTIONS = `You are a senior web designer analysing a refe
 const RESEARCH_INSTRUCTIONS = `You are a market researcher for a web agency. Using web search, gather what a best-in-class website in this exact niche does today: 4–6 competitor or exemplar sites (name + URL + what they do well), typical page structure, trust signals customers expect (certifications, guarantees, reviews), pricing presentation norms, and 5 industry-specific phrases/terms to use. Output terse Markdown (max ~500 words). Cite URLs inline.`;
 
 /**
- * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number }} opts
- * @returns {Promise<{ markdown: string, routes: string[] }|null>}
+ * @param {{ llm: import("./llm.mjs").LlmClient, log: import("./events.mjs").EventLog, model: string, projectKind?: "site"|"app", projectName?: string, siteUrl?: string|null, brief: Record<string, unknown>|null, projectSpec?: Record<string, unknown>|null, instruction?: string|null, twentyFirst?: import("./twenty-first.mjs").TwentyFirstClient|null, webSearch?: boolean, deadlineMs: number, repoDir?: string|null, fetchComponents?: boolean }} opts
+ * @returns {Promise<{ markdown: string, routes: string[], selectedComponents: Array<Record<string, unknown>>, designDirection: string, stats: Record<string, number> }|null>}
  */
 export async function runPlanningPhase(opts) {
   if (Date.now() > opts.deadlineMs - 5 * 60_000) return null;
@@ -128,7 +128,9 @@ export async function runPlanningPhase(opts) {
     }),
     componentAgent(opts, plan),
     inspirationAgent(opts),
-    opts.webSearch && !isApp
+    // Research only when web search is on and fetch-components (improved) is off —
+    // the improved path prefers fewer planning calls for cost/latency.
+    opts.webSearch && !isApp && opts.fetchComponents === false
       ? subAgent(opts, "research", "Learning about your industry", {
           instructions: RESEARCH_INSTRUCTIONS,
           input: `Project: ${opts.projectName || "Untitled"}\n\nBrief:\n${briefText}`,
@@ -137,7 +139,46 @@ export async function runPlanningPhase(opts) {
         })
       : Promise.resolve(null),
   ];
-  const [copy, design, components, inspiration, research] = await Promise.all(tasks);
+  const [copy, design, componentsResult, inspiration, research] = await Promise.all(tasks);
+  const componentsMarkdown =
+    componentsResult && typeof componentsResult === "object"
+      ? componentsResult.markdown
+      : typeof componentsResult === "string"
+        ? componentsResult
+        : null;
+  const selectedComponents =
+    componentsResult && typeof componentsResult === "object" && Array.isArray(componentsResult.selected)
+      ? componentsResult.selected
+      : [];
+  const componentStats =
+    componentsResult && typeof componentsResult === "object" && componentsResult.stats
+      ? componentsResult.stats
+      : { searches: 0, fetches: 0, selected: 0 };
+
+  const selectedBlock =
+    selectedComponents.length > 0
+      ? [
+          "## Selected components (REQUIRED — adapt these; do not invent unrelated section templates)",
+          "```json",
+          JSON.stringify(
+            {
+              selectedComponents: selectedComponents.map((c) => ({
+                source: c.source || "21st",
+                componentId: c.componentId,
+                name: c.name,
+                purpose: c.purpose,
+                reason: c.reason,
+                localPath: c.localPath,
+                adaptationInstructions: c.adaptationInstructions,
+              })),
+            },
+            null,
+            2,
+          ),
+          "```",
+          "Each localPath (when present) already contains the retrieved source under components/twenty-first/. Rewrite into components/site (or components/app) using THIS project's tokens, copy, and spacing. Never paste verbatim with foreign colors/fonts.",
+        ].join("\n")
+      : "";
 
   const packet = [
     "# Build packet",
@@ -147,16 +188,29 @@ export async function runPlanningPhase(opts) {
     research ? `## Market research\n${research}` : "",
     design ? `## Design system (implement exactly; adjust only for correctness)\n${design}` : "",
     copy ? `## Final copy (use verbatim; do not invent different copy)\n${copy}` : "",
-    components ? `## 21st.dev component shortlist\n${components}` : "",
+    selectedBlock || (componentsMarkdown ? `## 21st.dev component shortlist\n${componentsMarkdown}` : ""),
   ]
     .filter(Boolean)
     .join("\n\n");
 
   opts.log.emit("plan", "Build packet ready", {
     chars: packet.length,
-    parts: { copy: Boolean(copy), design: Boolean(design), components: Boolean(components), research: Boolean(research) },
+    parts: {
+      copy: Boolean(copy),
+      design: Boolean(design),
+      components: Boolean(componentsMarkdown || selectedComponents.length),
+      research: Boolean(research),
+      selected: selectedComponents.length,
+    },
+    stats: componentStats,
   });
-  return { markdown: truncateMiddle(packet, 90_000), routes };
+  return {
+    markdown: truncateMiddle(packet, 90_000),
+    routes,
+    selectedComponents,
+    designDirection: String(design || "").slice(0, 4000),
+    stats: componentStats,
+  };
 }
 
 async function subAgent(opts, name, progress, call) {
@@ -247,10 +301,12 @@ function extractStructure(html) {
 }
 
 /**
- * Spec-driven component research on 21st.dev (single MCP proxy path).
- * The visual direction + selected features + pages decide the categories;
- * the planner's explicit `search:` lines are added on top. Results are a
- * shortlist the coder adapts into the project's own tokens — never pasted.
+ * Spec-driven 21st.dev research. When `fetchComponents` is on, actually GET
+ * promising hits and materialize source under components/twenty-first/ so the
+ * coder adapts real code — search alone is not enough.
+ * Failures return null / empty selected; never throws (build continues natively).
+ *
+ * @returns {Promise<null | { markdown: string, selected: Array<Record<string, unknown>>, stats: { searches: number, fetches: number, selected: number } }>}
  */
 async function componentAgent(opts, plan) {
   if (!opts.twentyFirst) return null;
@@ -270,42 +326,150 @@ async function componentAgent(opts, plan) {
   const features = (Array.isArray(spec.features) ? spec.features : []).map((f) => String(f).toLowerCase());
   const pages = (Array.isArray(spec.pages) ? spec.pages : []).map((p) => String(p.path || "").toLowerCase());
   const layout = String(spec.visual?.layout || "").toLowerCase();
+  const isApp = opts.projectKind === "app";
 
-  const categories = [
-    `${mood} navbar with mobile menu`,
-    /split/.test(layout) ? `${mood} split hero with image` : /bleed/.test(layout) ? `${mood} full-width hero background image` : `${mood} hero section`,
-    `${mood} features grid`,
-    `${mood} call to action band`,
-    `${mood} footer`,
-  ];
-  if (features.some((f) => /testimonial/.test(f))) categories.push(`${mood} testimonials`);
-  if (features.some((f) => /pricing/.test(f)) || pages.includes("/pricing")) categories.push(`${mood} pricing table`);
-  if (features.some((f) => /faq/.test(f))) categories.push(`${mood} faq accordion`);
-  if (features.some((f) => /contact form|booking|newsletter/.test(f))) categories.push(`${mood} contact form`);
-  if (features.some((f) => /gallery/.test(f)) || pages.includes("/work")) categories.push(`${mood} image gallery bento grid`);
-  if (pages.includes("/team")) categories.push(`${mood} team section`);
-  if (pages.includes("/blog") || features.some((f) => /blog/.test(f))) categories.push(`${mood} blog cards`);
+  /** @type {Array<{ query: string, purpose: string }>} */
+  const catalog = isApp
+    ? [
+        { query: `${mood} app sidebar navigation`, purpose: "nav" },
+        { query: `${mood} dashboard header`, purpose: "shell" },
+        { query: `${mood} data table`, purpose: "table" },
+        { query: `${mood} empty state`, purpose: "empty" },
+        { query: `${mood} settings form`, purpose: "form" },
+      ]
+    : [
+        { query: `${mood} navbar with mobile menu`, purpose: "nav" },
+        {
+          query: /split/.test(layout)
+            ? `${mood} split hero with image`
+            : /bleed/.test(layout)
+              ? `${mood} full-width hero background image`
+              : `${mood} hero section`,
+          purpose: "hero",
+        },
+        { query: `${mood} features grid`, purpose: "features" },
+        { query: `${mood} call to action band`, purpose: "cta" },
+        { query: `${mood} footer`, purpose: "footer" },
+      ];
+  if (!isApp) {
+    if (features.some((f) => /testimonial/.test(f))) catalog.push({ query: `${mood} testimonials`, purpose: "testimonials" });
+    if (features.some((f) => /pricing/.test(f)) || pages.includes("/pricing")) {
+      catalog.push({ query: `${mood} pricing table`, purpose: "pricing" });
+    }
+    if (features.some((f) => /faq/.test(f))) catalog.push({ query: `${mood} faq accordion`, purpose: "faq" });
+    if (features.some((f) => /contact form|booking|newsletter/.test(f))) {
+      catalog.push({ query: `${mood} contact form`, purpose: "contact" });
+    }
+  }
 
-  const planQueries = [...plan.matchAll(/^\s*[-*]?\s*`?search:\s*([^`\n]+)`?\s*$/gim)].map((m) => m[1].trim());
-  const queries = uniq([...categories, ...planQueries]).slice(0, 10);
+  const planQueries = [...plan.matchAll(/^\s*[-*]?\s*`?search:\s*([^`\n]+)`?\s*$/gim)].map((m) => ({
+    query: m[1].trim(),
+    purpose: "section",
+  }));
+  const queries = uniqBy([...catalog, ...planQueries], (x) => x.query).slice(0, opts.fetchComponents ? 8 : 10);
   if (!queries.length) return null;
+
   opts.log.emit("progress", "Gathering design ideas…");
   const lines = [];
+  /** @type {Array<{ purpose: string, hit: { id: string, name?: string, category?: string } }>} */
+  const candidates = [];
+  let searches = 0;
   for (const q of queries) {
     if (Date.now() > opts.deadlineMs - 3 * 60_000) break;
-    const hits = await opts.twentyFirst.search(q, 3);
+    let hits = [];
+    try {
+      hits = await opts.twentyFirst.search(q.query, 3);
+      searches += 1;
+    } catch (err) {
+      opts.log.emit("log", `21st search failed (${q.purpose}): ${err?.message || err}`);
+      continue;
+    }
     if (!hits.length) continue;
-    lines.push(`### ${q}`);
+    lines.push(`### ${q.query}`);
     for (const h of hits) {
       lines.push(`- id=${h.id} — ${h.name}${h.category ? ` (${h.category})` : ""}`);
+      candidates.push({ purpose: q.purpose, hit: h });
     }
   }
   if (!lines.length) return null;
+
+  /** @type {Array<Record<string, unknown>>} */
+  const selected = [];
+  let fetches = 0;
+  const fetchEnabled = opts.fetchComponents !== false;
+  if (fetchEnabled) {
+    opts.log.emit("progress", "Pulling in design patterns…");
+    const byPurpose = new Map();
+    for (const c of candidates) {
+      if (!byPurpose.has(c.purpose)) byPurpose.set(c.purpose, c);
+    }
+    const picks = [...byPurpose.values()].slice(0, 6);
+    const { mkdirSync, writeFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const repoDir = opts.repoDir || null;
+    for (const pick of picks) {
+      if (Date.now() > opts.deadlineMs - 2 * 60_000) break;
+      let component = null;
+      try {
+        component = await opts.twentyFirst.get(pick.hit.id);
+        fetches += 1;
+      } catch (err) {
+        opts.log.emit("log", `21st get failed (${pick.hit.id}): ${err?.message || err}`);
+        continue;
+      }
+      if (!component?.code) continue;
+      const slug = String(pick.hit.id)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 48);
+      const localPath = `components/twenty-first/${pick.purpose}-${slug || "component"}.tsx`;
+      if (repoDir) {
+        try {
+          mkdirSync(join(repoDir, "components/twenty-first"), { recursive: true });
+          const header = `/**\n * Retrieved from 21st.dev for adaptation — do not ship verbatim.\n * id=${component.id} name=${component.name || pick.hit.name || ""}\n * purpose=${pick.purpose}\n */\n`;
+          writeFileSync(join(repoDir, localPath), `${header}${component.code}\n`, "utf8");
+        } catch (err) {
+          opts.log.emit("log", `21st write failed: ${err?.message || err}`);
+        }
+      }
+      selected.push({
+        source: "21st",
+        componentId: String(component.id || pick.hit.id),
+        name: String(component.name || pick.hit.name || pick.hit.id),
+        purpose: pick.purpose,
+        reason: `Best match for ${pick.purpose} under "${mood}" direction`,
+        localPath: repoDir ? localPath : undefined,
+        adaptationInstructions:
+          "Rewrite into the project design system: CSS variables from app/globals.css, brand fonts, radius/shadow/density from the spec, project copy. Replace hard-coded colors/fonts. Fix imports to components/ui/* and lib/utils cn. Install only packages you use. Keep structure/motion ideas; drop unavailable deps.",
+      });
+    }
+  }
+
   lines.push(
     "",
-    "Adaptation rules: get_component(id) for the ones that fit, then rewrite into components/ using THIS project's tokens (CSS variables from app/globals.css, the spec's radius/shadow/density/button style, its fonts and copy). Replace every hard-coded color/font/radius. Fix imports (components/ui/*, lib/utils cn), install only packages you actually use, and drop anything needing unavailable packages. Never paste a component verbatim.",
+    selected.length
+      ? `Fetched ${selected.length} component(s) into components/twenty-first/ — adapt those first.`
+      : "Adaptation rules: get_component(id) for the ones that fit, then rewrite into components/ using THIS project's tokens. Never paste a component verbatim.",
   );
-  return lines.join("\n");
+
+  return {
+    markdown: lines.join("\n"),
+    selected,
+    stats: { searches, fetches, selected: selected.length },
+  };
+}
+
+function uniqBy(arr, keyFn) {
+  const seen = new Set();
+  const out = [];
+  for (const item of arr) {
+    const k = keyFn(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
 }
 
 function uniq(arr) {

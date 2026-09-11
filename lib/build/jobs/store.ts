@@ -41,7 +41,13 @@ export type BuildJobFacts = {
   /** Long-term chat memory (ai_chats.condensed_context rendered as text). */
   condensedContext?: string | null;
   brief?: WebsiteSetupAnswers | null;
-  models?: { planner: string; coder: string };
+  models?: {
+    planner: string;
+    coder: string;
+    fast?: string;
+    strongCoder?: string;
+    visualReview?: string;
+  };
   transport?: BuildJobTransport;
   startedAt?: string;
   finishedAt?: string;

@@ -786,6 +786,11 @@ async function ensureProjectSandboxInner(
   }
 
   if (existingIsBuild && existing && opts.forceRestart) {
+    console.warn("[cander:sandbox] recreating project sandbox (single-VM policy)", {
+      projectId: opts.projectId,
+      retiringSessionId: existing.id,
+      reason: "forceRestart",
+    });
     try {
       await retireBuildSession(existing);
     } catch {

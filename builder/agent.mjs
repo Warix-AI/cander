@@ -1,13 +1,17 @@
 // Coding agent run on the OpenAI Agents SDK.
 //
-// The SDK owns the model ↔ tool loop (Responses API chaining, tool dispatch,
-// parallel calls, max turns). Cander owns everything around it: the tool
-// implementations, the finish/verify contract, preview-outage heuristics and
-// the wall-clock / call budgets. Same `runAgent` contract as before so the
-// orchestrator (index.mjs) is unchanged.
+// Hierarchy: BUILD JOB → builder/index workflow → runAgent → Runner → tools.
+// The SDK owns the model↔tool loop. Cander owns finish/verify, budgets, and
+// typed exit reasons. When `sdkOwnedLoop` is true, we do not reinflate an
+// indefinite outer for(;;) — at most one bounded nudge after a prose-only turn.
 
 import { configureAgentsSdk, loadAgentsSdk } from "./sdk.mjs";
 import { safeJson } from "./llm.mjs";
+
+/**
+ * Typed stop reasons for every runAgent exit.
+ * @typedef {"finished"|"finished_unverified"|"acceptance_failed"|"budget_exceeded"|"timeout"|"cancelled"|"preview_infrastructure_failure"|"model_failure"|"no_tool_calls"|"tool_failure"} AgentExitReason
+ */
 
 /**
  * @param {{
@@ -18,22 +22,30 @@ import { safeJson } from "./llm.mjs";
  *   instructions: string,
  *   task: string,
  *   reasoning?: string,
- *   budget: { deadlineMs: number, maxLlmCalls: number },
+ *   budget: { deadlineMs: number, maxLlmCalls: number, maxToolCalls?: number },
  *   onFinishRequested?: (finish: { summary: string, routes: string[] }) => Promise<{ accept: boolean, feedback?: string, infra?: boolean, classification?: string }>,
  *   label?: string,
+ *   /** When true, Runner owns the loop; only one prose-nudge recovery is allowed. *\/
+ *   sdkOwnedLoop?: boolean,
+ *   /** Shared AbortSignal from the job (cancel / wall clock). *\/
+ *   signal?: AbortSignal,
  * }} opts
- * @returns {Promise<{ finished: boolean, summary: string, routes: string[], reason: string, lastText: string, unverified?: boolean, classification?: string }>}
+ * @returns {Promise<{ finished: boolean, summary: string, routes: string[], reason: AgentExitReason|string, lastText: string, unverified?: boolean, classification?: string }>}
  */
 export async function runAgent(opts) {
   const { llm, tools, log, model, instructions, task, budget } = opts;
   const label = opts.label || "agent";
+  const sdkOwnedLoop = opts.sdkOwnedLoop !== false;
   const sdk = await loadAgentsSdk(log);
-  const client = configureAgentsSdk(sdk, { transport: llm.transport, apiBase: llm.apiBase, jobId: llm.jobId, token: llm.token });
+  const client = configureAgentsSdk(sdk, {
+    transport: llm.transport,
+    apiBase: llm.apiBase,
+    jobId: llm.jobId,
+    token: llm.token,
+  });
   const { Agent, Runner, tool, MaxTurnsExceededError } = sdk.agents;
 
-  /** Mutable per-run state shared between tool executors and the stop rule. */
   const state = {
-    /** Set when the run must end: { result } is the runAgent return value. */
     stop: /** @type {null | { result: Record<string, unknown> }} */ (null),
     lastText: "",
     finishRejections: 0,
@@ -55,6 +67,7 @@ export async function runAgent(opts) {
       parameters: def.parameters,
       strict: false,
       execute: async (raw) => {
+        if (opts.signal?.aborted) return "ERROR: job cancelled";
         const args = parseArgs(raw);
         if (args?._parse_error) return `ERROR: arguments were not valid JSON: ${args.raw}`;
         state.toolCalls += 1;
@@ -76,12 +89,12 @@ export async function runAgent(opts) {
     let verdict = { accept: true };
     if (opts.onFinishRequested) verdict = await opts.onFinishRequested(finish);
     if (verdict.accept) {
-      state.stop = { result: { finished: true, ...finish, reason: "finished", lastText: state.lastText } };
+      state.stop = {
+        result: { finished: true, ...finish, reason: "finished", lastText: state.lastText },
+      };
       return "finish accepted";
     }
     if (verdict.infra) {
-      // The preview cannot be verified from inside this sandbox and that is
-      // not the coder's problem. Hand the draft to the server unverified.
       log.emit("log", `${label}: finish accepted unverified (${verdict.classification || "preview_unavailable"})`);
       state.stop = {
         result: {
@@ -97,13 +110,16 @@ export async function runAgent(opts) {
       return "finish accepted (preview unavailable — verified server-side)";
     }
     state.finishRejections += 1;
-    if (state.finishRejections >= 3) {
+    // Continuous repair: keep the same agent run going with the report as
+    // tool output. Cap rejections so we still exit with acceptance_failed.
+    const maxRejects = sdkOwnedLoop ? 4 : 3;
+    if (state.finishRejections >= maxRejects) {
       state.stop = {
         result: {
           finished: false,
           summary: finish.summary,
           routes: finish.routes,
-          reason: "verification_failed",
+          reason: "acceptance_failed",
           lastText: verdict.feedback || state.lastText,
         },
       };
@@ -114,8 +130,6 @@ export async function runAgent(opts) {
   function observePreview(text) {
     let output = text;
     if (/^PREVIEW UNAVAILABLE — INFRASTRUCTURE/.test(text)) {
-      // The supervisor already tried to recover. Re-checking without new code
-      // is pure token burn: nudge, then end the run as an unverified handoff.
       state.infraStreak += 1;
       const idle = state.writesSinceInfra === 0 && state.infraStreak > 1;
       state.writesSinceInfra = 0;
@@ -128,7 +142,7 @@ export async function runAgent(opts) {
             finished: false,
             summary: state.lastText,
             routes: [],
-            reason: "preview_unavailable",
+            reason: "preview_infrastructure_failure",
             lastText: text,
             classification: "preview_unavailable",
           },
@@ -151,8 +165,9 @@ export async function runAgent(opts) {
             finished: false,
             summary: "",
             routes: [],
-            reason: "verification_failed",
-            lastText: "Preview stayed down after repeated checks. Stopped to avoid burning more tokens — hit Retry.",
+            reason: "acceptance_failed",
+            lastText:
+              "Preview stayed down after repeated checks. Stopped to avoid burning more tokens — hit Retry.",
           },
         };
       }
@@ -172,33 +187,44 @@ export async function runAgent(opts) {
       ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : {}),
     },
     tools: sdkTools,
-    // Cander decides when the run is over (finish accepted, infra handoff,
-    // repeated rejections) — otherwise the model keeps working with tools.
     toolUseBehavior: () =>
       state.stop
-        ? { isFinalOutput: true, finalOutput: String(state.stop.result.summary || state.stop.result.reason || "done") }
+        ? {
+            isFinalOutput: true,
+            finalOutput: String(state.stop.result.summary || state.stop.result.reason || "done"),
+          }
         : { isFinalOutput: false },
   });
 
   const runner = new Runner({ tracingDisabled: llm.transport === "proxy" });
   const abort = new AbortController();
-  const deadlineTimer = setTimeout(() => abort.abort(new Error("deadline")), Math.max(1, budget.deadlineMs - Date.now()));
+  const onExternalAbort = () => abort.abort(opts.signal?.reason || new Error("cancelled"));
+  if (opts.signal) {
+    if (opts.signal.aborted) onExternalAbort();
+    else opts.signal.addEventListener("abort", onExternalAbort, { once: true });
+  }
+  const deadlineTimer = setTimeout(
+    () => abort.abort(new Error("deadline")),
+    Math.max(1, budget.deadlineMs - Date.now()),
+  );
 
-  // Server-managed conversation: the SDK then sends only each turn's delta
-  // (tool outputs) instead of replaying the whole transcript per model call.
-  // Falls back to client-managed history if the conversation cannot be made.
   let conversationId;
   try {
     const conv = await client.conversations.create({});
     conversationId = conv?.id || undefined;
   } catch (err) {
-    log.emit("log", `${label}: conversation create failed, using local history (${String(err?.message || err).slice(0, 120)})`);
+    log.emit(
+      "log",
+      `${label}: conversation create failed, using local history (${String(err?.message || err).slice(0, 120)})`,
+    );
   }
 
   let input = task;
   let previousResponseId;
-  let idleTurns = 0;
   let calls = 0;
+  /** At most one prose-nudge when sdkOwnedLoop; legacy allows 2 idle turns. */
+  let proseNudges = 0;
+  const maxProseNudges = sdkOwnedLoop ? 1 : 2;
 
   const account = (result) => {
     const raws = Array.isArray(result?.rawResponses) ? result.rawResponses : [];
@@ -214,23 +240,40 @@ export async function runAgent(opts) {
       .filter(Boolean);
     const text = typeof result?.finalOutput === "string" ? result.finalOutput : "";
     if (text) state.lastText = text;
-    log.emit("llm", `${label}: ${raws.length} model call(s), ${toolNames.length} tool call(s)${text ? ` · ${text.slice(0, 120)}` : ""}`, {
-      calls: toolNames.slice(0, 40),
-      usage: { inputTokens: llm.inputTokens, outputTokens: llm.outputTokens, requests: llm.calls },
-    });
+    log.emit(
+      "llm",
+      `${label}: ${raws.length} model call(s), ${toolNames.length} tool call(s)${text ? ` · ${text.slice(0, 120)}` : ""}`,
+      {
+        calls: toolNames.slice(0, 40),
+        usage: { inputTokens: llm.inputTokens, outputTokens: llm.outputTokens, requests: llm.calls },
+      },
+    );
   };
 
+  const exit = (partial) => ({
+    finished: false,
+    summary: "",
+    routes: [],
+    lastText: state.lastText,
+    ...partial,
+  });
+
   try {
-    for (;;) {
+    // Bounded recovery only: conversation reset (once) + prose nudge (maxProseNudges).
+    // The SDK Runner owns the multi-turn tool loop inside each runner.run call.
+    for (let recovery = 0; recovery < 4; recovery++) {
+      if (opts.signal?.aborted || abort.signal.aborted) {
+        return exit({ reason: "cancelled" });
+      }
       if (Date.now() > budget.deadlineMs) {
-        return { finished: false, summary: "", routes: [], reason: "deadline", lastText: state.lastText };
+        return exit({ reason: "timeout" });
       }
       const remaining = budget.maxLlmCalls - calls;
       if (remaining <= 0) {
-        return { finished: false, summary: "", routes: [], reason: "llm_budget", lastText: state.lastText };
+        return exit({ reason: "budget_exceeded" });
       }
       if (budget.maxToolCalls && tools.toolCalls >= budget.maxToolCalls) {
-        return { finished: false, summary: "", routes: [], reason: "tool_budget", lastText: state.lastText };
+        return exit({ reason: "budget_exceeded" });
       }
 
       let result;
@@ -238,39 +281,65 @@ export async function runAgent(opts) {
         result = await runner.run(agent, input, {
           maxTurns: remaining,
           signal: abort.signal,
-          ...(conversationId ? { conversationId } : previousResponseId ? { previousResponseId } : {}),
+          ...(conversationId
+            ? { conversationId }
+            : previousResponseId
+              ? { previousResponseId }
+              : {}),
         });
       } catch (err) {
         const msg = err?.message || String(err);
         if (err instanceof MaxTurnsExceededError || /max turns/i.test(msg)) {
-          return { finished: false, summary: "", routes: [], reason: "llm_budget", lastText: state.lastText };
+          return exit({ reason: "budget_exceeded" });
         }
         if (abort.signal.aborted || /abort|deadline/i.test(msg)) {
-          return { finished: false, summary: "", routes: [], reason: "deadline", lastText: state.lastText };
+          return exit({
+            reason: /cancel/i.test(String(opts.signal?.reason || msg)) ? "cancelled" : "timeout",
+          });
         }
-        if ((conversationId || previousResponseId) && /previous_response|conversation|not found|invalid/i.test(msg)) {
-          // Broken server-side state (expired / proxy restart): restart with a note.
+        if (
+          (conversationId || previousResponseId) &&
+          /previous_response|conversation|not found|invalid/i.test(msg)
+        ) {
           log.emit("log", `${label}: conversation reset (${msg.slice(0, 120)})`);
           conversationId = undefined;
           previousResponseId = undefined;
           input = `${task}\n\n(Conversation state was reset. Re-inspect the repo with list_tree/read_file before continuing.)`;
           continue;
         }
-        throw err;
+        log.emit("log", `${label}: model failure ${msg.slice(0, 200)}`);
+        return exit({ reason: "model_failure", lastText: msg.slice(0, 500) });
       }
 
       account(result);
       if (state.stop) return state.stop.result;
 
-      // The model answered in prose without finishing: nudge it back to tools.
-      idleTurns += 1;
-      if (idleTurns >= 2) {
-        return { finished: false, summary: state.lastText, routes: [], reason: "no_tool_calls", lastText: state.lastText };
+      // Prose without finish: one bounded nudge, then exit — do not loop forever.
+      proseNudges += 1;
+      if (proseNudges > maxProseNudges) {
+        return exit({
+          finished: false,
+          summary: state.lastText,
+          reason: "no_tool_calls",
+          lastText: state.lastText,
+        });
       }
       if (!conversationId) previousResponseId = result.lastResponseId || previousResponseId;
-      input = "You replied without calling a tool. Continue the work with tools, and call finish(summary, routes) when the site is complete and verified.";
+      input =
+        "You replied without calling a tool. Continue the work with tools, and call finish(summary, routes) when the work is complete and verified.";
     }
+    return exit({ reason: "budget_exceeded" });
   } finally {
     clearTimeout(deadlineTimer);
+    if (opts.signal) opts.signal.removeEventListener("abort", onExternalAbort);
   }
+}
+
+/** Map legacy reason strings used by index.mjs classifyFailure / repair gates. */
+export function normalizeAgentReason(reason) {
+  if (reason === "verification_failed") return "acceptance_failed";
+  if (reason === "preview_unavailable") return "preview_infrastructure_failure";
+  if (reason === "deadline") return "timeout";
+  if (reason === "llm_budget" || reason === "tool_budget") return "budget_exceeded";
+  return reason;
 }

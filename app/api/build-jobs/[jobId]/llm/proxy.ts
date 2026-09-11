@@ -56,17 +56,21 @@ export async function proxyBuildJobOpenAI(
   }
 
   if (upstream === "responses") {
+    const m = (job.facts.models || {}) as Record<string, string | undefined>;
     const allowed = new Set(
       [
-        job.facts.models?.planner,
-        job.facts.models?.coder,
+        m.planner,
+        m.coder,
+        m.fast,
+        m.strongCoder,
+        m.visualReview,
         resolveOpenAIModel(),
         resolveOpenAICodingModel(),
       ].filter(Boolean) as string[],
     );
     const model = typeof body.model === "string" ? body.model : "";
     if (!allowed.has(model)) {
-      body.model = job.facts.models?.coder || resolveOpenAICodingModel();
+      body.model = m.coder || resolveOpenAICodingModel();
     }
     // Never let the sandbox turn on streaming or background mode through the proxy.
     delete body.stream;

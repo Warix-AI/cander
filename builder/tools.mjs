@@ -753,20 +753,14 @@ export class SandboxTools {
         throw new Error(`command not allowed: ${seg.slice(0, 80)}`);
       }
     }
-    // Long-lived servers hang the agent if run in the foreground. Detach them
-    // automatically and return immediately so the coder can keep working.
-    const detached = autoDetachLongServer(cmd);
-    if (detached) {
-      cmd = detached;
-      this.log.emit("tool", `$ ${cmd.slice(0, 160)}`, { command: cmd.slice(0, 500), detached: true });
-      const result = await execShell(cmd, { cwd: this.repoDir, timeoutMs: 15_000 });
-      const out = [
-        result.stdout,
-        result.stderr ? `\n[stderr]\n${result.stderr}` : "",
-        "\n[started in background — use check_preview; do not start the preview server again]",
-        `\n[exit ${result.exitCode}${result.timedOut ? ", timed out" : ""}]`,
-      ].join("");
-      return truncate(out, 20_000);
+    // Long-lived servers hang the agent if run in the foreground. Do NOT start
+    // next/npm-dev here — PreviewSupervisor owns the preview process. Redirect.
+    if (/(?:^|[;&|]\s*)(?:npm\s+run\s+dev|npm\s+start|npx\s+(?:--yes\s+)?next\s+dev|next\s+dev)\b/i.test(cmd)) {
+      this.log.emit("tool", `$ ${cmd.slice(0, 160)}`, { command: cmd.slice(0, 500), blocked: "preview_owner" });
+      return [
+        "REFUSED: Do not start or restart the preview server.",
+        "Cander's PreviewSupervisor owns next dev. Use check_preview instead — it recovers the server when needed.",
+      ].join(" ");
     }
     const timeoutMs = Math.min(Math.max(Number(timeoutSec) || 180, 5), 900) * 1000;
     // A production build in the live repo dir fights the dev server over
