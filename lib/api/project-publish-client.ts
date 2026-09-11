@@ -235,3 +235,24 @@ export async function waitForPublishOutcome(opts: {
     error: PUBLISH_STATE_COPY.needs_retry,
   };
 }
+
+/** Restore the previous live version (server promotes the last healthy deployment). */
+export async function rollbackPublishClient(opts: {
+  projectId: string;
+  workspaceId: string;
+}): Promise<{ ok: boolean; message: string }> {
+  if (!isSupabaseConfigured()) return { ok: false, message: "Not available offline." };
+  const token = await authToken();
+  if (!token) return { ok: false, message: "Please sign in again." };
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(opts.projectId)}/publish/rollback`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ workspaceId: opts.workspaceId }),
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; message?: string; error?: string };
+    return { ok: Boolean(data.ok), message: data.message || data.error || (res.ok ? "Done." : "Could not restore the previous version.") };
+  } catch {
+    return { ok: false, message: "Could not restore the previous version." };
+  }
+}

@@ -113,7 +113,7 @@ export function ChangeTimeline() {
         at: "",
         day: "Draft",
         summary:
-          "Edits that save to GitHub will show up here as commit SHAs on cander/draft.",
+          "Every saved change to your draft will show up here.",
         files: [],
       } satisfies Checkpoint,
     ];

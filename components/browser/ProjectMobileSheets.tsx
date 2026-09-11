@@ -18,6 +18,7 @@ import {
   Globe,
   Pencil,
   RotateCw,
+  Settings2,
   Trash2,
   Upload,
   X,
@@ -31,7 +32,9 @@ import {
 } from "@/components/preview/PublishDomainPicker";
 import { PanelToggle } from "@/components/shell/PanelToggle";
 import { resolvePublishUrl } from "@/lib/publish-domain";
-import { useSpaceMutation } from "@/lib/hooks/use-space-query";
+import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
+import { useSpaceData } from "@/components/app/SpaceDataProvider";
+import { ProjectSettingsPane } from "@/components/preview/ProjectSettingsPane";
 import { cn } from "@/lib/utils";
 
 export type ProjectSheetMode = "actions" | "info" | "add" | "rename" | "delete" | "space";
@@ -286,7 +289,7 @@ export function MobileHeaderActionsPopover({
 /** @deprecated Prefer MobileHeaderActionsPopover */
 export const MobileGlassActionsMenu = MobileHeaderActionsPopover;
 
-type ActionsPane = "main" | "publish" | "domains";
+type ActionsPane = "main" | "publish" | "domains" | "settings";
 
 export function ProjectActionsSheetBody({
   published,
@@ -358,6 +361,11 @@ export function ProjectActionsSheetBody({
               onClick={() => setPane("domains")}
             />
             <SheetAction
+              icon={Settings2}
+              label="Settings"
+              onClick={() => setPane("settings")}
+            />
+            <SheetAction
               icon={ExternalLink}
               label="Open in new tab"
               onClick={onOpenExternal}
@@ -411,8 +419,30 @@ export function ProjectActionsSheetBody({
           <ProjectDomainsManager />
         </div>
       </div>
+
+      <div
+        className={cn(
+          "absolute inset-0 flex flex-col bg-background transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          pane === "settings"
+            ? "translate-x-0"
+            : "pointer-events-none translate-x-full",
+        )}
+      >
+        <SheetSubHeader title="Settings" onBack={() => setPane("main")} />
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2.25rem)]">
+          <SettingsPaneBody />
+        </div>
+      </div>
     </div>
   );
+}
+
+function SettingsPaneBody() {
+  const { projectId } = useApp();
+  const { ctx } = useSpaceData();
+  const { project } = useSpaceProject(projectId);
+  if (!projectId) return <p className="text-[13px] text-muted-foreground">Open a project first.</p>;
+  return <ProjectSettingsPane projectId={projectId} workspaceId={ctx.workspaceId} projectKind={project?.kind ?? null} />;
 }
 
 /** Actions for media projects. These intentionally omit website-only publishing controls. */
@@ -471,6 +501,21 @@ function SheetSubHeader({
 function PublishPaneBody({ published = false }: { published?: boolean }) {
   const { publishApp, liveUrl, projectId } = useApp();
   const { publishBuild } = useSpaceMutation();
+  const { ctx } = useSpaceData();
+  const [rollbackBusy, setRollbackBusy] = useState(false);
+  const [rollbackNote, setRollbackNote] = useState<string | null>(null);
+  const handleRollback = useCallback(async () => {
+    if (!projectId || rollbackBusy) return;
+    setRollbackBusy(true);
+    setRollbackNote(null);
+    try {
+      const { rollbackPublishClient } = await import("@/lib/api/project-publish-client");
+      const result = await rollbackPublishClient({ projectId, workspaceId: ctx.workspaceId });
+      setRollbackNote(result.message);
+    } finally {
+      setRollbackBusy(false);
+    }
+  }, [ctx.workspaceId, projectId, rollbackBusy]);
   const options = usePublishDomainOptions();
   const [selected, setSelected] = useState(options[0]?.id ?? "cander");
   const [busy, setBusy] = useState(false);
@@ -529,6 +574,21 @@ function PublishPaneBody({ published = false }: { published?: boolean }) {
       >
         {busy ? "Publishing…" : publishLabel}
       </button>
+      {published ? (
+        <div className="mt-4">
+          <button
+            type="button"
+            disabled={rollbackBusy || !projectId}
+            onClick={() => void handleRollback()}
+            className="inline-flex h-10 w-full items-center justify-center rounded-full border border-border text-[13px] text-muted-foreground hover:bg-muted disabled:opacity-50"
+          >
+            {rollbackBusy ? "Restoring…" : "Go back to the previous live version"}
+          </button>
+          {rollbackNote ? (
+            <p className="mt-2 text-center text-[12px] leading-relaxed text-muted-foreground">{rollbackNote}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -760,10 +820,12 @@ export function DeleteProjectSheetBody({
     <div className="flex min-h-0 flex-1 flex-col px-4 pb-[calc(env(safe-area-inset-bottom,0px)+2rem)] pt-1">
       <p className="text-[17px] font-medium tracking-[-0.02em]">Delete project</p>
       <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
-        This permanently removes{" "}
-        <span className="font-medium text-foreground">{projectName}</span> and
-        its build history from this workspace. Type{" "}
-        <span className="font-medium text-foreground">delete</span> to confirm.
+        This removes{" "}
+        <span className="font-medium text-foreground">{projectName}</span> from
+        your workspace and takes its preview offline. Your live site stays up
+        for 30 days, and support can restore the project during that time.
+        Type <span className="font-medium text-foreground">delete</span> to
+        confirm.
       </p>
       <input
         autoFocus

@@ -169,7 +169,7 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
             domains: [...domains, normalized],
           });
           setDraft("");
-          setError("Saved locally — Vercel domain attach needs server config.");
+          setError("Saved. The domain will connect once your site is published.");
         } else {
           setError(result?.error || "Could not attach domain.");
         }
@@ -230,8 +230,8 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
             Domains
           </h2>
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-            Connect a custom domain to {displayName}. Domains attach on the
-            Warix Vercel project after DNS verification.
+            Connect a custom domain to {displayName}. It goes live once your
+            DNS is verified.
           </p>
         </>
       ) : null}
@@ -252,7 +252,7 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
                   ? item.hint
                   : domainState?.domain === normalizeCustomDomain(item.label) &&
                       domainState.status === "verified"
-                    ? "Verified on Vercel"
+                    ? "Verified"
                     : domainState?.domain === normalizeCustomDomain(item.label)
                       ? `Status: ${domainState.status}`
                       : item.hint}
@@ -322,8 +322,8 @@ export function ProjectDomainsManager({ compact = false }: { compact?: boolean }
         <p className="mt-2 text-[12px] text-destructive">{error}</p>
       ) : (
         <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-          Point DNS at Vercel (CNAME → cname.vercel-dns.com). Only verified
-          domains can be selected as the published URL.
+          Add a CNAME record pointing at cname.vercel-dns.com. Only verified
+          domains can be used as your site’s address.
         </p>
       )}
     </div>
