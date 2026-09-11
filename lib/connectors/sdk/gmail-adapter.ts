@@ -125,17 +125,29 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
   },
 
   async sync(ctx: SyncContext): Promise<SyncResult> {
-    const limit = Math.min(50, Math.max(1, ctx.limit ?? 40));
+    // Interactive Refresh uses a slightly smaller cap so the Composio + DB
+    // round-trip finishes sooner; background poll can pull a bit more.
+    const limit = Math.min(
+      50,
+      Math.max(1, ctx.limit ?? (ctx.priority === "interactive" ? 30 : 40)),
+    );
     const queries = ["in:inbox", "in:sent newer_than:14d", "newer_than:14d"];
+
+    // Run searches concurrently — sequential was the main Refresh latency.
+    const searchResults = await Promise.all(
+      queries.map(async (query) => {
+        const result = await runTool(ctx, "gmail.search", {
+          query,
+          maxResults: Math.min(25, limit),
+        });
+        return { query, result };
+      }),
+    );
+
     const upserted: SyncMessageHeader[] = [];
     const seen = new Set<string>();
 
-    for (const query of queries) {
-      if (upserted.length >= limit) break;
-      const result = await runTool(ctx, "gmail.search", {
-        query,
-        maxResults: Math.min(25, limit - upserted.length),
-      });
+    for (const { query, result } of searchResults) {
       if (!result.ok) {
         if (query === "in:inbox") throw new Error(result.error);
         continue;
@@ -150,6 +162,7 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
         seen.add(header.providerMessageId);
         if (upserted.length >= limit) break;
       }
+      if (upserted.length >= limit) break;
     }
 
     return {
@@ -158,6 +171,7 @@ export const gmailViewAdapter: ConnectorViewAdapter = {
       providerState: {
         lastQuery: queries.join(" | "),
         count: upserted.length,
+        priority: ctx.priority ?? "background",
       },
     };
   },

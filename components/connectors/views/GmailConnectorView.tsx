@@ -278,6 +278,7 @@ export function GmailConnectorView({
         workspaceId,
         connectorId: "gmail",
         connectionId: connectionIdRef.current ?? undefined,
+        priority: "interactive",
       });
       setLastSyncedAt(synced.lastSyncedAt);
       setConnectionId(synced.connectionId);
@@ -478,6 +479,7 @@ export function GmailConnectorView({
             await syncConnectorView({
               workspaceId,
               connectorId: "gmail",
+              priority: "interactive",
             });
             if (!cancelled) await loadList();
           } catch (err) {
@@ -519,6 +521,7 @@ export function GmailConnectorView({
         workspaceId,
         connectorId: "gmail",
         connectionId: connectionIdRef.current ?? undefined,
+        priority: "background",
       })
         .then(async (synced) => {
           setLastSyncedAt(synced.lastSyncedAt);
@@ -686,6 +689,7 @@ export function GmailConnectorView({
         workspaceId,
         connectorId: "gmail",
         connectionId: connectionIdRef.current ?? undefined,
+        priority: "interactive",
       });
       const data = await loadList();
       const seed =

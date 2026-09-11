@@ -17,6 +17,8 @@ export type RunConnectorSyncInput = {
   connectorId: string;
   connectionId?: string | null;
   limit?: number;
+  /** interactive = user Refresh — adapters may trim work for latency. */
+  priority?: "interactive" | "background";
 };
 
 export type RunConnectorSyncResult =
@@ -95,19 +97,28 @@ export async function runConnectorSync(
           ? (existingState.provider_state as Record<string, unknown>)
           : {},
       limit: input.limit,
+      priority: input.priority ?? "background",
     });
 
     const now = new Date().toISOString();
 
-    for (const header of sync.upserted) {
-      const { data: existing } = await admin
+    if (sync.upserted.length) {
+      const providerIds = sync.upserted.map((h) => h.providerMessageId);
+      const { data: existingRows } = await admin
         .from("connector_mail_messages")
-        .select("id")
+        .select("id, provider_message_id")
         .eq("connection_id", connection.connectionId)
-        .eq("provider_message_id", header.providerMessageId)
-        .maybeSingle();
+        .in("provider_message_id", providerIds);
 
-      const row = {
+      const idByProvider = new Map<string, string>();
+      for (const row of existingRows || []) {
+        if (row?.provider_message_id && row?.id) {
+          idByProvider.set(String(row.provider_message_id), String(row.id));
+        }
+      }
+
+      const rows = sync.upserted.map((header) => ({
+        id: idByProvider.get(header.providerMessageId) ?? newMailRowId(),
         connection_id: connection.connectionId,
         workspace_id: input.workspaceId,
         owner_id: input.profileId,
@@ -125,19 +136,15 @@ export async function runConnectorSync(
         has_attachments: Boolean(header.hasAttachments),
         raw_meta: header.rawMeta ?? {},
         updated_at: now,
-      };
+      }));
 
-      if (existing?.id) {
-        await admin
-          .from("connector_mail_messages")
-          .update(row)
-          .eq("id", existing.id);
-      } else {
-        await admin.from("connector_mail_messages").insert({
-          id: newMailRowId(),
-          ...row,
-          created_at: now,
-        });
+      // One round-trip instead of select+write per message.
+      // Omit body_* so lazy-fetched bodies are preserved on conflict.
+      const { error: upsertError } = await admin
+        .from("connector_mail_messages")
+        .upsert(rows, { onConflict: "connection_id,provider_message_id" });
+      if (upsertError) {
+        throw new Error(upsertError.message || "Failed to persist mail sync.");
       }
     }
 

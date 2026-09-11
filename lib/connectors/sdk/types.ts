@@ -25,6 +25,11 @@ export type SyncContext = {
   providerState: Record<string, unknown>;
   /** Soft cap for header/snippet fetch. */
   limit?: number;
+  /**
+   * interactive = user pressed Refresh — minimize wall-clock latency.
+   * background = quiet poll / cron — same coverage, may trade speed.
+   */
+  priority?: "interactive" | "background";
 };
 
 export type SyncMessageHeader = {

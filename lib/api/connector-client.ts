@@ -206,6 +206,8 @@ export async function syncConnectorView(input: {
   connectorId: string;
   connectionId?: string;
   limit?: number;
+  /** interactive = user pressed Refresh (faster Gmail path). */
+  priority?: "interactive" | "background";
 }): Promise<{ connectionId: string; upserted: number; lastSyncedAt: string }> {
   const headers = await authHeaders();
   const response = await fetch("/api/connectors/sync", {

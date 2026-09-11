@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     connectorId?: string;
     connectionId?: string;
     limit?: number;
+    priority?: "interactive" | "background";
   };
   try {
     body = await request.json();
@@ -50,6 +51,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: rate.error }, { status: rate.status });
   }
 
+  const priority =
+    body.priority === "interactive" ? "interactive" : "background";
+
   const result = await runConnectorSync({
     client: ctx.client,
     workspaceId: ctx.workspaceId,
@@ -57,6 +61,7 @@ export async function POST(request: Request) {
     connectorId,
     connectionId: body.connectionId,
     limit: body.limit,
+    priority,
   });
 
   if (!result.ok) {
