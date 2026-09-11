@@ -70,6 +70,7 @@ export const PROJECT_ENTITY_COLUMNS = [
   "thread_id",
   "published_url",
   "domains",
+  "builder_version",
   "version",
   "created_at",
   "updated_at",

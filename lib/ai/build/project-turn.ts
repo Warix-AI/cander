@@ -607,6 +607,19 @@ export async function runBuildProjectTurn(
     };
   }
 
+  // V2 config sites: never start the V1 sandbox coding agent for ordinary edits.
+  try {
+    const { getProjectBuilderVersion, runBuilderV2ConfigTurn } = await import(
+      "@/lib/build/v2/project-turn"
+    );
+    const builderVersion = await getProjectBuilderVersion(projectId);
+    if (builderVersion === "v2_config") {
+      return runBuilderV2ConfigTurn(request, opts, { projectId, workspaceId });
+    }
+  } catch {
+    /* fall through to V1 */
+  }
+
   // Planning stays on the chat model — no sandbox / no file writes.
   if (isBuildPlanIntent(request.content) && !isBuildCreateIntent(request.content)) {
     return runBuildPlanTurn(request, opts);

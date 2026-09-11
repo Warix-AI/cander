@@ -143,6 +143,14 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       // Local uniqueness + optimistic seed so openProject works immediately.
       const existing = localSpaceEntityStore.listAllProjects(ctx);
       const title = assertUniqueProjectTitle(existing, input.title);
+      const kind = input.kind ?? projectKindFromSpace(input.space);
+      // Flag-gated V2 create: site projects get builder_version=v2_config.
+      // Existing projects remain v1; apps stay on the coding-agent path.
+      const { isWebsiteBuilderV2EnabledPublic } = await import(
+        "@/lib/build/v2/flag"
+      );
+      const useV2Config =
+        kind === "site" && isWebsiteBuilderV2EnabledPublic();
       const project: SpaceProject = {
         ...newEntityTimestamps(),
         id: newId(),
@@ -151,9 +159,10 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         title,
         summary: input.summary ?? "",
         cover: input.cover,
-        kind: input.kind ?? projectKindFromSpace(input.space),
+        kind,
         status: "draft",
         instructions: input.instructions,
+        builderVersion: useV2Config ? "v2_config" : "v1",
         createdBy: ctx.actorId,
       };
       localSpaceEntityStore.seedProject(project);
@@ -176,11 +185,13 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
           actorId: ctx.actorId,
         }),
       );
-      // Apps/Websites: provision Warix GitHub + subdomain behind the existing create flow.
+      // V1 Apps/Websites: provision GitHub + subdomain. V2 config sites skip
+      // sandbox infra until publish — preview renders from configuration.
       if (
-        project.space === "build" ||
-        project.kind === "app" ||
-        project.kind === "site"
+        !useV2Config &&
+        (project.space === "build" ||
+          project.kind === "app" ||
+          project.kind === "site")
       ) {
         void import("@/lib/api/project-infra-client").then((m) =>
           m.ensureProjectInfraClient({

@@ -4,12 +4,14 @@ import { CanderMark } from "@/components/brand/CanderMark";
 import { useApp } from "@/components/app/AppProvider";
 import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import { WebsiteSetupProgress } from "@/components/preview/WebsiteSetupProgress";
+import { BuilderV2PreviewHost } from "@/components/build-v2/PreviewHost";
 import { buildPreviews } from "@/lib/data";
 import type { BuildSandboxStatus } from "@/lib/build/sandbox/constants";
 import { cn } from "@/lib/utils";
 
 /**
  * Build project preview — live iframe via Cander path proxy when ready.
+ * V2 config sites render from project configuration (no sandbox iframe).
  * Publish does not replace this draft surface; live URL is shown beside draft.
  * During guided website setup: blank canvas + Cander 8-segment progress ring.
  */
@@ -24,6 +26,8 @@ export function AppViewport({
   publishedUrl: _publishedUrl,
   onReloadPreview: _onReloadPreview,
   websiteSetup,
+  builderVersion,
+  projectId,
 }: {
   name: string;
   summary: string;
@@ -44,8 +48,13 @@ export function AppViewport({
     detail?: string | null;
     steps?: string[] | null;
   } | null;
+  /** Explicit builder architecture — v2_config skips sandbox preview */
+  builderVersion?: "v1" | "v2_config" | null;
+  projectId?: string | null;
 }) {
   const { viewport, project } = useApp();
+  const resolvedProjectId = projectId || project?.id || null;
+  const isV2Config = builderVersion === "v2_config";
 
   const framed = viewport !== "desktop";
   const cover =
@@ -53,12 +62,14 @@ export function AppViewport({
     buildPreviews.find((item) => item.projectId === project?.id)?.image;
 
   const setupActive =
+    !isV2Config &&
     websiteSetup &&
     (websiteSetup.status === "setup" ||
       websiteSetup.status === "building" ||
       websiteSetup.status === "failed");
 
   const showEnvOverlay =
+    !isV2Config &&
     !setupActive &&
     (envStatus === "starting" ||
       envStatus === "error" ||
@@ -69,7 +80,7 @@ export function AppViewport({
   // The iframe is kept mounted as long as we have a src, even while the
   // runtime restarts — status overlays stack on top instead of unmounting the
   // page (which would lose scroll, form state and client routing).
-  const showLive = !setupActive && Boolean(previewSrc);
+  const showLive = !isV2Config && !setupActive && Boolean(previewSrc);
   const overlayDimsLive = showLive && envStatus !== "ready";
   const emptyCopy =
     summary?.trim() || "Start generating your website in chat.";
@@ -91,6 +102,11 @@ export function AppViewport({
             "h-full w-auto max-w-full aspect-[9/19.5] rounded-[18px] shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
         )}
       >
+        {isV2Config && resolvedProjectId ? (
+          <div className="absolute inset-0 overflow-auto bg-white">
+            <BuilderV2PreviewHost projectId={resolvedProjectId} />
+          </div>
+        ) : null}
         {setupActive ? (
           <div className="absolute inset-0 bg-white">
             <WebsiteSetupProgress
@@ -157,7 +173,7 @@ export function AppViewport({
               </button>
             ) : null}
           </div>
-        ) : showLive ? null : cover ? (
+        ) : isV2Config ? null : showLive ? null : cover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={cover}

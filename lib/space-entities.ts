@@ -28,6 +28,11 @@ export type SpaceProject = EntityTimestamps & {
   threadId?: string;
   publishedUrl?: string;
   domains?: string[];
+  /**
+   * Explicit builder architecture. Existing projects are "v1".
+   * Config-driven Website Builder V2 uses "v2_config".
+   */
+  builderVersion?: "v1" | "v2_config";
   /** Profile that created this project — attribution in shared workspaces. */
   createdBy?: string;
 };

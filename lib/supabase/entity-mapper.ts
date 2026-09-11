@@ -20,6 +20,7 @@ export type ProjectRow = {
   thread_id: string | null;
   published_url: string | null;
   domains: string[];
+  builder_version?: "v1" | "v2_config" | null;
   version: number;
   created_at: string;
   updated_at: string;
@@ -105,6 +106,8 @@ export function projectRowToEntity(row: ProjectRow): SpaceProject {
     threadId: row.thread_id ?? undefined,
     publishedUrl: row.published_url ?? undefined,
     domains: row.domains.length ? row.domains : undefined,
+    builderVersion:
+      row.builder_version === "v2_config" ? "v2_config" : "v1",
     version: row.version,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -129,6 +132,7 @@ export function projectToRow(
     thread_id: project.threadId ?? null,
     published_url: project.publishedUrl ?? null,
     domains: project.domains ?? [],
+    builder_version: project.builderVersion ?? "v1",
     version: project.version,
     created_at: project.createdAt,
     updated_at: project.updatedAt,

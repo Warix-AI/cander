@@ -3569,6 +3569,8 @@ function ProjectBrowserBody({
         draftPreviewUrl={draftPreviewUrl}
         publishedUrl={published}
         websiteSetup={websiteSetup}
+        builderVersion={match?.builderVersion}
+        projectId={match?.id ?? tab.projectId}
         onRetryEnv={onSandboxRetry}
         onReloadPreview={onSandboxReload}
       />
