@@ -222,7 +222,7 @@ done | head -n 100`,
         // The commit was created through the GitHub API, so fetch it before
         // moving HEAD — otherwise the checkout stays "dirty" forever and the
         // next tip move forces a VM recreate instead of a fast-forward.
-        `SHA=${JSON.stringify(committed.draftSha)}; (git fetch --depth=1 origin "$SHA" 2>>/tmp/cander-git-fetch.log || git fetch origin "$SHA" 2>>/tmp/cander-git-fetch.log || true); git add -A >/dev/null 2>&1; git reset --hard "$SHA" >/dev/null 2>&1 || { echo RESET_FAILED; tail -n 5 /tmp/cander-git-fetch.log 2>/dev/null; }`,
+        `SHA=${JSON.stringify(committed.draftSha)}; (git fetch --depth=1 origin "$SHA" 2>>/tmp/cander-git-fetch.log || git fetch origin "$SHA" 2>>/tmp/cander-git-fetch.log || true); git add -A >/dev/null 2>&1; git reset --hard "$SHA" >/dev/null 2>&1 || { git reset -q >/dev/null 2>&1; echo RESET_FAILED; tail -n 5 /tmp/cander-git-fetch.log 2>/dev/null; }`,
       ],
     });
     if (/RESET_FAILED/.test(sync.stdout || "")) {

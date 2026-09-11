@@ -22,6 +22,13 @@ function credentialScript(token: string, fullName: string): string {
     "set -e",
     "[ -d .git ] || exit 0",
     `git remote set-url origin ${JSON.stringify(cleanUrl)} 2>/dev/null || git remote add origin ${JSON.stringify(cleanUrl)}`,
+    // The sandbox's git clone leaves a URL-scoped helper behind
+    // (credential.<url>.helper = "!f() { echo username=$GIT_USERNAME; ... }")
+    // that reads env vars which are gone by the time we run. URL-scoped
+    // helpers win over the global one, git then fails auth and *erases* our
+    // stored token. Drop every helper before installing ours.
+    "git config --name-only --get-regexp '^credential\\..*\\.helper$' 2>/dev/null | while IFS= read -r k; do git config --unset-all \"$k\" 2>/dev/null || true; done",
+    "git config --unset-all credential.helper 2>/dev/null || true",
     `git config credential.helper ${JSON.stringify(`store --file=${SANDBOX_GIT_CREDENTIALS_FILE}`)}`,
     `umask 077; printf '%s\\n' ${JSON.stringify(line)} > ${SANDBOX_GIT_CREDENTIALS_FILE}`,
     "echo GIT_AUTH_OK",
