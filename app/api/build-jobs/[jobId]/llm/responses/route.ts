@@ -1,9 +1,9 @@
 /**
- * POST /api/build-jobs/:jobId/llm — OpenAI Responses API proxy for the sandbox
- * builder (legacy path; the Agents SDK uses …/llm/responses).
+ * POST /api/build-jobs/:jobId/llm/responses — path used by the OpenAI / Agents
+ * SDK when the client baseURL is …/llm.
  */
 
-import { proxyBuildJobOpenAI } from "./proxy";
+import { proxyBuildJobOpenAI } from "../proxy";
 
 export const runtime = "nodejs";
 export const maxDuration = 800;
