@@ -46,6 +46,72 @@ function projectNameFor(projectId: string, title: string): string {
   return `cander-${base || "app"}-${short}`.slice(0, 40);
 }
 
+/** Deterministic, title-independent suffix every Cander-created project name ends with. */
+function projectNameSuffix(projectId: string): string {
+  return `-${projectId.replace(/-/g, "").slice(0, 10)}`;
+}
+
+/**
+ * Idempotency: before creating, look for a project we already created for this
+ * Cander project (a previous attempt that died before persisting the ref).
+ */
+async function findExistingSupabaseProject(
+  projectId: string,
+): Promise<{ ref: string; region: string | null; status: string | null } | null> {
+  try {
+    const res = await supabaseManagementFetch("/v1/projects");
+    if (!res.ok) return null;
+    const list = (await res.json()) as Array<{ id?: string; ref?: string; name?: string; region?: string; status?: string }>;
+    const suffix = projectNameSuffix(projectId);
+    const hit = list.find((p) => typeof p.name === "string" && p.name.endsWith(suffix) && p.status !== "REMOVED");
+    if (!hit) return null;
+    const ref = hit.ref ?? hit.id ?? null;
+    return ref ? { ref, region: hit.region ?? null, status: hit.status ?? null } : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Mirror the binding into project_backends (provider record) — best effort. */
+async function upsertBackendRecord(opts: {
+  projectId: string;
+  workspaceId: string;
+  ref: string | null;
+  status: "not_created" | "creating" | "ready" | "paused" | "failed";
+  region?: string | null;
+  failureReason?: string | null;
+}): Promise<void> {
+  const admin = createSupabaseAdminClient();
+  await admin
+    .from("project_backends")
+    .upsert(
+      {
+        project_id: opts.projectId,
+        workspace_id: opts.workspaceId,
+        provider: "supabase",
+        supabase_project_ref: opts.ref,
+        supabase_url: opts.ref ? supabaseUrlForRef(opts.ref) : null,
+        region: opts.region ?? undefined,
+        status: opts.status,
+        failure_reason: opts.failureReason ?? null,
+        last_verified_at: opts.status === "ready" ? new Date().toISOString() : undefined,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "project_id" },
+    )
+    .then(({ error }) => {
+      if (error) console.warn("[cander:supabase] backend record upsert failed", error.message);
+    });
+  if (opts.ref) {
+    await admin
+      .from("projects")
+      .update({ supabase_url: supabaseUrlForRef(opts.ref) })
+      .eq("id", opts.projectId)
+      .eq("workspace_id", opts.workspaceId)
+      .then(() => undefined, () => undefined);
+  }
+}
+
 function supabaseUrlForRef(ref: string): string {
   return `https://${ref}.supabase.co`;
 }
@@ -212,12 +278,28 @@ export async function ensureAppSupabaseProject(opts: {
 
   let ref = binding.ref;
   let created = false;
+  let region: string | null = null;
 
   if (!ref) {
     await patchBinding(opts.projectId, opts.workspaceId, {
       supabase_status: "pending",
     });
+    await upsertBackendRecord({ ...opts, ref: null, status: "creating" });
 
+    // Adopt a project from an earlier attempt instead of creating a second one.
+    const existing = await findExistingSupabaseProject(opts.projectId);
+    if (existing) {
+      ref = existing.ref;
+      region = existing.region;
+      await patchBinding(opts.projectId, opts.workspaceId, {
+        supabase_project_ref: ref,
+        supabase_status: "pending",
+      });
+      await upsertBackendRecord({ ...opts, ref, region, status: "creating" });
+    }
+  }
+
+  if (!ref) {
     const name = projectNameFor(opts.projectId, binding.title);
     const dbPass = generateDbPassword();
     const regionGroup =
@@ -303,6 +385,21 @@ export async function ensureAppSupabaseProject(opts: {
       supabase_project_ref: ref,
       supabase_status: "pending",
     });
+    await upsertBackendRecord({ ...opts, ref, status: "creating" });
+    // Database password goes to the vault (never logged). If the vault isn't
+    // configured yet it is simply not retained, as before.
+    try {
+      const { putProjectSecret } = await import("@/lib/build/secrets/vault");
+      await putProjectSecret({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        name: "SUPABASE_DB_PASSWORD",
+        value: dbPass,
+        source: "provision",
+      });
+    } catch (err) {
+      console.warn("[cander:supabase] db password not stored", err instanceof Error ? err.message : "error");
+    }
 
     try {
       await waitForProjectActive(ref);
@@ -311,6 +408,7 @@ export async function ensureAppSupabaseProject(opts: {
       await patchBinding(opts.projectId, opts.workspaceId, {
         supabase_status: "error",
       });
+      await upsertBackendRecord({ ...opts, ref, status: "failed", failureReason: message.slice(0, 300) });
       return {
         status: "error",
         projectRef: ref,
@@ -342,6 +440,7 @@ export async function ensureAppSupabaseProject(opts: {
       supabase_project_ref: ref,
       supabase_status: "ready",
     });
+    await upsertBackendRecord({ ...opts, ref, region, status: "ready" });
 
     return {
       status: "ready",

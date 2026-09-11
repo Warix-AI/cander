@@ -12,20 +12,26 @@ const POLL_MS = 750;
 
 export type LeaseHandle = { projectId: string; holder: string; release: () => Promise<void> };
 
+const RPC_RETRIES = 3;
+
+/**
+ * Fail closed: if the lease RPC itself errors (network, DB blip) we retry with
+ * backoff and then report "not acquired" — two instances racing to create
+ * VMs for one project is worse than a delayed preview.
+ */
 async function tryAcquire(projectId: string, holder: string, ttlSec: number): Promise<boolean> {
   const admin = createSupabaseAdminClient();
-  const { data, error } = await admin.rpc("acquire_sandbox_lease", {
-    p_project_id: projectId,
-    p_holder: holder,
-    p_ttl_seconds: ttlSec,
-  });
-  if (error) {
-    // Missing RPC (migration not applied yet) must never block the product —
-    // fall back to unserialized behaviour and log once.
-    console.warn("[cander:sandbox] lease rpc unavailable", error.message);
-    return true;
+  for (let attempt = 0; attempt < RPC_RETRIES; attempt++) {
+    const { data, error } = await admin.rpc("acquire_sandbox_lease", {
+      p_project_id: projectId,
+      p_holder: holder,
+      p_ttl_seconds: ttlSec,
+    });
+    if (!error) return Boolean(data);
+    console.warn("[cander:sandbox] lease rpc failed", { attempt, message: error.message });
+    await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
   }
-  return Boolean(data);
+  return false;
 }
 
 /**

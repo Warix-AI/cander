@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/sandbox-gc",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/project-teardown",
+      "schedule": "17 4 * * *"
     }
   ]
 }

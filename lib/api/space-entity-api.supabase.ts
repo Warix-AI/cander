@@ -91,6 +91,7 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         .select(PROJECT_ENTITY_COLUMNS)
         .eq("workspace_id", ctx.workspaceId)
         .eq("space_id", space)
+        .is("archived_at", null)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       noteSupabaseEgress({
@@ -108,6 +109,7 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         .from("projects")
         .select(PROJECT_ENTITY_COLUMNS)
         .eq("workspace_id", ctx.workspaceId)
+        .is("archived_at", null)
         .order("updated_at", { ascending: false });
       if (error) throw error;
       noteSupabaseEgress({
@@ -125,6 +127,7 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
         .select(PROJECT_ENTITY_COLUMNS)
         .eq("workspace_id", ctx.workspaceId)
         .eq("id", id)
+        .is("archived_at", null)
         .maybeSingle();
       if (error) throw error;
       noteSupabaseEgress({
@@ -221,13 +224,24 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
     async deleteProject(ctx, id) {
       localSpaceEntityStore.deleteProject(ctx, id);
       notifyEntityStoreChange();
+      // Delete = archive. The server stops the sandbox, pauses the database
+      // and hides the project; provider resources are torn down after the
+      // grace period (restorable until then via /restore).
       const supabase = createSupabaseBrowserClient();
-      const { error } = await supabase
-        .from("projects")
-        .delete()
-        .eq("id", id)
-        .eq("workspace_id", ctx.workspaceId);
-      if (error) throw error;
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Not signed in.");
+      const res = await fetch(`/api/projects/${encodeURIComponent(id)}/archive`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceId: ctx.workspaceId }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error || "Could not delete the project.");
+      }
     },
 
     async listSources(ctx, opts) {
