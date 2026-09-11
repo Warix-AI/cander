@@ -208,7 +208,7 @@ export function AiChooseButton({ on, onClick }: { on: boolean; onClick: () => vo
       )}
     >
       <Sparkles className="h-3.5 w-3.5" strokeWidth={1.8} />
-      {on ? "Cander will choose" : "Let Cander choose"}
+      {on ? "Candor will decide" : "Let Candor decide"}
     </button>
   );
 }
@@ -276,52 +276,113 @@ export function PaletteField({
   value: unknown;
   onChange: (next: unknown) => void;
 }) {
-  const v: PaletteAnswer = value && typeof value === "object" ? (value as PaletteAnswer) : {};
+  const v: PaletteAnswer =
+    value && typeof value === "object"
+      ? (value as PaletteAnswer)
+      : typeof value === "string" && value
+        ? value === "light" || value === "dark"
+          ? { mode: value }
+          : value === "custom"
+            ? { preset: "custom" }
+            : { custom: value }
+        : {};
   const choices = question.choices ?? [];
+  const simpleMode = choices.every(
+    (c) => !c.preview || c.preview.kind !== "palette",
+  );
   const set = (patch: Partial<PaletteAnswer>) => {
     const next = { ...v, ...patch };
-    for (const k of Object.keys(next) as Array<keyof PaletteAnswer>) if (!next[k]) delete next[k];
+    for (const k of Object.keys(next) as Array<keyof PaletteAnswer>) {
+      if (!next[k]) delete next[k];
+    }
     onChange(Object.keys(next).length ? next : undefined);
   };
+  const selectedId =
+    v.preset ||
+    (v.mode === "light" || v.mode === "dark" ? v.mode : undefined) ||
+    (v.custom ? "custom" : undefined);
+
   return (
     <div className="flex flex-col gap-3">
-      <TileRow cols={4}>
-        {choices.map((c) => (
-          <ChoiceTile key={c.id} choice={c} on={v.preset === c.id} onClick={() => set({ preset: v.preset === c.id ? undefined : c.id })} />
-        ))}
+      <TileRow cols={simpleMode ? 3 : 4}>
+        {choices.map((c) => {
+          const on = selectedId === c.id || v.preset === c.id;
+          return (
+            <ChoiceTile
+              key={c.id}
+              choice={c}
+              on={on}
+              onClick={() => {
+                if (on) {
+                  onChange(undefined);
+                  return;
+                }
+                if (c.id === "light" || c.id === "dark") {
+                  set({ mode: c.id, preset: c.id, custom: undefined });
+                } else if (c.id === "custom") {
+                  set({ preset: "custom", mode: undefined });
+                } else {
+                  set({ preset: c.id });
+                }
+              }}
+            />
+          );
+        })}
       </TileRow>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-full border border-border p-0.5">
-          {(["light", "dark", "auto"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => set({ mode: m })}
-              className={cn(
-                "min-h-[32px] rounded-full px-3 text-[12px] capitalize",
-                (v.mode ?? "auto") === m ? "bg-foreground text-background" : "text-muted-foreground",
-              )}
+      {!simpleMode ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-full border border-border p-0.5">
+            {(["light", "dark", "auto"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => set({ mode: m })}
+                className={cn(
+                  "min-h-[32px] rounded-full px-3 text-[12px] capitalize",
+                  (v.mode ?? "auto") === m ? "bg-foreground text-background" : "text-muted-foreground",
+                )}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+          {(["primary", "accent"] as const).map((k) => (
+            <label
+              key={k}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-border px-2.5 text-[12px]"
             >
-              {m}
-            </button>
+              <span
+                className="h-4 w-4 rounded-full border border-black/10"
+                style={{
+                  background:
+                    v[k] && HEX_RE.test(v[k]!)
+                      ? v[k]!.startsWith("#")
+                        ? v[k]
+                        : `#${v[k]}`
+                      : "transparent",
+                }}
+              />
+              <span className="capitalize text-muted-foreground">{k}</span>
+              <input
+                className="w-[74px] bg-transparent font-mono text-[12px] outline-none"
+                placeholder="#hex"
+                value={v[k] ?? ""}
+                onChange={(e) =>
+                  set({ [k]: e.target.value.trim() || undefined } as Partial<PaletteAnswer>)
+                }
+              />
+            </label>
           ))}
         </div>
-        {(["primary", "accent"] as const).map((k) => (
-          <label key={k} className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-border px-2.5 text-[12px]">
-            <span
-              className="h-4 w-4 rounded-full border border-black/10"
-              style={{ background: v[k] && HEX_RE.test(v[k]!) ? (v[k]!.startsWith("#") ? v[k] : `#${v[k]}`) : "transparent" }}
-            />
-            <span className="capitalize text-muted-foreground">{k}</span>
-            <input
-              className="w-[74px] bg-transparent font-mono text-[12px] outline-none"
-              placeholder="#hex"
-              value={v[k] ?? ""}
-              onChange={(e) => set({ [k]: e.target.value.trim() || undefined } as Partial<PaletteAnswer>)}
-            />
-          </label>
-        ))}
-      </div>
+      ) : null}
+      {simpleMode && (selectedId === "custom" || v.preset === "custom" || Boolean(v.custom)) ? (
+        <textarea
+          className="min-h-[72px] w-full resize-y rounded-[10px] border border-border bg-input px-3 py-2 text-[13.5px] outline-none focus:border-foreground/30"
+          placeholder='e.g. black, white, cyan accent — or #0B1020, #F4F7FC, #28D7F5'
+          value={v.custom ?? ""}
+          onChange={(e) => set({ preset: "custom", custom: e.target.value.trim() || undefined })}
+        />
+      ) : null}
     </div>
   );
 }

@@ -135,15 +135,40 @@ describe("project spec selectedComponents", () => {
           purpose: "hero",
           localPath: "components/twenty-first/hero-abc.tsx",
           adaptationInstructions: "Adapt tokens",
+          imported: true,
+          usedInRender: true,
         },
       ],
-      imagery: { heroSubject: "team collaborating" },
+      imagery: {
+        heroSubject: "team collaborating",
+        strategy: "generate",
+        plan: [
+          {
+            role: "hero",
+            strategy: "generated",
+            description: "night launch",
+            assetPath: "/assets/hero.webp",
+          },
+        ],
+      },
+      designBrief: {
+        purpose: "SaaS",
+        styleDirection: "minimal",
+        colorDirection: "dark",
+        imageryStrategy: "generate",
+        designTokens: { primary: "#22d3ee" },
+        avoid: ["Purple SaaS gradients"],
+      },
       primaryFlows: [{ id: "onboard", title: "Onboarding", steps: ["signup", "setup"] }],
     });
     assert.ok(spec);
     assert.equal(spec!.selectedComponents?.[0]?.componentId, "abc");
     assert.equal(spec!.selectedComponents?.[0]?.localPath, "components/twenty-first/hero-abc.tsx");
+    assert.equal(spec!.selectedComponents?.[0]?.usedInRender, true);
     assert.equal(spec!.imagery?.heroSubject, "team collaborating");
+    assert.equal(spec!.imagery?.plan?.[0]?.assetPath, "/assets/hero.webp");
+    assert.equal(spec!.designBrief?.styleDirection, "minimal");
+    assert.equal(spec!.designBrief?.designTokens?.primary, "#22d3ee");
     assert.equal(spec!.primaryFlows?.[0]?.id, "onboard");
   });
 });

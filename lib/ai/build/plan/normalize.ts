@@ -236,20 +236,92 @@ function normalizeProjectSpecMemory(o: Record<string, unknown>): Partial<Project
         reason: asString(c!.reason) || undefined,
         adaptationInstructions: asString(c!.adaptationInstructions) || undefined,
         localPath: asString(c!.localPath) || undefined,
+        imported: typeof c!.imported === "boolean" ? c!.imported : undefined,
+        usedInRender: typeof c!.usedInRender === "boolean" ? c!.usedInRender : undefined,
       }))
       .filter((c) => c.componentId);
     if (selected.length) out.selectedComponents = selected.slice(0, 12);
   }
   const imagery = asRecord(o.imagery);
   if (imagery) {
+    const planRaw = Array.isArray(imagery.plan) ? imagery.plan : [];
+    const plan = planRaw
+      .map((p) => asRecord(p))
+      .filter(Boolean)
+      .map((p) => ({
+        role: asString(p!.role) || "section",
+        strategy: asString(p!.strategy) || "placeholder",
+        description: asString(p!.description) || "",
+        assetPath: asString(p!.assetPath) || undefined,
+      }))
+      .filter((p) => p.description || p.assetPath);
     const img: NonNullable<ProjectSpec["imagery"]> = {
       heroSubject: asString(imagery.heroSubject) || undefined,
       sectionSubjects: asStringArray(imagery.sectionSubjects),
       avoid: asStringArray(imagery.avoid),
+      strategy: asString(imagery.strategy) || undefined,
+      plan: plan.length ? plan : undefined,
     };
     if (!img.sectionSubjects?.length) delete img.sectionSubjects;
     if (!img.avoid?.length) delete img.avoid;
-    if (img.heroSubject || img.sectionSubjects || img.avoid) out.imagery = img;
+    if (!img.plan?.length) delete img.plan;
+    if (img.heroSubject || img.sectionSubjects || img.avoid || img.strategy || img.plan) {
+      out.imagery = img;
+    }
+  }
+  const designBrief = asRecord(o.designBrief);
+  if (designBrief) {
+    const tokens = asRecord(designBrief.designTokens) || {};
+    const tokenMap: Record<string, string | undefined> = {};
+    for (const [k, v] of Object.entries(tokens)) {
+      if (typeof v === "string" && v.trim()) tokenMap[k] = v.trim();
+    }
+    const imgPlan = Array.isArray(designBrief.imagery)
+      ? designBrief.imagery
+          .map((p) => asRecord(p))
+          .filter(Boolean)
+          .map((p) => ({
+            role: asString(p!.role) || "section",
+            strategy: asString(p!.strategy) || "placeholder",
+            description: asString(p!.description) || "",
+            assetPath: asString(p!.assetPath) || undefined,
+          }))
+      : undefined;
+    const strengthsRaw = asStringMap(designBrief.strengths);
+    const strengths: Record<string, string> | undefined = strengthsRaw
+      ? Object.fromEntries(
+          Object.entries(strengthsRaw).filter(([, v]) => typeof v === "string" && v),
+        ) as Record<string, string>
+      : undefined;
+    const designBriefNorm: NonNullable<ProjectSpec["designBrief"]> = {
+      purpose: asString(designBrief.purpose) || undefined,
+      audience: asString(designBrief.audience) || undefined,
+      primaryGoal: asString(designBrief.primaryGoal) || undefined,
+      contentDirection: asString(designBrief.contentDirection) || undefined,
+      styleDirection: asString(designBrief.styleDirection) || undefined,
+      colorDirection: asString(designBrief.colorDirection) || undefined,
+      imageryStrategy: asString(designBrief.imageryStrategy) || undefined,
+      referenceUrl: designBrief.referenceUrl == null ? null : asString(designBrief.referenceUrl) || null,
+      designTokens: Object.keys(tokenMap).length
+        ? (Object.fromEntries(
+            Object.entries(tokenMap).filter(([, v]) => typeof v === "string"),
+          ) as Record<string, string>)
+        : undefined,
+      imagery: imgPlan?.length ? imgPlan : undefined,
+      avoid: asStringArray(designBrief.avoid),
+      builderFreedom: asStringArray(designBrief.builderFreedom),
+      referenceTraits: asStringArray(designBrief.referenceTraits),
+      updatedAt: asString(designBrief.updatedAt) || undefined,
+      strengths,
+      twentyFirstStats: asRecord(designBrief.twentyFirstStats) || undefined,
+      selectedComponents: Array.isArray(designBrief.selectedComponents)
+        ? (designBrief.selectedComponents as Array<Record<string, unknown>>).slice(0, 12)
+        : undefined,
+    };
+    if (!designBriefNorm.avoid?.length) delete designBriefNorm.avoid;
+    if (!designBriefNorm.builderFreedom?.length) delete designBriefNorm.builderFreedom;
+    if (!designBriefNorm.referenceTraits?.length) delete designBriefNorm.referenceTraits;
+    out.designBrief = designBriefNorm;
   }
   if (Array.isArray(o.primaryFlows)) {
     const flows = o.primaryFlows

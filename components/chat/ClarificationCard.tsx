@@ -507,7 +507,7 @@ function ClarificationCardView({
             </button>
           ) : null}
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex flex-wrap gap-1.5">
           {!isWebsiteSetup ? (
             <button
               type="button"
@@ -521,24 +521,52 @@ function ClarificationCardView({
             >
               Skip all
             </button>
-          ) : !isLast ? (
-            <button
-              type="button"
-              onClick={() => {
-                // Skip = leave unanswered; Cander decides at build time.
-                if (q) patchClarificationAnswers(card.threadId, { [q.id]: undefined });
-                if (clarificationNext(card.threadId)) syncWebsiteBrief(card.answers);
-              }}
-              className="min-h-[36px] rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted"
-            >
-              Skip
-            </button>
-          ) : null}
+          ) : (
+            <>
+              {!isLast ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (q) patchClarificationAnswers(card.threadId, { [q.id]: undefined });
+                    if (clarificationNext(card.threadId)) syncWebsiteBrief(card.answers);
+                  }}
+                  className="min-h-[36px] rounded-full px-3 text-[12.5px] text-muted-foreground hover:bg-muted"
+                >
+                  Skip
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => {
+                  const allAi: Record<string, unknown> = {};
+                  for (const question of card.questions) {
+                    if (question.aiChoice) allAi[question.id] = AI_CHOICE_VALUE;
+                  }
+                  const finalized = finalizeWebsiteAnswers({ ...card.answers, ...allAi });
+                  patchClarificationAnswers(card.threadId, finalized);
+                  const result = submitClarification(card.threadId);
+                  if (result) {
+                    if (projectId && workspaceId) {
+                      void persistWebsiteSetupProgress({
+                        projectId,
+                        workspaceId,
+                        answers: { ...result.answers, confirm_build: true },
+                        status: "building",
+                      });
+                    }
+                    onSubmitted?.(result);
+                  }
+                }}
+                className="min-h-[36px] rounded-full border border-border px-3 text-[12.5px] font-medium text-foreground hover:bg-muted"
+              >
+                Let Candor decide
+              </button>
+            </>
+          )}
           <button
             type="button"
             onClick={() => {
               if (!isLast) {
-                // Commit smart defaults the user didn't touch before moving on.
                 if (q && currentValue !== card.answers[q.id]) {
                   patchClarificationAnswers(card.threadId, { [q.id]: currentValue });
                 }

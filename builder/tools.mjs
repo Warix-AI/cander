@@ -840,11 +840,27 @@ export class SandboxTools {
   async downloadImage(url, path) {
     const u = String(url ?? "").trim();
     if (!/^https:\/\//i.test(u)) throw new Error("url must be https");
-    const { abs, rel } = this.safePath(path);
-    if (!rel.startsWith("public/")) throw new Error("path must be under public/");
+    // Reject known-ephemeral / auth-gated hosts that break at publish time.
+    if (
+      /oaidalleapiprodscus|blob\.core\.windows\.net|replicate\.delivery|openai\.com\/.*\/files|X-Amz-Signature|Expires=\d{10}/i.test(
+        u,
+      )
+    ) {
+      throw new Error(
+        "Refusing ephemeral/auth image URL — download a durable Unsplash/static asset into public/assets/ instead, or use an intentional placeholder.",
+      );
+    }
+    let relPath = String(path ?? "").trim();
+    // Prefer durable public/assets/* for marketing imagery.
+    if (relPath.startsWith("public/images/")) {
+      relPath = relPath.replace(/^public\/images\//, "public/assets/");
+    }
+    if (!relPath.startsWith("public/")) throw new Error("path must be under public/");
+    const { abs, rel } = this.safePath(relPath);
     if (!BINARY_RE.test(rel) && !/\.svg$/i.test(rel)) {
       throw new Error("path must end with an image extension");
     }
+    this.log.emit("progress", "Preparing imagery…", { phase: "imagery" });
     const res = await fetch(u, {
       redirect: "follow",
       signal: AbortSignal.timeout(30_000),

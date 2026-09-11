@@ -1,8 +1,7 @@
 /**
- * Tap-first website setup steps. Every step is skippable and offers
- * “Let AI choose”; the values feed projects.project_spec (durable memory).
- *
- * Pure data + mapping helpers — safe for client and server.
+ * Short tap-first website setup (≤6 questions, under a minute).
+ * Legacy 12-step + 8-key briefs normalize into these fields.
+ * Pure data + mapping — safe for client and server.
  */
 
 import { AI_CHOICE_VALUE } from "@/lib/ai/clarification/ai-choice";
@@ -11,7 +10,20 @@ import type {
   ClarificationQuestion,
 } from "@/lib/ai/clarification/schema";
 
+/** Current short onboarding keys. */
 export const WEBSITE_SETUP_STEP_KEYS = [
+  "purpose",
+  "goal",
+  "style",
+  "colors",
+  "imagery",
+  "reference_url",
+] as const;
+
+export type WebsiteSetupStepKey = (typeof WEBSITE_SETUP_STEP_KEYS)[number];
+
+/** @deprecated Kept for reading older briefs. */
+export const WEBSITE_SETUP_LEGACY_STEP_KEYS = [
   "purpose",
   "primary_cta",
   "visual_direction",
@@ -26,104 +38,208 @@ export const WEBSITE_SETUP_STEP_KEYS = [
   "anything_else",
 ] as const;
 
-export type WebsiteSetupStepKey = (typeof WEBSITE_SETUP_STEP_KEYS)[number];
-
 export type PaletteAnswer = {
   preset?: string;
   primary?: string;
   accent?: string;
+  background?: string;
+  foreground?: string;
   mode?: "light" | "dark" | "auto";
+  /** Free-text color direction, e.g. "black, white, cyan" or hex list. */
+  custom?: string;
 };
+
+export type ColorsAnswer = PaletteAnswer | string;
 
 export type IdentityAnswer = {
   business_name?: string;
   tagline?: string;
-  /** project_assets ids (uploaded through /api/projects/[id]/assets). */
   logo_asset_id?: string;
   favicon_asset_id?: string;
-  /** "logo" = derive from logo, "upload" = favicon_asset_id, "generate" = builder makes app/icon.tsx */
   favicon_mode?: "logo" | "upload" | "generate";
   og_title?: string;
   og_description?: string;
 };
 
-export const VISUAL_DIRECTIONS: ClarificationChoice[] = [
-  { id: "clean-saas", label: "Clean & modern", hint: "Crisp, lots of white space", recommended: true,
-    preview: { kind: "style", bg: "#ffffff", fg: "#0f172a", accent: "#2563eb", radius: "10px" } },
-  { id: "warm-local", label: "Warm & friendly", hint: "Approachable, earthy tones",
-    preview: { kind: "style", bg: "#fbf7f0", fg: "#3b2f2f", accent: "#d97706", radius: "14px" } },
-  { id: "editorial", label: "Editorial", hint: "Type-led, magazine feel",
-    preview: { kind: "style", bg: "#faf9f6", fg: "#111111", accent: "#b91c1c", radius: "2px", font: "serif" } },
-  { id: "bold-modern", label: "Bold", hint: "Big type, strong color",
-    preview: { kind: "style", bg: "#0b0b0f", fg: "#ffffff", accent: "#f43f5e", radius: "6px" } },
-  { id: "dark-premium", label: "Dark & premium", hint: "Luxury, understated",
-    preview: { kind: "style", bg: "#0a0a0a", fg: "#e5e5e5", accent: "#c9a961", radius: "8px" } },
-  { id: "playful", label: "Playful", hint: "Rounded, colorful, fun",
-    preview: { kind: "style", bg: "#fff7ed", fg: "#1f2937", accent: "#8b5cf6", radius: "22px" } },
+export type ImageryStrategy =
+  | "generate"
+  | "placeholder"
+  | "user_upload"
+  | "minimal"
+  | "ai_choice";
+
+export const STYLE_DIRECTIONS: ClarificationChoice[] = [
+  {
+    id: "minimal",
+    label: "Minimal",
+    hint: "Quiet, lots of space",
+    recommended: true,
+    preview: { kind: "style", bg: "#ffffff", fg: "#111111", accent: "#2563eb", radius: "6px" },
+  },
+  {
+    id: "modern",
+    label: "Modern",
+    hint: "Clean product feel",
+    preview: { kind: "style", bg: "#f8fafc", fg: "#0f172a", accent: "#0ea5e9", radius: "10px" },
+  },
+  {
+    id: "bold",
+    label: "Bold",
+    hint: "Strong type and contrast",
+    preview: { kind: "style", bg: "#0b0b0f", fg: "#ffffff", accent: "#f43f5e", radius: "4px" },
+  },
+  {
+    id: "premium",
+    label: "Premium",
+    hint: "Restrained luxury",
+    preview: { kind: "style", bg: "#0a0a0a", fg: "#e5e5e5", accent: "#c9a961", radius: "8px" },
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    hint: "Type-led, magazine",
+    preview: { kind: "style", bg: "#faf9f6", fg: "#111111", accent: "#b91c1c", radius: "2px", font: "serif" },
+  },
+  {
+    id: "playful",
+    label: "Playful",
+    hint: "Friendly and colorful",
+    preview: { kind: "style", bg: "#fff7ed", fg: "#1f2937", accent: "#8b5cf6", radius: "18px" },
+  },
+  {
+    id: "technical",
+    label: "Technical",
+    hint: "Precise, engineering",
+    preview: { kind: "style", bg: "#0b1120", fg: "#e2e8f0", accent: "#22d3ee", radius: "4px" },
+  },
 ];
 
+/** Alias for older imports. */
+export const VISUAL_DIRECTIONS = STYLE_DIRECTIONS;
+
+export const COLOR_CHOICES: ClarificationChoice[] = [
+  { id: "light", label: "Light", hint: "Bright backgrounds", recommended: true },
+  { id: "dark", label: "Dark", hint: "Dark backgrounds" },
+  { id: "custom", label: "Enter brand colors", hint: "Hex or “black, white, cyan”" },
+];
+
+export const IMAGERY_CHOICES: ClarificationChoice[] = [
+  {
+    id: "generate",
+    label: "Generate imagery",
+    hint: "Candor creates fitting visuals",
+    recommended: true,
+  },
+  {
+    id: "placeholder",
+    label: "Polished placeholders",
+    hint: "Replace them later",
+  },
+  {
+    id: "user_upload",
+    label: "I’ll provide images",
+    hint: "Use placeholders until you upload",
+  },
+  {
+    id: "minimal",
+    label: "Minimal / no imagery",
+    hint: "Typography and color first",
+  },
+];
+
+/** Kept for legacy brief mapping / older UI widgets. */
 export const PALETTE_PRESETS: ClarificationChoice[] = [
-  { id: "ocean", label: "Ocean", recommended: true,
-    preview: { kind: "palette", primary: "#0f4c81", accent: "#38bdf8", background: "#ffffff", foreground: "#0f172a", mode: "light" } },
-  { id: "forest", label: "Forest",
-    preview: { kind: "palette", primary: "#1f5f3f", accent: "#a3e635", background: "#f7faf7", foreground: "#122117", mode: "light" } },
-  { id: "sunset", label: "Sunset",
-    preview: { kind: "palette", primary: "#c2410c", accent: "#fbbf24", background: "#fffaf5", foreground: "#2a1a10", mode: "light" } },
-  { id: "plum", label: "Plum",
-    preview: { kind: "palette", primary: "#5b21b6", accent: "#f472b6", background: "#fcfaff", foreground: "#1e1b2e", mode: "light" } },
-  { id: "slate", label: "Slate",
-    preview: { kind: "palette", primary: "#111827", accent: "#6366f1", background: "#ffffff", foreground: "#111827", mode: "light" } },
-  { id: "midnight", label: "Midnight",
-    preview: { kind: "palette", primary: "#e2e8f0", accent: "#22d3ee", background: "#0b1120", foreground: "#e2e8f0", mode: "dark" } },
-  { id: "noir-gold", label: "Noir & gold",
-    preview: { kind: "palette", primary: "#f5f5f4", accent: "#d4af37", background: "#0a0a0a", foreground: "#f5f5f4", mode: "dark" } },
-  { id: "sand", label: "Sand",
-    preview: { kind: "palette", primary: "#7c5e3c", accent: "#0f766e", background: "#f8f3ea", foreground: "#2b2118", mode: "light" } },
+  {
+    id: "ocean",
+    label: "Ocean",
+    recommended: true,
+    preview: {
+      kind: "palette",
+      primary: "#0f4c81",
+      accent: "#38bdf8",
+      background: "#ffffff",
+      foreground: "#0f172a",
+      mode: "light",
+    },
+  },
+  {
+    id: "midnight",
+    label: "Midnight",
+    preview: {
+      kind: "palette",
+      primary: "#e2e8f0",
+      accent: "#22d3ee",
+      background: "#0b1120",
+      foreground: "#e2e8f0",
+      mode: "dark",
+    },
+  },
+  {
+    id: "slate",
+    label: "Slate",
+    preview: {
+      kind: "palette",
+      primary: "#111827",
+      accent: "#6366f1",
+      background: "#ffffff",
+      foreground: "#111827",
+      mode: "light",
+    },
+  },
 ];
 
 export const TYPOGRAPHY_PRESETS: ClarificationChoice[] = [
-  { id: "modern-sans", label: "Modern sans", hint: "Inter + Inter", recommended: true,
-    preview: { kind: "type", display: "Inter, ui-sans-serif, system-ui, sans-serif", body: "Inter, ui-sans-serif, system-ui, sans-serif" } },
-  { id: "geometric", label: "Geometric", hint: "Manrope + DM Sans",
-    preview: { kind: "type", display: "Manrope, Avenir, ui-sans-serif, sans-serif", body: "'DM Sans', ui-sans-serif, sans-serif" } },
-  { id: "classic-serif", label: "Classic serif", hint: "Playfair Display + Source Sans",
-    preview: { kind: "type", display: "'Playfair Display', Georgia, serif", body: "'Source Sans 3', ui-sans-serif, sans-serif" } },
-  { id: "editorial-serif", label: "Editorial", hint: "Fraunces + Inter",
-    preview: { kind: "type", display: "Fraunces, 'Iowan Old Style', Georgia, serif", body: "Inter, ui-sans-serif, sans-serif" } },
-  { id: "humanist", label: "Humanist", hint: "Nunito + Nunito Sans",
-    preview: { kind: "type", display: "Nunito, 'Trebuchet MS', sans-serif", body: "'Nunito Sans', ui-sans-serif, sans-serif" } },
-  { id: "mono-accent", label: "Technical", hint: "Space Grotesk + JetBrains Mono accents",
-    preview: { kind: "type", display: "'Space Grotesk', ui-sans-serif, sans-serif", body: "Inter, ui-sans-serif, sans-serif", sample: "Ship faster_" } },
+  {
+    id: "modern-sans",
+    label: "Modern sans",
+    recommended: true,
+    preview: {
+      kind: "type",
+      display: "Inter, ui-sans-serif, system-ui, sans-serif",
+      body: "Inter, ui-sans-serif, system-ui, sans-serif",
+    },
+  },
+  {
+    id: "mono-accent",
+    label: "Technical",
+    preview: {
+      kind: "type",
+      display: "'Space Grotesk', ui-sans-serif, sans-serif",
+      body: "Inter, ui-sans-serif, sans-serif",
+      sample: "Ship faster_",
+    },
+  },
 ];
 
 export const COMPONENT_STYLES: ClarificationChoice[] = [
-  { id: "soft", label: "Soft", hint: "Rounded, gentle shadows", recommended: true,
-    preview: { kind: "component", radius: "14px", shadow: "0 8px 24px rgba(0,0,0,.08)", border: "transparent", density: "regular", button: "rounded" } },
-  { id: "pill", label: "Pill", hint: "Rounded cards, pill buttons",
-    preview: { kind: "component", radius: "20px", shadow: "0 6px 20px rgba(0,0,0,.06)", border: "transparent", density: "airy", button: "pill" } },
-  { id: "sharp", label: "Sharp", hint: "Square corners, flat",
-    preview: { kind: "component", radius: "2px", shadow: "none", border: "currentColor", density: "compact", button: "square" } },
-  { id: "outlined", label: "Outlined", hint: "Thin borders, no shadow",
-    preview: { kind: "component", radius: "8px", shadow: "none", border: "rgba(0,0,0,.18)", density: "regular", button: "rounded" } },
-  { id: "elevated", label: "Elevated", hint: "Layered, deeper shadows",
-    preview: { kind: "component", radius: "12px", shadow: "0 16px 40px rgba(0,0,0,.16)", border: "transparent", density: "airy", button: "rounded" } },
+  {
+    id: "soft",
+    label: "Soft",
+    recommended: true,
+    preview: {
+      kind: "component",
+      radius: "14px",
+      shadow: "0 8px 24px rgba(0,0,0,.08)",
+      border: "transparent",
+      density: "regular",
+      button: "rounded",
+    },
+  },
 ];
 
 export const LAYOUT_DIRECTIONS: ClarificationChoice[] = [
-  { id: "centered", label: "Centered", hint: "Classic hero, centered sections", recommended: true, preview: { kind: "layout", arrangement: "centered" } },
-  { id: "left", label: "Left-aligned", hint: "Editorial, text-first", preview: { kind: "layout", arrangement: "left" } },
-  { id: "split", label: "Split hero", hint: "Copy left, image right", preview: { kind: "layout", arrangement: "split" } },
-  { id: "bleed", label: "Full-bleed imagery", hint: "Big photos, overlays", preview: { kind: "layout", arrangement: "bleed" } },
-  { id: "grid", label: "Grid-heavy", hint: "Cards and tiles", preview: { kind: "layout", arrangement: "grid" } },
+  {
+    id: "centered",
+    label: "Centered",
+    recommended: true,
+    preview: { kind: "layout", arrangement: "centered" },
+  },
 ];
 
 export const CTA_CHOICES: ClarificationChoice[] = [
-  { id: "book", label: "Book a call", preview: { kind: "icon", name: "calendar" }, recommended: true },
-  { id: "quote", label: "Get a quote", preview: { kind: "icon", name: "file-text" } },
-  { id: "buy", label: "Buy / Order", preview: { kind: "icon", name: "shopping-bag" } },
-  { id: "signup", label: "Sign up", preview: { kind: "icon", name: "user-plus" } },
-  { id: "contact", label: "Contact us", preview: { kind: "icon", name: "mail" } },
-  { id: "learn", label: "Learn more", preview: { kind: "icon", name: "arrow-right" } },
+  { id: "contact", label: "Contact us", recommended: true },
+  { id: "book", label: "Book a call" },
+  { id: "quote", label: "Get a quote" },
 ];
 
 export const PAGE_CHOICES: ClarificationChoice[] = [
@@ -131,139 +247,74 @@ export const PAGE_CHOICES: ClarificationChoice[] = [
   { id: "about", label: "About", recommended: true },
   { id: "services", label: "Services", recommended: true },
   { id: "contact", label: "Contact", recommended: true },
-  { id: "pricing", label: "Pricing" },
-  { id: "faq", label: "FAQ" },
-  { id: "gallery", label: "Gallery / Work" },
-  { id: "team", label: "Team" },
-  { id: "blog", label: "Blog" },
-  { id: "one_page", label: "One page only", hint: "Everything on the home page" },
 ];
 
 export const FEATURE_CHOICES: ClarificationChoice[] = [
   { id: "contact_form", label: "Contact form", recommended: true },
-  { id: "testimonials", label: "Testimonials", recommended: true },
-  { id: "faq", label: "FAQ" },
-  { id: "booking", label: "Booking / scheduling" },
-  { id: "pricing_table", label: "Pricing table" },
-  { id: "gallery", label: "Photo gallery" },
-  { id: "newsletter", label: "Newsletter signup" },
-  { id: "map", label: "Map & locations" },
-  { id: "social", label: "Social links" },
-  { id: "blog", label: "Blog / news" },
+  { id: "testimonials", label: "Testimonials" },
 ];
 
 export const WEBSITE_SETUP_STEPS: ClarificationQuestion[] = [
   {
     id: "purpose",
     type: "textarea",
-    label: "What is this site for?",
-    description: "A sentence or two about the business and what the site should achieve.",
-    placeholder: "We’re a family dental clinic in Austin. The site should get new patients to book.",
+    label: "What is the website for?",
+    description: "Aerospace company, landscaping business, SaaS product, portfolio…",
+    placeholder: "Reusable launch systems for satellite operators and research teams.",
     required: false,
-    aiChoice: false,
+    aiChoice: true,
   },
   {
-    id: "primary_cta",
+    id: "goal",
+    type: "textarea",
+    label: "What should it say or accomplish?",
+    description: "What you do, who it’s for, and the main action you want visitors to take.",
+    placeholder:
+      "Make us look serious and technically capable, and drive qualified contact inquiries.",
+    required: false,
+    aiChoice: true,
+  },
+  {
+    id: "style",
     type: "visual_choice",
-    label: "What should visitors do first?",
-    description: "This becomes the main button across the site.",
-    choices: CTA_CHOICES,
+    label: "Style",
+    description: "A directional preference — not a rigid template.",
+    choices: STYLE_DIRECTIONS,
     required: false,
     aiChoice: true,
     allowCustom: true,
   },
   {
-    id: "visual_direction",
-    type: "visual_choice",
-    label: "Pick a visual direction",
-    choices: VISUAL_DIRECTIONS,
-    required: false,
-    aiChoice: true,
-  },
-  {
-    id: "palette",
+    id: "colors",
     type: "palette",
     label: "Colors",
-    description: "Tap a palette, switch light/dark, or paste your brand hex codes.",
-    choices: PALETTE_PRESETS,
+    description: "Let Candor choose, pick light/dark, or enter brand colors (hex or names).",
+    choices: COLOR_CHOICES,
     required: false,
     aiChoice: true,
     allowCustom: true,
   },
   {
-    id: "typography",
-    type: "type_sample",
-    label: "Typography",
-    choices: TYPOGRAPHY_PRESETS,
-    required: false,
-    aiChoice: true,
-  },
-  {
-    id: "component_style",
+    id: "imagery",
     type: "visual_choice",
-    label: "Component style",
-    description: "Corners, shadows and buttons — shown on a sample card.",
-    choices: COMPONENT_STYLES,
+    label: "How should Candor handle imagery?",
+    choices: IMAGERY_CHOICES,
     required: false,
     aiChoice: true,
   },
   {
-    id: "layout_direction",
-    type: "visual_choice",
-    label: "Layout",
-    choices: LAYOUT_DIRECTIONS,
-    required: false,
-    aiChoice: true,
-  },
-  {
-    id: "pages",
-    type: "multi_choice",
-    label: "Pages",
-    description: "We’ve pre-selected a sensible set. Tap to change.",
-    choices: PAGE_CHOICES,
-    required: false,
-    aiChoice: true,
-    defaultValue: PAGE_CHOICES.filter((c) => c.recommended).map((c) => c.id),
-  },
-  {
-    id: "features",
-    type: "multi_choice",
-    label: "Features",
-    choices: FEATURE_CHOICES,
-    required: false,
-    aiChoice: true,
-    defaultValue: FEATURE_CHOICES.filter((c) => c.recommended).map((c) => c.id),
-  },
-  {
-    id: "inspiration_urls",
+    id: "reference_url",
     type: "urls",
-    label: "Any sites you like?",
-    description: "Optional. We study structure, hierarchy and navigation — never copy content.",
+    label: "Have a website whose style you like?",
+    description: "Optional. We borrow structure and feel — never copy content.",
     placeholder: "https://example.com",
     required: false,
-    max: 3,
-  },
-  {
-    id: "identity",
-    type: "upload",
-    label: "Name, logo & social preview",
-    description: "Upload a logo (we’ll make the favicon) or let us generate one. Social title/description show when the link is shared.",
-    required: false,
-    aiChoice: true,
-    uploadFields: ["business_name", "tagline", "logo", "favicon", "og_title", "og_description"],
-  },
-  {
-    id: "anything_else",
-    type: "textarea",
-    label: "Anything else?",
-    description: "Tone of voice, must-haves, things to avoid, opening hours, phone number…",
-    placeholder: "Friendly but professional. Mention we’re open Saturdays.",
-    required: false,
+    max: 1,
   },
 ];
 
 export function isAiChoice(v: unknown): boolean {
-  return v === AI_CHOICE_VALUE;
+  return v === AI_CHOICE_VALUE || v === "ai" || v === "ai_choice";
 }
 
 export function choiceLabel(list: ClarificationChoice[], id: unknown): string | null {
@@ -272,22 +323,33 @@ export function choiceLabel(list: ClarificationChoice[], id: unknown): string | 
 }
 
 function paletteFromAnswer(v: unknown): PaletteAnswer | null {
-  if (!v || typeof v !== "object") return typeof v === "string" && v !== AI_CHOICE_VALUE ? { preset: v } : null;
+  if (!v || typeof v !== "object") {
+    if (typeof v === "string" && !isAiChoice(v)) {
+      if (v === "light" || v === "dark") return { mode: v };
+      if (v === "custom") return { custom: "" };
+      return { preset: v, custom: v };
+    }
+    return null;
+  }
   return v as PaletteAnswer;
 }
 
-/** Human-readable palette description for prompts/spec. */
 export function describePalette(v: unknown): string | null {
   const p = paletteFromAnswer(v);
   if (!p) return null;
+  if (p.custom?.trim()) return p.custom.trim();
   const preset = PALETTE_PRESETS.find((c) => c.id === p.preset);
   const parts: string[] = [];
   if (preset?.preview?.kind === "palette") {
     const pv = preset.preview;
-    parts.push(`${preset.label}: primary ${pv.primary}, accent ${pv.accent}, background ${pv.background}, foreground ${pv.foreground}`);
+    parts.push(
+      `${preset.label}: primary ${pv.primary}, accent ${pv.accent}, background ${pv.background}, foreground ${pv.foreground}`,
+    );
   }
   if (p.primary) parts.push(`primary ${p.primary}`);
   if (p.accent) parts.push(`accent ${p.accent}`);
+  if (p.background) parts.push(`background ${p.background}`);
+  if (p.foreground) parts.push(`foreground ${p.foreground}`);
   if (p.mode && p.mode !== "auto") parts.push(`${p.mode} mode`);
   return parts.length ? parts.join("; ") : null;
 }
@@ -295,8 +357,8 @@ export function describePalette(v: unknown): string | null {
 export function paletteTokens(v: unknown): Record<string, string> | null {
   const p = paletteFromAnswer(v);
   if (!p) return null;
-  const preset = PALETTE_PRESETS.find((c) => c.id === p.preset);
   const out: Record<string, string> = {};
+  const preset = PALETTE_PRESETS.find((c) => c.id === p.preset);
   if (preset?.preview?.kind === "palette") {
     out.primary = preset.preview.primary;
     out.accent = preset.preview.accent;
@@ -304,28 +366,45 @@ export function paletteTokens(v: unknown): Record<string, string> | null {
     out.foreground = preset.preview.foreground;
     out.mode = preset.preview.mode;
   }
+  if (p.mode === "light") {
+    out.mode = "light";
+    out.background = out.background || "#ffffff";
+    out.foreground = out.foreground || "#0f172a";
+  }
+  if (p.mode === "dark") {
+    out.mode = "dark";
+    out.background = out.background || "#0b1120";
+    out.foreground = out.foreground || "#e2e8f0";
+  }
   if (p.primary) out.primary = p.primary;
   if (p.accent) out.accent = p.accent;
-  if (p.mode && p.mode !== "auto") out.mode = p.mode;
+  if (p.background) out.background = p.background;
+  if (p.foreground) out.foreground = p.foreground;
+  if (p.custom?.trim()) out.custom = p.custom.trim();
   return Object.keys(out).length ? out : null;
 }
 
 export function typographyTokens(v: unknown): { display?: string; body?: string } | null {
   const preset = TYPOGRAPHY_PRESETS.find((c) => c.id === v);
   if (!preset || preset.preview?.kind !== "type") return null;
-  return { display: preset.preview.display.split(",")[0].replace(/'/g, ""), body: preset.preview.body.split(",")[0].replace(/'/g, "") };
+  return {
+    display: preset.preview.display.split(",")[0].replace(/'/g, ""),
+    body: preset.preview.body.split(",")[0].replace(/'/g, ""),
+  };
 }
 
-export function componentTokens(v: unknown): { radius?: string; shadow?: string; density?: string; buttons?: string; cards?: string } | null {
+export function componentTokens(
+  v: unknown,
+): { radius?: string; shadow?: string; density?: string; buttons?: string; cards?: string } | null {
   const preset = COMPONENT_STYLES.find((c) => c.id === v);
   if (!preset || preset.preview?.kind !== "component") return null;
   const p = preset.preview;
   return {
     radius: p.radius,
-    shadow: p.shadow === "none" ? "none" : p.shadow.includes("40px") ? "deep" : "soft",
+    shadow: p.shadow === "none" ? "none" : "soft",
     density: p.density,
     buttons: p.button,
-    cards: p.border !== "transparent" ? "outlined" : p.shadow === "none" ? "flat" : "shadowed",
+    cards: "shadowed",
   };
 }
 
@@ -343,43 +422,113 @@ export function urlsFromAnswer(v: unknown): string[] {
     .slice(0, 3);
 }
 
+export function imageryStrategyFromAnswer(v: unknown): ImageryStrategy {
+  if (isAiChoice(v) || v == null || v === "") return "ai_choice";
+  const id = typeof v === "string" ? v : String((v as { id?: string }).id || "");
+  if (id === "generate" || id === "placeholder" || id === "user_upload" || id === "minimal") {
+    return id;
+  }
+  return "ai_choice";
+}
+
+/**
+ * Normalize any historical brief answers into the short onboarding shape.
+ * Old projects keep working; new builds only see the short keys.
+ */
+export function normalizeSetupAnswersToShort(
+  raw: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...raw };
+
+  // purpose: keep; also fold legacy business_goal
+  if (!answerFilled(out.purpose) && typeof raw.business_goal === "string") {
+    out.purpose = raw.business_goal;
+  }
+
+  // goal: new field; fold audience_cta / anything_else / primary_cta
+  if (!answerFilled(out.goal)) {
+    const parts = [
+      typeof raw.goal === "string" ? raw.goal : "",
+      typeof raw.audience_cta === "string" ? raw.audience_cta : "",
+      typeof raw.anything_else === "string" ? raw.anything_else : "",
+      typeof raw.primary_cta === "string" && !isAiChoice(raw.primary_cta)
+        ? `Primary CTA: ${choiceLabel(CTA_CHOICES, raw.primary_cta) ?? raw.primary_cta}`
+        : "",
+    ].filter((s) => s.trim());
+    if (parts.length) out.goal = parts.join("\n").slice(0, 1200);
+  }
+
+  // style ← visual_direction / visual_style
+  if (!answerFilled(out.style)) {
+    if (typeof raw.visual_direction === "string") {
+      out.style = mapLegacyStyle(raw.visual_direction);
+    } else if (typeof raw.visual_style === "string") {
+      out.style = mapLegacyStyle(raw.visual_style);
+    }
+  }
+
+  // colors ← palette / brand_colors
+  if (!answerFilled(out.colors)) {
+    if (raw.palette !== undefined) out.colors = raw.palette;
+    else if (typeof raw.brand_colors === "string") {
+      out.colors = { custom: raw.brand_colors, mode: "auto" };
+    }
+  }
+
+  // imagery default
+  if (!answerFilled(out.imagery)) {
+    out.imagery = AI_CHOICE_VALUE;
+  }
+
+  // reference_url ← inspiration_urls[0]
+  if (!answerFilled(out.reference_url)) {
+    const urls = urlsFromAnswer(raw.inspiration_urls ?? raw.reference_url);
+    if (urls[0]) out.reference_url = urls[0];
+  }
+
+  return out;
+}
+
+function mapLegacyStyle(v: string): string {
+  const s = v.toLowerCase();
+  if (/minimal|clean/.test(s)) return "minimal";
+  if (/bold/.test(s)) return "bold";
+  if (/premium|dark.?premium|luxury|noir/.test(s)) return "premium";
+  if (/editorial|magazine/.test(s)) return "editorial";
+  if (/playful|fun|warm/.test(s)) return "playful";
+  if (/tech|mono|saas|modern/.test(s)) return /tech|mono/.test(s) ? "technical" : "modern";
+  if (STYLE_DIRECTIONS.some((c) => c.id === v)) return v;
+  return v;
+}
+
+function answerFilled(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === "boolean") return true;
+  if (typeof value === "string") return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
 /**
  * Bridge to the legacy 8-key brief shape still read by older prompts/tools.
- * Produces plain, descriptive strings; AI-chosen steps read as such.
  */
 export function legacyAnswersFromSteps(a: Record<string, unknown>): Record<string, unknown> {
-  const ai = "Let Cander decide";
-  const identity = identityFromAnswer(a.identity);
-  const pages = Array.isArray(a.pages) ? a.pages.map(String) : [];
-  const depth = isAiChoice(a.pages)
+  const short = normalizeSetupAnswersToShort(a);
+  const ai = "Let Candor decide";
+  const style = isAiChoice(short.style)
     ? ai
-    : pages.includes("one_page")
-      ? "landing"
-      : pages.length <= 3
-        ? "small"
-        : "multi";
-  const cta = isAiChoice(a.primary_cta) ? ai : choiceLabel(CTA_CHOICES, a.primary_cta);
+    : choiceLabel(STYLE_DIRECTIONS, short.style) ?? String(short.style || ai);
+  const colors = isAiChoice(short.colors) ? ai : describePalette(short.colors) ?? ai;
+  const purpose = typeof short.purpose === "string" ? short.purpose : "";
+  const goal = typeof short.goal === "string" ? short.goal : "";
   return {
-    business_goal: [
-      identity?.business_name ? `${identity.business_name}${identity.tagline ? ` — ${identity.tagline}` : ""}.` : "",
-      typeof a.purpose === "string" ? a.purpose : "",
-    ]
-      .filter(Boolean)
-      .join(" ") || ai,
-    audience_cta: cta ? `Primary CTA: ${cta}` : ai,
-    site_depth: depth,
-    visual_style: isAiChoice(a.visual_direction) ? ai : choiceLabel(VISUAL_DIRECTIONS, a.visual_direction) ?? ai,
-    brand_colors: isAiChoice(a.palette) ? ai : describePalette(a.palette) ?? ai,
-    layout_shape: [
-      isAiChoice(a.layout_direction) ? null : choiceLabel(LAYOUT_DIRECTIONS, a.layout_direction),
-      isAiChoice(a.component_style) ? null : choiceLabel(COMPONENT_STYLES, a.component_style),
-      isAiChoice(a.typography) ? null : choiceLabel(TYPOGRAPHY_PRESETS, a.typography),
-    ].filter(Boolean) as string[],
-    copy_tone: typeof a.anything_else === "string" && a.anything_else.trim() ? a.anything_else : ai,
-    sections_features: isAiChoice(a.features)
-      ? ai
-      : Array.isArray(a.features)
-        ? a.features.map((f) => choiceLabel(FEATURE_CHOICES, f) ?? String(f))
-        : ai,
+    business_goal: [purpose, goal].filter(Boolean).join(" — ") || ai,
+    audience_cta: goal || ai,
+    site_depth: "multi",
+    visual_style: style,
+    brand_colors: colors,
+    layout_shape: [style],
+    copy_tone: goal || ai,
+    sections_features: ai,
   };
 }

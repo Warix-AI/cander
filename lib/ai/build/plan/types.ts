@@ -73,12 +73,49 @@ export type ProjectSpec = {
     adaptationInstructions?: string;
     /** Repo-relative path when source was materialized for the coder. */
     localPath?: string;
+    imported?: boolean;
+    usedInRender?: boolean;
   }>;
   /** Imagery direction for heroes/sections (subjects, mood) — not raw URLs. */
   imagery?: {
     heroSubject?: string;
     sectionSubjects?: string[];
     avoid?: string[];
+    strategy?: string;
+    plan?: Array<{
+      role: string;
+      strategy: string;
+      description: string;
+      assetPath?: string;
+    }>;
+  };
+  /**
+   * Canonical design brief — authoritative design direction derived from
+   * onboarding (not raw fragmented preferences).
+   */
+  designBrief?: {
+    purpose?: string;
+    audience?: string;
+    primaryGoal?: string;
+    contentDirection?: string;
+    styleDirection?: string;
+    colorDirection?: string;
+    imageryStrategy?: string;
+    referenceUrl?: string | null;
+    designTokens?: Record<string, string>;
+    imagery?: Array<{
+      role: string;
+      strategy: string;
+      description: string;
+      assetPath?: string;
+    }>;
+    avoid?: string[];
+    builderFreedom?: string[];
+    selectedComponents?: Array<Record<string, unknown>>;
+    twentyFirstStats?: Record<string, unknown>;
+    referenceTraits?: string[];
+    strengths?: Record<string, string>;
+    updatedAt?: string;
   };
   /** App: ordered primary user flows the create job should implement. */
   primaryFlows?: Array<{ id: string; title: string; steps?: string[] }>;

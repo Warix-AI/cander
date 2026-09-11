@@ -36,7 +36,7 @@ export function openWebsiteSetupClarification(opts: {
     threadId: opts.threadId,
     title: "Set up your website",
     description:
-      "Tap through a few quick choices — skip anything, or let Cander choose. Then we build your draft.",
+      "A few quick questions — under a minute. Skip anything, or tap Let Candor decide.",
     questions: WEBSITE_SETUP_QUESTIONS,
     resumeTool: WEBSITE_SETUP_RESUME_TOOL,
     resumeArguments: {

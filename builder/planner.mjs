@@ -75,8 +75,9 @@ export async function runPlanningPhase(opts) {
   opts.log.emit(
     "progress",
     isApp
-      ? "Reading your request and planning screens, data model, and brand…"
-      : "Reading your answers and planning pages, sections, and brand…",
+      ? "Understanding your product…"
+      : "Understanding your website…",
+    { phase: "planning" },
   );
 
   const briefText = opts.projectSpec
@@ -301,9 +302,9 @@ function extractStructure(html) {
 }
 
 /**
- * Spec-driven 21st.dev research. When `fetchComponents` is on, actually GET
- * promising hits and materialize source under components/twenty-first/ so the
- * coder adapts real code — search alone is not enough.
+ * Spec-driven 21st.dev research. When `fetchComponents` is on, search then
+ * fetch ~2–4 promising candidates per key purpose, compare, select best,
+ * and materialize under components/twenty-first/. Search alone is not enough.
  * Failures return null / empty selected; never throws (build continues natively).
  *
  * @returns {Promise<null | { markdown: string, selected: Array<Record<string, unknown>>, stats: { searches: number, fetches: number, selected: number } }>}
@@ -311,18 +312,23 @@ function extractStructure(html) {
 async function componentAgent(opts, plan) {
   if (!opts.twentyFirst) return null;
   const spec = opts.projectSpec || {};
-  const direction = String(spec.visual?.direction || "").toLowerCase();
-  const mood = /dark|premium|luxury/.test(direction)
-    ? "dark premium"
-    : /bold/.test(direction)
-      ? "bold modern"
-      : /warm|friendly/.test(direction)
-        ? "warm friendly"
-        : /editorial/.test(direction)
-          ? "editorial"
-          : /playful/.test(direction)
-            ? "playful colorful"
-            : "clean minimal";
+  const brief = spec.designBrief || {};
+  const direction = String(
+    brief.styleDirection || spec.visual?.direction || "",
+  ).toLowerCase();
+  const mood = /technical|aerospace|engineering/.test(direction)
+    ? "technical precise"
+    : /dark|premium|luxury/.test(direction)
+      ? "dark premium"
+      : /bold/.test(direction)
+        ? "bold modern"
+        : /warm|friendly|playful/.test(direction)
+          ? "playful colorful"
+          : /editorial/.test(direction)
+            ? "editorial magazine"
+            : /minimal/.test(direction)
+              ? "minimal clean"
+              : "modern clean";
   const features = (Array.isArray(spec.features) ? spec.features : []).map((f) => String(f).toLowerCase());
   const pages = (Array.isArray(spec.pages) ? spec.pages : []).map((p) => String(p.path || "").toLowerCase());
   const layout = String(spec.visual?.layout || "").toLowerCase();
@@ -344,12 +350,12 @@ async function componentAgent(opts, plan) {
             ? `${mood} split hero with image`
             : /bleed/.test(layout)
               ? `${mood} full-width hero background image`
-              : `${mood} hero section`,
+              : `${mood} marketing hero section`,
           purpose: "hero",
         },
-        { query: `${mood} features grid`, purpose: "features" },
+        { query: `${mood} features section`, purpose: "features" },
         { query: `${mood} call to action band`, purpose: "cta" },
-        { query: `${mood} footer`, purpose: "footer" },
+        { query: `${mood} site footer`, purpose: "footer" },
       ];
   if (!isApp) {
     if (features.some((f) => /testimonial/.test(f))) catalog.push({ query: `${mood} testimonials`, purpose: "testimonials" });
@@ -369,16 +375,16 @@ async function componentAgent(opts, plan) {
   const queries = uniqBy([...catalog, ...planQueries], (x) => x.query).slice(0, opts.fetchComponents ? 8 : 10);
   if (!queries.length) return null;
 
-  opts.log.emit("progress", "Gathering design ideas…");
+  opts.log.emit("progress", "Finding design components…", { phase: "twenty_first" });
   const lines = [];
-  /** @type {Array<{ purpose: string, hit: { id: string, name?: string, category?: string } }>} */
+  /** @type {Array<{ purpose: string, hit: { id: string, name?: string, category?: string, description?: string } }>} */
   const candidates = [];
   let searches = 0;
   for (const q of queries) {
     if (Date.now() > opts.deadlineMs - 3 * 60_000) break;
     let hits = [];
     try {
-      hits = await opts.twentyFirst.search(q.query, 3);
+      hits = await opts.twentyFirst.search(q.query, 4);
       searches += 1;
     } catch (err) {
       opts.log.emit("log", `21st search failed (${q.purpose}): ${err?.message || err}`);
@@ -398,16 +404,42 @@ async function componentAgent(opts, plan) {
   let fetches = 0;
   const fetchEnabled = opts.fetchComponents !== false;
   if (fetchEnabled) {
-    opts.log.emit("progress", "Pulling in design patterns…");
+    opts.log.emit("progress", "Reviewing component options…", {
+      phase: "twenty_first",
+      detail: `Reviewing ${Math.min(candidates.length, 12)} design component options`,
+    });
+    /** @type {Map<string, Array<{ purpose: string, hit: any }>>} */
     const byPurpose = new Map();
     for (const c of candidates) {
-      if (!byPurpose.has(c.purpose)) byPurpose.set(c.purpose, c);
+      const list = byPurpose.get(c.purpose) || [];
+      list.push(c);
+      byPurpose.set(c.purpose, list);
     }
-    const picks = [...byPurpose.values()].slice(0, 6);
+    // Prefer core site purposes; fetch 2–4 candidates across purposes.
+    const purposeOrder = ["hero", "nav", "features", "cta", "footer", "contact", "faq", "testimonials", "pricing", "section", "shell", "table", "empty", "form"];
+    const orderedPurposes = [
+      ...purposeOrder.filter((p) => byPurpose.has(p)),
+      ...[...byPurpose.keys()].filter((p) => !purposeOrder.includes(p)),
+    ];
+    /** @type {Array<{ purpose: string, hit: any }>} */
+    const toFetch = [];
+    for (const purpose of orderedPurposes) {
+      const list = byPurpose.get(purpose) || [];
+      // Take top 2 hits per purpose so we can compare.
+      for (const item of list.slice(0, 2)) {
+        if (toFetch.length >= 8) break;
+        if (toFetch.some((t) => t.hit.id === item.hit.id)) continue;
+        toFetch.push(item);
+      }
+      if (toFetch.length >= 8) break;
+    }
+
     const { mkdirSync, writeFileSync } = await import("node:fs");
     const { join } = await import("node:path");
     const repoDir = opts.repoDir || null;
-    for (const pick of picks) {
+    /** @type {Array<{ pick: any, component: any, score: number }>} */
+    const fetched = [];
+    for (const pick of toFetch) {
       if (Date.now() > opts.deadlineMs - 2 * 60_000) break;
       let component = null;
       try {
@@ -418,6 +450,22 @@ async function componentAgent(opts, plan) {
         continue;
       }
       if (!component?.code) continue;
+      const score = scoreComponentCandidate(component, pick, mood, direction);
+      fetched.push({ pick, component, score });
+    }
+
+    // Select best per purpose (and keep overall top if sparse).
+    const bestByPurpose = new Map();
+    for (const f of fetched.sort((a, b) => b.score - a.score)) {
+      if (!bestByPurpose.has(f.pick.purpose)) bestByPurpose.set(f.pick.purpose, f);
+    }
+    const winners = [...bestByPurpose.values()].slice(0, 6);
+    opts.log.emit("progress", `Reviewing ${fetched.length} design component options…`, {
+      phase: "twenty_first",
+      detail: `Selected ${winners.length} of ${fetched.length} fetched`,
+    });
+
+    for (const { pick, component, score } of winners) {
       const slug = String(pick.hit.id)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
@@ -427,7 +475,7 @@ async function componentAgent(opts, plan) {
       if (repoDir) {
         try {
           mkdirSync(join(repoDir, "components/twenty-first"), { recursive: true });
-          const header = `/**\n * Retrieved from 21st.dev for adaptation — do not ship verbatim.\n * id=${component.id} name=${component.name || pick.hit.name || ""}\n * purpose=${pick.purpose}\n */\n`;
+          const header = `/**\n * Retrieved from 21st.dev for adaptation — do not ship verbatim.\n * id=${component.id} name=${component.name || pick.hit.name || ""}\n * purpose=${pick.purpose} score=${score}\n */\n`;
           writeFileSync(join(repoDir, localPath), `${header}${component.code}\n`, "utf8");
         } catch (err) {
           opts.log.emit("log", `21st write failed: ${err?.message || err}`);
@@ -438,10 +486,10 @@ async function componentAgent(opts, plan) {
         componentId: String(component.id || pick.hit.id),
         name: String(component.name || pick.hit.name || pick.hit.id),
         purpose: pick.purpose,
-        reason: `Best match for ${pick.purpose} under "${mood}" direction`,
+        reason: `Best of ${byPurpose.get(pick.purpose)?.length || 1} candidates for ${pick.purpose} (${mood})`,
         localPath: repoDir ? localPath : undefined,
         adaptationInstructions:
-          "Rewrite into the project design system: CSS variables from app/globals.css, brand fonts, radius/shadow/density from the spec, project copy. Replace hard-coded colors/fonts. Fix imports to components/ui/* and lib/utils cn. Install only packages you use. Keep structure/motion ideas; drop unavailable deps.",
+          "Normalize to THIS project's design system before use: CSS variables from app/globals.css, brand fonts, radius/shadow/spacing/container width from the design brief, project copy and imagery. Replace hard-coded colors/fonts. Fix imports to components/ui/* and lib/utils cn. Install only packages you use. Keep structure/motion ideas; drop unavailable deps. The final site must look like one designer created it — not a collage.",
       });
     }
   }
@@ -449,7 +497,7 @@ async function componentAgent(opts, plan) {
   lines.push(
     "",
     selected.length
-      ? `Fetched ${selected.length} component(s) into components/twenty-first/ — adapt those first.`
+      ? `Fetched and selected ${selected.length} component(s) into components/twenty-first/ after comparing candidates — adapt those first and actually import them into the live pages.`
       : "Adaptation rules: get_component(id) for the ones that fit, then rewrite into components/ using THIS project's tokens. Never paste a component verbatim.",
   );
 
@@ -458,6 +506,22 @@ async function componentAgent(opts, plan) {
     selected,
     stats: { searches, fetches, selected: selected.length },
   };
+}
+
+function scoreComponentCandidate(component, pick, mood, direction) {
+  const blob = `${component.name || ""} ${component.description || ""} ${pick.hit.name || ""} ${pick.hit.description || ""} ${pick.hit.category || ""}`.toLowerCase();
+  let score = 1;
+  if (blob.includes(pick.purpose)) score += 3;
+  for (const token of String(mood).split(/\s+/)) {
+    if (token.length > 2 && blob.includes(token)) score += 1;
+  }
+  for (const token of String(direction).split(/[^a-z0-9]+/)) {
+    if (token.length > 3 && blob.includes(token)) score += 1;
+  }
+  const codeLen = String(component.code || "").length;
+  if (codeLen > 400 && codeLen < 40_000) score += 2;
+  if (/purple|indigo gradient|glassmorphism/i.test(blob)) score -= 1;
+  return score;
 }
 
 function uniqBy(arr, keyFn) {
@@ -482,3 +546,4 @@ function truncateMiddle(s, max) {
   const tail = s.slice(-Math.floor(max * 0.2));
   return `${head}\n\n… (packet truncated) …\n\n${tail}`;
 }
+

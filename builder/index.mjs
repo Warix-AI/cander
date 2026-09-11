@@ -559,6 +559,92 @@ async function main() {
     }
   }
 
+  // Track whether selected 21st components were actually imported/used.
+  if (selectedComponents.length) {
+    try {
+      const { readFileSync: rf, readdirSync } = await import("node:fs");
+      const { join: j } = await import("node:path");
+      const walk = (dir, acc = []) => {
+        let ents = [];
+        try {
+          ents = readdirSync(dir, { withFileTypes: true });
+        } catch {
+          return acc;
+        }
+        for (const e of ents) {
+          const p = j(dir, e.name);
+          if (e.isDirectory() && e.name !== "node_modules" && e.name !== ".next" && e.name !== "twenty-first") {
+            walk(p, acc);
+          } else if (/\.(tsx?|jsx?)$/.test(e.name)) acc.push(p);
+        }
+        return acc;
+      };
+      const sources = walk(j(repoDir, "app")).concat(walk(j(repoDir, "components")));
+      const blob = sources
+        .map((p) => {
+          try {
+            return rf(p, "utf8");
+          } catch {
+            return "";
+          }
+        })
+        .join("\n");
+      let imported = 0;
+      let used = 0;
+      for (const c of selectedComponents) {
+        const local = String(c.localPath || "");
+        const base = local.split("/").pop()?.replace(/\.\w+$/, "") || "";
+        const hitImport =
+          (local && blob.includes(local.replace(/^components\//, "@/components/"))) ||
+          (base && new RegExp(`from\\s+["'][^"']*${base}["']`).test(blob)) ||
+          (local && blob.includes(local));
+        if (hitImport) {
+          imported += 1;
+          c.imported = true;
+        }
+        if (hitImport || (base && blob.includes(base))) {
+          used += 1;
+          c.usedInRender = Boolean(hitImport);
+        }
+      }
+      const ignored = imported === 0 && selectedComponents.length > 0;
+      if (ignored) {
+        log.emit("log", `21st: fetched ${selectedComponents.length} component(s) but none were imported into the app`);
+      } else {
+        log.emit("log", `21st usage: ${imported}/${selectedComponents.length} imported`);
+      }
+      log.emit("spec_update", "Recorded 21st component usage", {
+        patch: {
+          selectedComponents: selectedComponents.map((c) => ({
+            source: c.source || "21st",
+            componentId: c.componentId,
+            name: c.name,
+            purpose: c.purpose,
+            reason: c.reason,
+            localPath: c.localPath,
+            adaptationInstructions: c.adaptationInstructions,
+            imported: Boolean(c.imported),
+            usedInRender: Boolean(c.usedInRender),
+          })),
+          designBrief: {
+            twentyFirstStats: {
+              searchCount: metrics.twentyFirstSearches,
+              fetchCount: metrics.twentyFirstFetches,
+              selectedIds: selectedComponents.map((c) => c.componentId),
+              componentFilesWritten: selectedComponents.map((c) => c.localPath).filter(Boolean),
+              componentFilesImported: selectedComponents.filter((c) => c.imported).map((c) => c.localPath),
+              componentFilesUsedInRender: selectedComponents.filter((c) => c.usedInRender).map((c) => c.localPath),
+              ignoredByCoder: ignored,
+            },
+          },
+        },
+      });
+      void used;
+    } catch (err) {
+      log.emit("log", `21st usage audit skipped: ${err?.message || err}`);
+    }
+  }
+
   // Count writes AFTER repair so resumed verify→repair jobs that only touch
   // files in the repair pass still persist / hand off a partial draft.
   const realWrites = [...tools.writtenPaths].filter((p) => !p.startsWith(".cander/")).length;

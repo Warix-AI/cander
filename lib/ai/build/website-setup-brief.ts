@@ -1,5 +1,6 @@
 /**
- * Typed design brief for guided website setup (8 steps + confirm).
+ * Typed design brief for guided website setup (short steps + confirm).
+ * Older multi-step / 8-key briefs still normalize cleanly.
  */
 
 import type { ClarificationQuestion } from "@/lib/ai/clarification/schema";
@@ -8,6 +9,7 @@ import {
   WEBSITE_SETUP_STEPS,
   WEBSITE_SETUP_STEP_KEYS,
   legacyAnswersFromSteps,
+  normalizeSetupAnswersToShort,
   type IdentityAnswer,
   type PaletteAnswer,
 } from "@/lib/ai/build/website-setup-steps";
@@ -16,8 +18,14 @@ import { cleanBriefAnswers } from "@/lib/ai/build/plan/spec-memory";
 export type WebsiteSetupStatus = "setup" | "building" | "ready" | "failed";
 
 export type WebsiteSetupAnswers = {
-  // Tap-first steps (current). Values may be the AI_CHOICE_VALUE sentinel.
+  // Short tap-first steps (current). Values may be the AI_CHOICE_VALUE sentinel.
   purpose?: string;
+  goal?: string;
+  style?: string;
+  colors?: PaletteAnswer | string;
+  imagery?: string;
+  reference_url?: string | string[];
+  // Legacy 12-step keys (older projects).
   primary_cta?: string;
   visual_direction?: string;
   palette?: PaletteAnswer | string;
@@ -52,7 +60,7 @@ export type RetrievedComponentRef = {
 
 export type WebsiteSetupBrief = {
   status: WebsiteSetupStatus;
-  /** Completed answer count among the 8 setup questions (0–8). */
+  /** Completed answer count among current setup questions. */
   completedSteps: number;
   answers: WebsiteSetupAnswers;
   confirmedAt?: string;
@@ -170,23 +178,18 @@ function pickLegacy(a: Record<string, unknown>): Record<string, unknown> {
 }
 
 export function briefToPlanningPrompt(brief: WebsiteSetupBrief): string {
+  const short = normalizeSetupAnswersToShort(
+    brief.answers as Record<string, unknown>,
+  );
   const a = legacyBriefAnswers(brief.answers);
-  const sections = Array.isArray(a.sections_features)
-    ? a.sections_features.join(", ")
-    : a.sections_features ?? "";
-  const layout = Array.isArray(a.layout_shape)
-    ? a.layout_shape.join(", ")
-    : a.layout_shape ?? "";
   return [
-    "Guided website setup brief (source of truth):",
-    `- Business & goal: ${a.business_goal ?? ""}`,
-    `- Audience & CTA: ${a.audience_cta ?? ""}`,
-    `- Site depth: ${a.site_depth ?? ""}`,
-    `- Visual style: ${a.visual_style ?? ""}`,
-    `- Brand colors: ${a.brand_colors ?? ""}`,
-    `- Layout shape: ${layout}`,
-    `- Copy tone / content: ${a.copy_tone ?? ""}`,
-    `- Sections/features: ${sections}`,
+    "Guided website setup (raw answers — planner turns these into a canonical design brief):",
+    `- Purpose: ${String(short.purpose ?? a.business_goal ?? "")}`,
+    `- Goal / accomplish: ${String(short.goal ?? a.audience_cta ?? "")}`,
+    `- Style preference: ${String(short.style ?? a.visual_style ?? "Let Candor decide")}`,
+    `- Colors: ${typeof short.colors === "string" ? short.colors : JSON.stringify(short.colors ?? a.brand_colors ?? "Let Candor decide")}`,
+    `- Imagery: ${String(short.imagery ?? "Let Candor decide")}`,
+    `- Reference URL: ${Array.isArray(short.reference_url) ? short.reference_url[0] ?? "" : String(short.reference_url ?? "")}`,
   ].join("\n");
 }
 
@@ -197,39 +200,30 @@ export function briefToPlanningPrompt(brief: WebsiteSetupBrief): string {
 export function formatWebsiteSetupUserSummary(
   answers: WebsiteSetupAnswers | Record<string, unknown>,
 ): string {
-  const a = legacyBriefAnswers(answers);
-  const depth =
-    a.site_depth === "landing"
-      ? "a single landing page"
-      : a.site_depth === "small"
-        ? "a small multi-page site"
-        : a.site_depth === "multi"
-          ? "a multi-page marketing site"
-          : "a website";
-  const style = String(a.visual_style || "modern")
-    .replace(/-/g, " ")
-    .trim();
-  const layout = Array.isArray(a.layout_shape)
-    ? a.layout_shape.join(", ")
-    : String(a.layout_shape || "").trim();
-  const sections = Array.isArray(a.sections_features)
-    ? a.sections_features.join(", ")
-    : String(a.sections_features || "").trim();
+  const short = normalizeSetupAnswersToShort(answers as Record<string, unknown>);
+  const purpose = String(short.purpose || "").trim();
+  const goal = String(short.goal || "").trim();
+  const style = String(short.style || "Let Candor decide").replace(/-/g, " ").trim();
+  const colors =
+    typeof short.colors === "string"
+      ? short.colors
+      : short.colors && typeof short.colors === "object"
+        ? JSON.stringify(short.colors)
+        : "Let Candor decide";
+  const imagery = String(short.imagery || "Let Candor decide");
+  const ref = Array.isArray(short.reference_url)
+    ? short.reference_url[0]
+    : short.reference_url;
 
   const parts = [
-    `Create ${depth} for us.`,
-    a.business_goal ? `Business & goal: ${String(a.business_goal).trim()}` : "",
-    a.audience_cta
-      ? `Audience & primary CTA: ${String(a.audience_cta).trim()}`
-      : "",
-    style ? `Visual direction: ${style}.` : "",
-    a.brand_colors
-      ? `Colors: ${String(a.brand_colors).trim()}.`
-      : "",
-    layout ? `Layout feel: ${layout}.` : "",
-    a.copy_tone ? `Copy: ${String(a.copy_tone).trim()}.` : "",
-    sections ? `Include sections for: ${sections}.` : "",
-    "Build the draft site from this brief.",
+    "Create a marketing website for us.",
+    purpose ? `What it’s for: ${purpose}` : "",
+    goal ? `What it should accomplish: ${goal}` : "",
+    `Style preference: ${style}.`,
+    `Colors: ${colors}.`,
+    `Imagery: ${imagery}.`,
+    ref ? `Style reference (inspiration only): ${String(ref)}.` : "",
+    "Build the draft from this brief — Candor owns the detailed design decisions.",
   ].filter(Boolean);
 
   return parts.join(" ");
@@ -280,10 +274,11 @@ export function normalizeWebsiteSetupBrief(raw: unknown): WebsiteSetupBrief {
     o.status === "setup"
       ? o.status
       : "setup";
-  const answers =
+  const rawAnswers =
     o.answers && typeof o.answers === "object"
-      ? cleanBriefAnswers(o.answers as Record<string, unknown>) as WebsiteSetupAnswers
+      ? cleanBriefAnswers(o.answers as Record<string, unknown>)
       : {};
+  const answers = normalizeSetupAnswersToShort(rawAnswers) as WebsiteSetupAnswers;
   return emptyWebsiteSetupBrief({
     status,
     completedSteps:

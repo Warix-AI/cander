@@ -13,19 +13,17 @@ import type { ProjectKind, ProjectSpec, ProjectSpecDecision } from "./types.ts";
 import { normalizeProjectSpec } from "./normalize.ts";
 import { projectSpecFromBriefHeuristic } from "./heuristics.ts";
 import {
-  CTA_CHOICES,
-  FEATURE_CHOICES,
-  LAYOUT_DIRECTIONS,
-  PAGE_CHOICES,
-  VISUAL_DIRECTIONS,
+  STYLE_DIRECTIONS,
   choiceLabel,
-  componentTokens,
   identityFromAnswer,
+  imageryStrategyFromAnswer,
   isAiChoice,
+  normalizeSetupAnswersToShort,
   paletteTokens,
-  typographyTokens,
   urlsFromAnswer,
+  WEBSITE_SETUP_STEP_KEYS,
 } from "@/lib/ai/build/website-setup-steps";
+import { designBriefFromSetupAnswers } from "@/lib/ai/build/design-brief";
 
 export const PROJECT_SPEC_REPO_PATH = "cander.spec.json";
 export const PROJECT_DESIGN_DOC_REPO_PATH = "DESIGN.md";
@@ -129,16 +127,38 @@ export function projectSpecFromSetupBrief(opts: {
   if (spec.visual && !spec.visual.direction && !spec.visual.layout && !spec.visual.palette) {
     delete spec.visual;
   }
+  try {
+    spec.designBrief = designBriefFromSetupAnswers(a, {
+      projectName: spec.businessName,
+    });
+  } catch {
+    /* ignore */
+  }
   return normalizeProjectSpec(spec) ?? spec;
 }
 
 const STEP_KEYS = [
-  "purpose", "primary_cta", "visual_direction", "palette", "typography", "component_style",
-  "layout_direction", "pages", "features", "inspiration_urls", "identity", "anything_else",
+  ...WEBSITE_SETUP_STEP_KEYS,
+  "primary_cta",
+  "visual_direction",
+  "palette",
+  "typography",
+  "component_style",
+  "layout_direction",
+  "pages",
+  "features",
+  "inspiration_urls",
+  "identity",
+  "anything_else",
 ];
 
 function hasStepAnswers(a: Record<string, unknown>): boolean {
-  return STEP_KEYS.some((k) => a[k] !== undefined && a[k] !== "" && !(Array.isArray(a[k]) && !(a[k] as unknown[]).length));
+  return STEP_KEYS.some(
+    (k) =>
+      a[k] !== undefined &&
+      a[k] !== "" &&
+      !(Array.isArray(a[k]) && !(a[k] as unknown[]).length),
+  );
 }
 
 const PAGE_ROUTES: Record<string, { path: string; title: string; purpose: string }> = {
@@ -146,117 +166,112 @@ const PAGE_ROUTES: Record<string, { path: string; title: string; purpose: string
   about: { path: "/about", title: "About", purpose: "Story, team, values, trust" },
   services: { path: "/services", title: "Services", purpose: "What we offer and for whom" },
   contact: { path: "/contact", title: "Contact", purpose: "Form, details, map or hours" },
-  pricing: { path: "/pricing", title: "Pricing", purpose: "Plans or packages with CTA" },
-  faq: { path: "/faq", title: "FAQ", purpose: "Objections and practical questions" },
-  gallery: { path: "/work", title: "Work", purpose: "Gallery or case studies" },
-  team: { path: "/team", title: "Team", purpose: "People and roles" },
-  blog: { path: "/blog", title: "Blog", purpose: "Articles and news" },
 };
 
-const CTA_HREF: Record<string, string> = {
-  book: "/contact",
-  quote: "/contact",
-  buy: "/pricing",
-  signup: "/contact",
-  contact: "/contact",
-  learn: "/about",
-};
-
-/** Seed from the tap-first steps; “Let Cander choose” leaves a field open for the planner. */
+/** Seed from short onboarding (or normalized legacy steps). */
 function projectSpecFromSetupSteps(opts: {
   answers: Record<string, unknown>;
   projectName: string;
   kind: ProjectKind;
   instruction?: string | null;
 }): ProjectSpec {
-  const a = opts.answers;
+  const a = normalizeSetupAnswersToShort(opts.answers);
   const now = new Date().toISOString();
-  const identity = identityFromAnswer(a.identity);
+  const identity = identityFromAnswer(opts.answers.identity);
   const purpose = typeof a.purpose === "string" ? a.purpose.trim() : "";
-  const extra = typeof a.anything_else === "string" ? a.anything_else.trim() : "";
+  const goal = typeof a.goal === "string" ? a.goal.trim() : "";
   const businessName = identity?.business_name?.trim() || opts.projectName || "New business";
+  const brief = designBriefFromSetupAnswers(opts.answers, { projectName: businessName });
 
-  const ctaId = isAiChoice(a.primary_cta) ? null : typeof a.primary_cta === "string" ? a.primary_cta : null;
-  const ctaLabel = ctaId ? choiceLabel(CTA_CHOICES, ctaId) : null;
-  const ctas: ProjectSpec["ctas"] = ctaLabel
-    ? [{ label: ctaLabel.replace(" / Order", ""), href: CTA_HREF[ctaId!] ?? "/contact", primary: true }]
-    : [];
-
-  const pageIds = isAiChoice(a.pages) ? null : Array.isArray(a.pages) ? a.pages.map(String) : null;
-  const onePage = pageIds?.includes("one_page") ?? false;
-  const pages = pageIds
-    ? onePage
-      ? [PAGE_ROUTES.home]
-      : ["home", ...pageIds.filter((p) => p !== "home" && p !== "one_page")]
-          .map((id) => PAGE_ROUTES[id])
-          .filter(Boolean)
-    : undefined;
-
-  const features = isAiChoice(a.features)
+  const style = isAiChoice(a.style)
     ? undefined
-    : Array.isArray(a.features)
-      ? a.features.map((f) => choiceLabel(FEATURE_CHOICES, f) ?? String(f))
-      : undefined;
-  if (features && onePage) features.push("Single-page layout with anchor navigation");
-
-  const direction = isAiChoice(a.visual_direction) ? undefined : choiceLabel(VISUAL_DIRECTIONS, a.visual_direction) ?? undefined;
-  const palette = isAiChoice(a.palette) ? null : paletteTokens(a.palette);
-  const typography = isAiChoice(a.typography) ? null : typographyTokens(a.typography);
-  const components = isAiChoice(a.component_style) ? null : componentTokens(a.component_style);
-  const layout = isAiChoice(a.layout_direction) ? undefined : choiceLabel(LAYOUT_DIRECTIONS, a.layout_direction) ?? undefined;
+    : choiceLabel(STYLE_DIRECTIONS, a.style) ?? (typeof a.style === "string" ? a.style : undefined);
+  const palette = isAiChoice(a.colors) ? null : paletteTokens(a.colors);
+  const imageryStrat = imageryStrategyFromAnswer(a.imagery);
 
   const visual: ProjectSpec["visual"] = {};
-  if (direction) visual.direction = direction;
+  if (style) visual.direction = style;
   if (palette) {
-    const { mode, ...colors } = palette;
-    visual.palette = { ...colors, ...(mode ? { mode } : {}) };
+    const { mode, custom, ...colors } = palette;
+    visual.palette = {
+      ...colors,
+      ...(mode ? { mode } : {}),
+      ...(custom ? { notes: custom } : {}),
+    };
   }
-  if (typography) visual.typography = typography;
-  if (components) visual.components = components;
-  if (layout) visual.layout = layout;
+  if (brief.designTokens.headingFontDirection || brief.designTokens.bodyFontDirection) {
+    visual.typography = {
+      display: brief.designTokens.headingFontDirection,
+      body: brief.designTokens.bodyFontDirection,
+    };
+  }
 
-  const brand: NonNullable<ProjectSpec["brand"]> = {};
-  const faviconMode = identity?.favicon_mode ?? (identity?.logo_asset_id ? "logo" : "generate");
   const technical = [
     "Next.js App Router + Tailwind v4; design tokens live in app/globals.css (:root variables + @theme inline).",
     "Fonts load via <link> in app/layout.tsx or system stacks (no next/font/google).",
     "Shared layout pieces live in components/site/*; primitives in components/ui/*.",
-    faviconMode === "generate"
-      ? "Favicon: generate app/icon.tsx with ImageResponse (brand mark or initials on the primary color) and app/apple-icon.tsx."
-      : "Favicon: derive app/icon.png + app/apple-icon.png from the uploaded brand asset (public/brand/).",
+    "Imagery: durable files under public/assets/ (e.g. /assets/hero.webp). Never ship expiring AI URLs or sandbox-only paths.",
+    "Adapt any components/twenty-first/* selections into the project design system — one cohesive look.",
   ];
   const userInstructions: string[] = [];
-  if (extra) userInstructions.push(extra.slice(0, 600));
+  if (goal) userInstructions.push(goal.slice(0, 600));
   if (opts.instruction?.trim()) userInstructions.push(opts.instruction.trim().slice(0, 600));
-  if (identity?.og_title) userInstructions.push(`Social share title: “${identity.og_title.trim()}”.`);
-  if (identity?.og_description) userInstructions.push(`Social share description: “${identity.og_description.trim()}”.`);
+
+  const refs = urlsFromAnswer(a.reference_url);
+  const answered = WEBSITE_SETUP_STEP_KEYS.filter(
+    (k) => !isAiChoice(a[k]) && a[k] !== undefined && a[k] !== "",
+  ).length;
 
   const spec: ProjectSpec = {
     version: 1,
     kind: opts.kind,
     businessName,
     tagline: identity?.tagline?.trim() || undefined,
-    intent: purpose || `Marketing website for ${businessName}`,
-    goals: purpose ? [purpose.slice(0, 200)] : [],
-    ctas,
-    pages,
-    features,
+    intent: purpose || goal || `Marketing website for ${businessName}`,
+    audience: brief.audience,
+    goals: [goal, purpose].filter(Boolean).map((s) => s.slice(0, 200)).slice(0, 6),
+    ctas: [{ label: "Contact us", href: "/contact", primary: true }],
+    pages: [
+      PAGE_ROUTES.home,
+      PAGE_ROUTES.about,
+      PAGE_ROUTES.services,
+      PAGE_ROUTES.contact,
+    ],
+    features: ["Contact form"],
     visual: Object.keys(visual).length ? visual : undefined,
-    inspiration: urlsFromAnswer(a.inspiration_urls).map((url) => ({ url, summary: "" })),
-    brand: Object.keys(brand).length ? brand : undefined,
+    inspiration: refs.map((url) => ({
+      url,
+      summary: "Style inspiration only — do not clone copy or brand.",
+    })),
+    designBrief: brief,
+    imagery: {
+      heroSubject: brief.imagery.find((i) => i.role === "hero")?.description,
+      sectionSubjects: brief.imagery.filter((i) => i.role !== "hero").map((i) => i.description),
+      avoid: [
+        "Broken or empty img tags",
+        "Expiring AI image URLs in production",
+        ...(imageryStrat === "minimal" ? ["Large photography sections"] : []),
+      ],
+      strategy: imageryStrat === "ai_choice" ? "decide" : imageryStrat,
+      plan: brief.imagery,
+    },
     technical,
     userInstructions,
     decisions: [
       {
         at: now,
-        summary: `Seeded from tap-first setup (${STEP_KEYS.filter((k) => !isAiChoice(a[k]) && a[k] !== undefined).length} answered, rest left to Cander).`,
+        summary: `Seeded from short website setup (${answered} answered, rest left to Candor). Canonical design brief attached.`,
         source: "setup",
       },
     ],
     updatedAt: now,
   };
-  if (identity?.logo_asset_id) spec.brand = { ...(spec.brand ?? {}), logoPath: `asset:${identity.logo_asset_id}` };
-  if (identity?.favicon_asset_id) spec.brand = { ...(spec.brand ?? {}), faviconPath: `asset:${identity.favicon_asset_id}` };
+  if (identity?.logo_asset_id) {
+    spec.brand = { ...(spec.brand ?? {}), logoPath: `asset:${identity.logo_asset_id}` };
+  }
+  if (identity?.favicon_asset_id) {
+    spec.brand = { ...(spec.brand ?? {}), faviconPath: `asset:${identity.favicon_asset_id}` };
+  }
   if (!spec.inspiration?.length) delete spec.inspiration;
   return normalizeProjectSpec(spec) ?? spec;
 }
@@ -368,6 +383,20 @@ export function renderDesignDoc(spec: ProjectSpec): string {
   }
   if (spec.inspiration?.length) {
     lines.push("## Inspiration", ...spec.inspiration.map((i) => `- ${i.url}${i.summary ? ` — ${i.summary}` : ""}`), "");
+  }
+  if (spec.designBrief) {
+    const b = spec.designBrief;
+    lines.push("## Canonical design brief (authoritative)");
+    if (b.purpose) lines.push(`- Purpose: ${b.purpose}`);
+    if (b.audience) lines.push(`- Audience: ${b.audience}`);
+    if (b.primaryGoal) lines.push(`- Primary goal: ${b.primaryGoal}`);
+    if (b.styleDirection) lines.push(`- Style: ${b.styleDirection}`);
+    if (b.colorDirection) lines.push(`- Color: ${b.colorDirection}`);
+    if (b.imageryStrategy) lines.push(`- Imagery strategy: ${b.imageryStrategy}`);
+    if (b.referenceUrl) lines.push(`- Reference (inspiration only): ${b.referenceUrl}`);
+    if (b.avoid?.length) lines.push(`- Avoid: ${b.avoid.join("; ")}`);
+    if (b.builderFreedom?.length) lines.push(`- AI freedom: ${b.builderFreedom.join(", ")}`);
+    lines.push("");
   }
   if (spec.tone) lines.push("## Copy tone", spec.tone, "");
   if (spec.technical?.length) lines.push("## Technical conventions", ...spec.technical.map((t) => `- ${t}`), "");

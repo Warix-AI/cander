@@ -80,13 +80,30 @@ export class LlmClient {
 
   /**
    * Simple text completion (no tools). Used by planner / sub-agents.
-   * @param {{ model: string, instructions: string, input: string, reasoning?: string, maxOutputTokens?: number, tools?: unknown[], jsonSchema?: {name: string, schema: Record<string, unknown>} }} opts
+   * @param {{ model: string, instructions: string, input: string, reasoning?: string, maxOutputTokens?: number, tools?: unknown[], jsonSchema?: {name: string, schema: Record<string, unknown>}, images?: Array<{ mediaType: string, dataBase64: string, detail?: string }> }} opts
    */
   async text(opts) {
+    let input = opts.input;
+    if (opts.images?.length) {
+      // Responses API multimodal: array of input_text + input_image parts.
+      input = [
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: String(opts.input || "") },
+            ...opts.images.slice(0, 4).map((img) => ({
+              type: "input_image",
+              image_url: `data:${img.mediaType || "image/png"};base64,${img.dataBase64}`,
+              detail: img.detail || "low",
+            })),
+          ],
+        },
+      ];
+    }
     const body = {
       model: opts.model,
       instructions: opts.instructions,
-      input: opts.input,
+      input,
       ...(opts.tools?.length ? { tools: opts.tools, tool_choice: "auto" } : {}),
       ...(opts.reasoning ? { reasoning: { effort: opts.reasoning } } : {}),
       ...(opts.maxOutputTokens ? { max_output_tokens: opts.maxOutputTokens } : {}),

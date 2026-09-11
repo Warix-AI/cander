@@ -78,7 +78,7 @@ import {
 } from "@/lib/ai/build/plan/spec-memory";
 import type { ProjectSpec } from "@/lib/ai/build/plan/types";
 import { signedProjectAssetUrl } from "@/lib/project-assets-server";
-import { sanitizeUserProgress } from "@/lib/build/jobs/user-progress";
+import { sanitizeUserProgress, preferInformativeProgress } from "@/lib/build/jobs/user-progress";
 
 const LOG = "[cander:build-job]";
 const BUILDER_DIR_IN_SANDBOX = ".cander/builder";
@@ -797,7 +797,11 @@ async function pullAndProcess(job: BuildJob): Promise<BuildJob> {
       });
     }
     const noteRaw = lastProgress?.message ?? job.progressNote;
-    const note = sanitizeUserProgress(noteRaw) ?? job.progressNote;
+    const isHeartbeat = Boolean(lastProgress?.payload?.heartbeat);
+    const sanitized = sanitizeUserProgress(noteRaw);
+    const note = preferInformativeProgress(job.progressNote, sanitized ?? noteRaw, {
+      nextIsHeartbeat: isHeartbeat,
+    });
     current =
       (await updateBuildJob(job.id, {
         progressNote: note,
@@ -928,7 +932,15 @@ export async function ingestPushedBuildJobEvents(
     });
   }
   const noteRaw = lastProgress?.message ?? job.progressNote;
-  const note = sanitizeUserProgress(noteRaw) ?? job.progressNote;
+  const isHeartbeat = Boolean(
+    lastProgress &&
+      typeof lastProgress === "object" &&
+      (lastProgress as { payload?: { heartbeat?: boolean } }).payload?.heartbeat,
+  );
+  const sanitized = sanitizeUserProgress(noteRaw);
+  const note = preferInformativeProgress(job.progressNote, sanitized ?? noteRaw, {
+    nextIsHeartbeat: isHeartbeat,
+  });
   const updated =
     (await updateBuildJob(job.id, {
       progressNote: note,

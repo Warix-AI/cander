@@ -5,7 +5,7 @@ export const STACK_RULES = `Stack (already booted in this sandbox; the preview s
 - shadcn-style primitives live in components/ui/* with \`cn\` from lib/utils.ts. lucide-react, framer-motion, clsx, tailwind-merge, class-variance-authority, @radix-ui/react-slot are installed.
 - Server components by default. Add "use client" only to leaf components that need state/effects/handlers.
 - Never use \`next/font/google\` in a sandbox without network guarantees — load fonts via a <link> in app/layout.tsx or use system font stacks.
-- Images: for hero/section photography use download_image to save real photos (e.g. https://images.unsplash.com/photo-… with ?auto=format&fit=crop&w=1600&q=80) into public/images/ and reference them as src="/images/…" with descriptive alt. next/image needs width/height (or fill inside a sized relative parent); <img> is fine. Never leave gradient placeholder boxes where a photo belongs.
+- Images: prefer durable project-local assets under \`public/assets/\` (e.g. download_image → public/assets/hero.webp, reference as src="/assets/hero.webp"). Never put temporary/expiring AI image URLs, authenticated storage URLs, or sandbox-only paths into production JSX. If imagery is placeholder/minimal, use an intentional brand-colored abstract placeholder component (gradient/geometry) that reads as replaceable — never a broken <img>. next/image needs width/height (or fill inside a sized relative parent); <img> is fine with alt.
 - Keep package.json valid; run \`npm install <pkg>\` via run_command if you add a dependency, then re-check the preview.
 - Do NOT start or restart the preview with \`npm run dev\` / \`next dev\` / \`npm start\` yourself — Cander supervises that process and restarts it for you. Use check_preview. Read its output carefully:
   • "PREVIEW DOWN — APPLICATION ERROR": the server cannot start because of YOUR code (compile/runtime error shown). Fix exactly that, then check again.
@@ -67,7 +67,7 @@ export const WORKFLOW_CREATE = `Workflow:
 1. list_tree, read package.json, app/layout.tsx, app/globals.css, and any components/twenty-first/* the plan already fetched.
 2. If a build packet is provided, it is the plan — implement its sitemap, sections, design CSS and copy. If "Selected components" JSON is present, adapt those retrieved sources first (localPath files) into components/site/* with project tokens — do not leave twenty-first files as the live UI and do not invent unrelated section templates when a selected component covers that purpose.
 3. Build shared pieces first: app/globals.css (paste the packet's CSS), components/site/Header.tsx, Footer.tsx, MobileNav.tsx (client), Section primitives — matching the design language.
-4. Write app/layout.tsx (metadata, fonts, JSON-LD, Header/Footer), then app/page.tsx, then every other page. emit_progress before each page. Use download_image for hero/section photography when the plan calls for imagery.
+4. Write app/layout.tsx (metadata, fonts, JSON-LD, Header/Footer), then app/page.tsx, then every other page. emit_progress before each page. Follow the imagery plan: download_image into public/assets/* for generated photos, or intentional placeholders — never broken images.
 5. search_components / get_component only to fill gaps the selected list did not cover. Adapt into components/ — never paste unresolved imports.
 6. Write app/robots.ts, app/sitemap.ts, app/not-found.tsx.
 7. run_command("npx --no-install tsc --noEmit --skipLibCheck") and check_preview on every route. Fix every error. Do not start or restart the preview server yourself. Repeat until clean.
@@ -300,6 +300,33 @@ export function formatProjectSpec(spec) {
   if (spec.imagery && typeof spec.imagery === "object") {
     push("Imagery hero", spec.imagery.heroSubject);
     push("Imagery sections", spec.imagery.sectionSubjects);
+    push("Imagery strategy", spec.imagery.strategy);
+    if (Array.isArray(spec.imagery.plan) && spec.imagery.plan.length) {
+      push(
+        "Imagery plan",
+        spec.imagery.plan.map(
+          (p) => `${p.role}:${p.strategy} — ${p.description}${p.assetPath ? ` → ${p.assetPath}` : ""}`,
+        ),
+      );
+    }
+  }
+  if (spec.designBrief && typeof spec.designBrief === "object") {
+    const b = spec.designBrief;
+    push("Design brief purpose", b.purpose);
+    push("Design brief goal", b.primaryGoal);
+    push("Design brief style", b.styleDirection);
+    push("Design brief color", b.colorDirection);
+    push("Design brief imagery", b.imageryStrategy);
+    push("Design brief avoid", b.avoid);
+    push("Design brief freedom", b.builderFreedom);
+    if (b.designTokens && typeof b.designTokens === "object") {
+      push(
+        "Design tokens",
+        Object.entries(b.designTokens)
+          .filter(([, x]) => x)
+          .map(([k, x]) => `${k} ${x}`),
+      );
+    }
   }
   if (Array.isArray(spec.primaryFlows) && spec.primaryFlows.length) {
     push(

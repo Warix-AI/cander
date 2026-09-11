@@ -353,15 +353,25 @@ export async function runAcceptance(opts) {
   const wantBuild = opts.productionBuild !== false && codeTouched && !tscFailed;
   if (wantBuild && issues.length === 0) {
     opts.log.emit("verify", "Running a production build (what Vercel will run)…");
+    opts.log.emit("progress", "Preparing production build…", { phase: "validating" });
+    opts.log.startHeartbeat?.("validating", [
+      "Preparing production build…",
+      "Still validating the production build…",
+      "Checking generated pages…",
+      "Finishing production validation…",
+    ]);
     const build = await runProductionBuild(repoDir, opts.timeoutMs);
+    opts.log.stopHeartbeat?.();
     if (build.ok) {
       buildVerified = true;
       opts.log.emit("verify", `Production build passed${build.seconds ? ` (${build.seconds}s)` : ""}.`);
+      opts.log.emit("progress", "Running final build checks…", { phase: "validating" });
     } else if (build.timedOut) {
       // Not attributable to the code with confidence; publish preflight rebuilds.
       opts.log.emit("log", "Production build timed out; publish will rebuild before deploying.");
     } else {
       issues.push(`Production build failed (next build) — Vercel would reject this deploy:\n${build.summary}`);
+      opts.log.emit("progress", "Repairing a build issue…", { phase: "repair" });
     }
   }
 
@@ -781,6 +791,20 @@ export function seoBarIssues(results) {
     const imgs = [...html.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
     const noAlt = imgs.filter((tag) => !/\salt=/i.test(tag));
     if (noAlt.length) issues.push(`${r.path} has ${noAlt.length} <img> without alt text — every image needs a descriptive alt (or alt="" if decorative).`);
+    for (const tag of imgs) {
+      const src = tag.match(/\ssrc=["']([^"']+)["']/i)?.[1] || "";
+      if (!src) continue;
+      if (/oaidalleapiprodscus|blob\.core\.windows\.net|replicate\.delivery|X-Amz-Signature|Expires=\d{10}/i.test(src)) {
+        issues.push(
+          `${r.path} uses an ephemeral/auth image URL (${src.slice(0, 80)}…) — download into public/assets/ and reference /assets/… instead.`,
+        );
+      }
+      if (src.startsWith("/assets/") || src.startsWith("/images/") || src.startsWith("/brand/")) {
+        const rel = `public${src.split("?")[0]}`;
+        // Existence checked relative to repo when available via global verify context — soft note in HTML scan only.
+        void rel;
+      }
+    }
     if (!/<meta[^>]+property=["']og:title["']/i.test(html)) issues.push(`${r.path} has no og:title — add metadata.openGraph (title, description, url, siteName, images).`);
   }
   for (const [title, paths] of titles) {
