@@ -67,6 +67,8 @@ export type BuildJobFacts = {
    * and it passed. Publish preflight trusts it and skips its own rebuild.
    */
   buildVerified?: { sha: string; at: string };
+  /** Set on jobs scheduled by the publish auto-fix loop; runner republishes on ready. */
+  publishFix?: { attempt: number; publishAttemptId: string; preferredUrl: string | null } | null;
   /** Set on Retry: continue the previous job in the same sandbox. */
   resume?: BuildJobResume | null;
   /** Chat thread + message the job should report back to (edit mode). */
@@ -198,6 +200,7 @@ export async function createBuildJob(opts: {
   brief?: WebsiteSetupAnswers | null;
   ackMessageId?: string | null;
   resume?: BuildJobResume | null;
+  publishFix?: { attempt: number; publishAttemptId: string; preferredUrl: string | null } | null;
 }): Promise<BuildJob> {
   const admin = createSupabaseAdminClient();
   const facts: BuildJobFacts = {
@@ -212,6 +215,7 @@ export async function createBuildJob(opts: {
     brief: opts.brief ?? null,
     ackMessageId: opts.ackMessageId ?? null,
     ...(opts.resume ? { resume: opts.resume } : {}),
+    ...(opts.publishFix ? { publishFix: opts.publishFix } : {}),
   };
   const { data, error } = await admin
     .from("ai_tasks")

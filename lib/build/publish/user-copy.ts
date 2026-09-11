@@ -9,6 +9,8 @@ export type PublishUserState =
   | "publishing"
   | "live"
   | "busy"
+  | "fixing"
+  | "restored"
   | "needs_fix"
   | "needs_retry";
 
@@ -17,6 +19,9 @@ export const PUBLISH_STATE_COPY: Record<PublishUserState, string> = {
   publishing: "Publishing your site…",
   live: "Your site is live.",
   busy: "A change is still being applied. Publish again once it’s done.",
+  fixing: "Fixing a small issue, then publishing automatically…",
+  restored:
+    "The new version didn’t respond correctly, so your previous live version was kept. Ask Cander to fix it, then publish again.",
   needs_fix:
     "Your draft needs a quick fix before it can go live. Ask Cander to fix it, then publish again.",
   needs_retry: "Publishing didn’t finish. Try again.",
@@ -42,8 +47,16 @@ export function publishUserStateFromAttempt(
     case "git_sync_repair":
       return "live";
     case "failed": {
-      const meta = (attempt.meta ?? {}) as { draftNeedsRepair?: boolean; reason?: string };
+      const meta = (attempt.meta ?? {}) as {
+        draftNeedsRepair?: boolean;
+        reason?: string;
+        autoFixJobId?: string;
+        healthFailures?: unknown[];
+        restored?: boolean;
+      };
       if (meta.reason === "build_in_progress") return "busy";
+      if (meta.autoFixJobId) return "fixing";
+      if (meta.restored) return "restored";
       return meta.draftNeedsRepair ? "needs_fix" : "needs_retry";
     }
     default:

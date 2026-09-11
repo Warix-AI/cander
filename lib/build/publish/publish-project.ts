@@ -20,6 +20,15 @@ import { gitStoragePointer } from "@/lib/build/git/revision-pointers";
 import { ensureProjectInfra } from "@/lib/build/ensure-project-infra";
 import { assertNoConcurrentBuild } from "@/lib/build/sandbox/lock";
 import { resolveSafePublishedUrl } from "@/lib/build/publish/published-url";
+import {
+  acquirePublishLock,
+  healthCheckDeployment,
+  heartbeatPublishLock,
+  recordDeploymentEvent,
+  releasePublishLock,
+  rollbackToDeployment,
+} from "@/lib/build/publish/pipeline";
+import { schedulePublishFix } from "@/lib/build/publish/auto-fix";
 import { preflightPublishTip } from "@/lib/build/publish/preflight";
 import { ensureDraftTipAuthor } from "@/lib/build/git/ensure-tip-author";
 import {
@@ -109,6 +118,8 @@ export async function publishProject(opts: {
   preferredUrl?: string | null;
   slug?: string | null;
   publishAttemptId?: string | null;
+  /** Internal: which automatic fix→republish round this is (0 = user-initiated). */
+  fixAttempt?: number;
 }): Promise<PublishProjectResult> {
   const publishAttemptId =
     opts.publishAttemptId?.trim() || crypto.randomUUID();
@@ -225,7 +236,7 @@ export async function publishProject(opts: {
   });
 }
 
-async function publishProjectWithRow(opts: {
+type PublishRowOpts = {
   userId: string;
   projectId: string;
   workspaceId: string;
@@ -233,7 +244,40 @@ async function publishProjectWithRow(opts: {
   slug?: string | null;
   publishAttemptId: string;
   project: Record<string, unknown>;
-}): Promise<PublishProjectResult> {
+  /** Set when this publish was re-run automatically after a fix job. */
+  fixAttempt?: number;
+};
+
+/**
+ * Exactly one publish per project at a time, regardless of SHA. The lock is
+ * held for the whole pipeline and heartbeated while Vercel builds.
+ */
+async function publishProjectWithRow(opts: PublishRowOpts): Promise<PublishProjectResult> {
+  const holder = opts.publishAttemptId;
+  const locked = await acquirePublishLock({ projectId: opts.projectId, holder, attemptId: opts.publishAttemptId });
+  if (!locked) {
+    logPublish(opts.publishAttemptId, "lock_busy", {});
+    return {
+      ok: false,
+      status: "error",
+      publishedSha: opts.project.published_sha ? String(opts.project.published_sha) : null,
+      publishedUrl: opts.project.published_url ? String(opts.project.published_url) : null,
+      vercelDeploymentId: null,
+      vercelProjectId: opts.project.vercel_project_id ? String(opts.project.vercel_project_id) : null,
+      deploymentRecordId: null,
+      preferredUrl: opts.preferredUrl ?? null,
+      publishAttemptId: opts.publishAttemptId,
+      message: "A publish is already in progress for this project. It will finish on its own — no need to press Publish again.",
+    };
+  }
+  try {
+    return await publishProjectLocked(opts, holder);
+  } finally {
+    await releasePublishLock({ projectId: opts.projectId, holder });
+  }
+}
+
+async function publishProjectLocked(opts: PublishRowOpts, lockHolder: string): Promise<PublishProjectResult> {
   const project = opts.project;
   const admin = createSupabaseAdminClient();
   const publishAttemptId = opts.publishAttemptId;
@@ -513,6 +557,24 @@ async function publishProjectWithRow(opts: {
         compileOk: preflight.compileOk === true,
         draftNeedsRepair: isDraftRepair,
       });
+      const fix = isDraftRepair
+        ? await schedulePublishFix({
+            userId: opts.userId,
+            projectId: opts.projectId,
+            workspaceId: opts.workspaceId,
+            preferredUrl,
+            publishAttemptId,
+            fixAttempt: opts.fixAttempt ?? 0,
+            failure: preflight.issues.join("\n"),
+          })
+        : null;
+      if (fix?.scheduled) {
+        await updatePublishAttempt({
+          publishAttemptId,
+          projectId: opts.projectId,
+          patch: { meta: { preflightIssues: preflight.issues.slice(0, 20), draftNeedsRepair: true, autoFixJobId: fix.jobId } },
+        });
+      }
       return {
         ok: false,
         status: "error",
@@ -527,7 +589,9 @@ async function publishProjectWithRow(opts: {
         deploymentRecordId: null,
         preferredUrl,
         publishAttemptId,
-        message: msg,
+        message: fix?.scheduled
+          ? "Your site needs a small fix before it can go live. I'm fixing it now and will publish automatically when it passes."
+          : msg,
       };
     }
 
@@ -536,10 +600,48 @@ async function publishProjectWithRow(opts: {
       pathCount: preflight.paths.length,
     });
 
+    // Environment + database schema go first so the build has everything it
+    // needs and production is never left half-migrated. Failure here aborts
+    // before any deployment exists — the live site is untouched.
+    const env = await syncEnvironmentForPublish({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      vercelProjectId,
+      githubFullName: String(project.github_full_name || ""),
+      sha: publishSha,
+      publishAttemptId,
+    });
+    if (!env.ok) {
+      await updatePublishAttempt({
+        publishAttemptId,
+        projectId: opts.projectId,
+        patch: { status: "failed", error: env.message.slice(0, 4000), completed_at: new Date().toISOString() },
+      });
+      return {
+        ok: false,
+        status: "error",
+        publishedSha: project.published_sha ? String(project.published_sha) : null,
+        publishedUrl: project.published_url ? String(project.published_url) : null,
+        vercelDeploymentId: null,
+        vercelProjectId,
+        deploymentRecordId: null,
+        preferredUrl,
+        publishAttemptId,
+        message: env.message,
+      };
+    }
+
     await updatePublishAttempt({
       publishAttemptId,
       projectId: opts.projectId,
       patch: { status: "deploying" },
+    });
+    await recordDeploymentEvent({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      state: "queued",
+      publishAttemptId,
+      commitSha: publishSha,
     });
 
     logPublish(publishAttemptId, "deploy_api_start", {
@@ -562,8 +664,74 @@ async function publishProjectWithRow(opts: {
       ref: draftBranch,
       sha: publishSha,
       publishAttemptId,
-      onTick: () => heartbeatPublishAttempt(publishAttemptId),
+      onTick: async () => {
+        await heartbeatPublishAttempt(publishAttemptId);
+        await heartbeatPublishLock({ projectId: opts.projectId, holder: lockHolder, attemptId: publishAttemptId });
+      },
     });
+    await recordDeploymentEvent({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      state: "ready",
+      publishAttemptId,
+      vercelDeploymentId: deployment.id,
+      commitSha: publishSha,
+      url: deployment.url,
+    });
+
+    // Blocking health check on the fresh deployment. A failure restores the
+    // previous production deployment (when there is one) before we report.
+    const previousDeploymentId = project.vercel_production_deployment_id ? String(project.vercel_production_deployment_id) : null;
+    const previousSha = project.published_sha ? String(project.published_sha) : null;
+    const health = await healthCheckDeployment({ baseUrl: deployment.url, routes: preflight.paths.map(routeFromPagePath).filter((r): r is string => Boolean(r)) });
+    if (!health.ok) {
+      const reason = `health check failed: ${health.failures.map((f) => `${f.path} → ${f.status || "no response"}`).join(", ")}`;
+      logPublish(publishAttemptId, "health_check_failed", { failures: health.failures });
+      let restored = false;
+      if (previousDeploymentId && previousDeploymentId !== deployment.id) {
+        const rb = await rollbackToDeployment({
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          vercelProjectId,
+          deploymentId: previousDeploymentId,
+          sha: previousSha,
+          reason,
+          publishAttemptId,
+        });
+        restored = rb.ok;
+      }
+      await recordDeploymentEvent({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        state: "failed",
+        publishAttemptId,
+        vercelDeploymentId: deployment.id,
+        commitSha: publishSha,
+        url: deployment.url,
+        failureReason: reason,
+        meta: { restored },
+      });
+      const message = restored
+        ? "The new version didn't respond correctly, so I kept your previous live version in place. Ask me to fix the site and publish again."
+        : "The new version didn't respond correctly. Ask me to fix the site and publish again.";
+      await updatePublishAttempt({
+        publishAttemptId,
+        projectId: opts.projectId,
+        patch: { status: "failed", error: `${message} (${reason})`.slice(0, 4000), completed_at: new Date().toISOString(), meta: { userId: opts.userId, draftNeedsRepair: true, healthFailures: health.failures, restored } },
+      });
+      return {
+        ok: false,
+        status: "error",
+        publishedSha: previousSha,
+        publishedUrl: project.published_url ? String(project.published_url) : null,
+        vercelDeploymentId: deployment.id,
+        vercelProjectId,
+        deploymentRecordId: null,
+        preferredUrl,
+        publishAttemptId,
+        message,
+      };
+    }
 
     logPublish(publishAttemptId, "deploy_api_ready", {
       vercelDeploymentId: deployment.id,
@@ -597,6 +765,10 @@ async function publishProjectWithRow(opts: {
     // Persist successful production independently of draft_sha.
     const projectUpdate: Record<string, unknown> = {
       status: "published",
+      // Keep the last healthy production deployment for one-click rollback.
+      ...(previousDeploymentId && previousDeploymentId !== deployment.id
+        ? { vercel_previous_deployment_id: previousDeploymentId, vercel_previous_sha: previousSha }
+        : {}),
       published_sha: publishSha,
       published_url: publishedUrl,
       vercel_project_id: vercelProjectId,
@@ -616,6 +788,8 @@ async function publishProjectWithRow(opts: {
       delete projectUpdate.publish_git_sync_needed;
       delete projectUpdate.publish_git_sync_error;
       delete projectUpdate.vercel_production_url;
+      delete projectUpdate.vercel_previous_deployment_id;
+      delete projectUpdate.vercel_previous_sha;
       await admin
         .from("projects")
         .update(projectUpdate)
@@ -712,6 +886,15 @@ async function publishProjectWithRow(opts: {
         sha: publishSha,
       });
       promotedMainSha = promoted.publishedSha;
+      await recordDeploymentEvent({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        state: "promoted",
+        publishAttemptId,
+        vercelDeploymentId: deployment.id,
+        commitSha: publishSha,
+        url: publishedUrl,
+      });
       logPublish(publishAttemptId, "main_promoted", {
         defaultBranch: promoted.defaultBranch,
         sha: publishSha.slice(0, 12),
@@ -785,7 +968,33 @@ async function publishProjectWithRow(opts: {
         meta: { userId: opts.userId, draftNeedsRepair },
       },
     });
+    await recordDeploymentEvent({
+      projectId: opts.projectId,
+      workspaceId: opts.workspaceId,
+      state: "failed",
+      publishAttemptId,
+      commitSha: draftSha,
+      failureReason: message,
+    });
     logPublish(publishAttemptId, "failed", { error: message });
+    const fix = draftNeedsRepair
+      ? await schedulePublishFix({
+          userId: opts.userId,
+          projectId: opts.projectId,
+          workspaceId: opts.workspaceId,
+          preferredUrl,
+          publishAttemptId,
+          fixAttempt: opts.fixAttempt ?? 0,
+          failure: message,
+        })
+      : null;
+    if (fix?.scheduled) {
+      await updatePublishAttempt({
+        publishAttemptId,
+        projectId: opts.projectId,
+        patch: { meta: { userId: opts.userId, draftNeedsRepair, autoFixJobId: fix.jobId } },
+      });
+    }
     return {
       ok: false,
       status: "error",
@@ -802,7 +1011,78 @@ async function publishProjectWithRow(opts: {
       deploymentRecordId: null,
       preferredUrl,
       publishAttemptId,
-      message,
+      message: fix?.scheduled
+        ? "The build hit an error on the way live. I'm fixing it now and will publish automatically when it passes."
+        : message,
     };
   }
+}
+
+/** app/(group)/about/page.tsx → /about ; null for non-page files. */
+function routeFromPagePath(path: string): string | null {
+  const m = path.match(/^app\/(.*?)\/?page\.(tsx|jsx|ts|js)$/);
+  if (!m) return path === "app/page.tsx" ? "/" : null;
+  const route = `/${m[1]}`.replace(/\/\([^)]+\)/g, "").replace(/\/+/g, "/");
+  if (/\[|\]/.test(route)) return null;
+  return route === "" ? "/" : route;
+}
+
+/**
+ * Env vars → Vercel, pending migrations → production database. Both are
+ * idempotent and run before any deployment is created.
+ */
+async function syncEnvironmentForPublish(opts: {
+  projectId: string;
+  workspaceId: string;
+  vercelProjectId: string;
+  githubFullName: string;
+  sha: string;
+  publishAttemptId: string;
+}): Promise<{ ok: true } | { ok: false; message: string }> {
+  const admin = createSupabaseAdminClient();
+  const { data } = await admin
+    .from("projects")
+    .select("kind, supabase_project_ref, supabase_status")
+    .eq("id", opts.projectId)
+    .maybeSingle();
+  const isApp = String(data?.kind ?? "").toLowerCase() === "app";
+  const supabaseRef = data?.supabase_project_ref ? String(data.supabase_project_ref) : null;
+
+  try {
+    if (isApp && supabaseRef) {
+      const { ensureBackendEnvVars } = await import("@/lib/build/env/sync");
+      await ensureBackendEnvVars({ projectId: opts.projectId, workspaceId: opts.workspaceId });
+    }
+    const { syncProjectEnvToVercel } = await import("@/lib/build/env/sync");
+    const env = await syncProjectEnvToVercel({ projectId: opts.projectId, workspaceId: opts.workspaceId, vercelProjectId: opts.vercelProjectId });
+    logPublish(opts.publishAttemptId, "env_synced", { synced: env.synced.length, unchanged: env.unchanged.length, failed: env.failed });
+    if (env.failed.length) {
+      return { ok: false, message: `Publish stopped: ${env.failed.length} setting(s) could not be prepared for the live site (${env.failed.join(", ")}). Your live site was not changed.` };
+    }
+  } catch (err) {
+    logPublish(opts.publishAttemptId, "env_sync_error", { error: err instanceof Error ? err.message : String(err) });
+    return { ok: false, message: "Publish stopped: the live site's settings could not be prepared. Your live site was not changed." };
+  }
+
+  if (supabaseRef && opts.githubFullName) {
+    try {
+      const { applyPendingMigrations } = await import("@/lib/build/supabase/migrations");
+      const mig = await applyPendingMigrations({
+        projectId: opts.projectId,
+        workspaceId: opts.workspaceId,
+        githubFullName: opts.githubFullName,
+        sha: opts.sha,
+        supabaseRef,
+        target: "production",
+      });
+      logPublish(opts.publishAttemptId, "migrations", { applied: mig.applied, skipped: mig.skipped.length, failed: mig.failed?.version ?? null });
+      if (!mig.ok) {
+        return { ok: false, message: `Publish stopped: a database change (${mig.failed?.version}) failed to apply, so nothing was deployed. Ask me to fix the database change and publish again.` };
+      }
+    } catch (err) {
+      logPublish(opts.publishAttemptId, "migrations_error", { error: err instanceof Error ? err.message : String(err) });
+      return { ok: false, message: "Publish stopped: database changes could not be applied. Your live site was not changed." };
+    }
+  }
+  return { ok: true };
 }

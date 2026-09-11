@@ -998,6 +998,13 @@ async function completeBuildJob(
     });
     console.info(LOG, "ready", { jobId: job.id, draftSha, unverified });
     await startNextQueuedJob(job);
+    if (job.facts.publishFix && !unverified) {
+      // Publish auto-fix loop: the repair landed, so try going live again.
+      const { republishAfterFix } = await import("@/lib/build/publish/auto-fix");
+      await republishAfterFix(job).catch((err) =>
+        console.warn(LOG, "republish after fix failed", err instanceof Error ? err.message : err),
+      );
+    }
     return done;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
