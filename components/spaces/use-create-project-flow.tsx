@@ -11,6 +11,8 @@ import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import type { ProjectKind } from "@/lib/space-entities";
 import type { SpaceId } from "@/lib/types";
 
+const DISABLED_PROJECT_KINDS = new Set<ProjectKind>(["app", "site"]);
+
 export function useCreateProjectFlow(onCreated: (projectId: string) => void) {
   const ctx = useWorkspaceCtx();
   const { createProject } = useSpaceMutation();
@@ -24,6 +26,7 @@ export function useCreateProjectFlow(onCreated: (projectId: string) => void) {
       defaultTitle: string;
       summary?: string;
     }) => {
+      if (DISABLED_PROJECT_KINDS.has(input.kind)) return;
       setDraft({
         space: input.space,
         kind: input.kind,

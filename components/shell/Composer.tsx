@@ -1744,8 +1744,9 @@ export function Composer({
                         <Icon className="h-full w-full" strokeWidth={1.75} />
                       }
                       label={item.label}
-                      description={item.summary}
+                      description={item.disabled ? "Coming soon" : item.summary}
                       onClick={() => {
+                        if (item.disabled) return;
                         if (item.action === "quick-search") {
                           openQuickSearchBrowser();
                           setMenu(null);

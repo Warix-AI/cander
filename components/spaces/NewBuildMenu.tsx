@@ -10,9 +10,10 @@ export const BUILD_CREATE_OPTIONS: {
   kind: ProjectKind;
   label: string;
   summary: string;
+  disabled?: boolean;
 }[] = [
-  { kind: "app", label: "App", summary: "Interactive app or tool" },
-  { kind: "site", label: "Website", summary: "Marketing site or landing page" },
+  { kind: "app", label: "App", summary: "Interactive app or tool", disabled: true },
+  { kind: "site", label: "Website", summary: "Marketing site or landing page", disabled: true },
   // Agent create hidden for now — keep automation kind for existing projects.
 ];
 
@@ -54,9 +55,10 @@ export function NewBuildMenu({ onCreated, icon = false }: NewBuildMenuProps) {
                 key={item.kind}
                 type="button"
                 role="menuitem"
-                disabled={busy}
+                disabled={busy || item.disabled}
                 onClick={() => {
                   close();
+                  if (item.disabled) return;
                   openCreate({
                     space: "build",
                     kind: item.kind,
@@ -68,7 +70,7 @@ export function NewBuildMenu({ onCreated, icon = false }: NewBuildMenuProps) {
               >
                 <span className="text-[13px] font-medium">{item.label}</span>
                 <span className="text-[12px] text-muted-foreground">
-                  {item.summary}
+                  {item.disabled ? "Coming soon" : item.summary}
                 </span>
               </button>
             ))}

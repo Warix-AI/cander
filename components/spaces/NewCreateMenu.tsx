@@ -15,6 +15,7 @@ export type CreateStart = {
   kind: ProjectKind;
   space: SpaceId;
   title: string;
+  disabled?: boolean;
 };
 
 /** Unified Create menu — Image (Studio) + App / Website (Build). */
@@ -34,6 +35,7 @@ export const CREATE_MENU_OPTIONS: CreateStart[] = [
     kind: item.kind,
     space: "build" as const,
     title: `New ${item.label}`,
+    disabled: item.disabled,
   })),
 ];
 
@@ -75,9 +77,10 @@ export function NewCreateMenu({ onCreated, icon = true }: NewCreateMenuProps) {
                 key={item.id}
                 type="button"
                 role="menuitem"
-                disabled={busy}
+                disabled={busy || item.disabled}
                 onClick={() => {
                   close();
+                  if (item.disabled) return;
                   openCreate({
                     space: item.space,
                     kind: item.kind,
@@ -89,7 +92,7 @@ export function NewCreateMenu({ onCreated, icon = true }: NewCreateMenuProps) {
               >
                 <span className="text-[13px] font-medium">{item.label}</span>
                 <span className="text-[12px] text-muted-foreground">
-                  {item.summary}
+                  {item.disabled ? "Coming soon" : item.summary}
                 </span>
               </button>
             ))}

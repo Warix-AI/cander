@@ -19,6 +19,7 @@ export type CanvasStartOption = {
   kind?: ProjectKind;
   space?: SpaceId;
   title?: string;
+  disabled?: boolean;
 };
 
 /**
@@ -57,6 +58,7 @@ export function canvasStartOptions(): CanvasStartOption[] {
       kind: "app",
       space: "build",
       title: "New App",
+      disabled: true,
     },
     {
       id: "website",
@@ -67,6 +69,7 @@ export function canvasStartOptions(): CanvasStartOption[] {
       kind: "site",
       space: "build",
       title: "New Website",
+      disabled: true,
     },
   ];
 }

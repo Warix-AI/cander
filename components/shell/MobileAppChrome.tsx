@@ -816,9 +816,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
               <button
                 key={item.id}
                 type="button"
-                disabled={newProjectBusy}
+                disabled={newProjectBusy || item.disabled}
                 onClick={() => {
                   setNewProjectOpen(false);
+                  if (item.disabled) return;
                   if (item.action === "quick-search") {
                     openQuickSearchBrowser();
                     return;
@@ -837,7 +838,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
                   {item.label}
                 </span>
                 <span className="text-[13px] text-muted-foreground">
-                  {item.summary}
+                  {item.disabled ? "Coming soon" : item.summary}
                 </span>
               </button>
             ))}

@@ -51,9 +51,10 @@ export function NewCanvasMenu({ onCreated, icon = true, buttonLabel = "New" }: N
                 key={item.id}
                 type="button"
                 role="menuitem"
-                disabled={busy}
+                disabled={busy || item.disabled}
                 onClick={() => {
                   close();
+                  if (item.disabled) return;
                   if (item.action === "quick-search") {
                     openQuickSearchBrowser();
                     return;
@@ -73,7 +74,7 @@ export function NewCanvasMenu({ onCreated, icon = true, buttonLabel = "New" }: N
               >
                 <span className="text-[13px] font-medium">{item.label}</span>
                 <span className="text-[12px] text-muted-foreground">
-                  {item.summary}
+                  {item.disabled ? "Coming soon" : item.summary}
                 </span>
               </button>
             ))}

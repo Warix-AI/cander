@@ -53,9 +53,10 @@ export function PanelChoiceState() {
               <button
                 key={item.id}
                 type="button"
-                disabled={Boolean(busy) || createBusy}
+                disabled={Boolean(busy) || createBusy || item.disabled}
                 onClick={() =>
                   void run(item.id, () => {
+                    if (item.disabled) return;
                     if (item.action === "quick-search") {
                       openQuickSearchBrowser();
                       return;
@@ -82,7 +83,7 @@ export function PanelChoiceState() {
                     {busy === item.id ? "Starting…" : item.label}
                   </span>
                   <span className="block truncate text-[11.5px] text-muted-foreground">
-                    {item.summary}
+                    {item.disabled ? "Coming soon" : item.summary}
                   </span>
                 </span>
               </button>

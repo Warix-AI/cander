@@ -142,6 +142,7 @@ export function SearchModal() {
         group: "Create",
         icon: Icon,
         run: () => {
+          if (option.disabled) return;
           if (option.action === "quick-search") {
             openQuickSearchBrowser();
             return;
