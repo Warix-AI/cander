@@ -212,6 +212,11 @@ describe("agent definition includes scope", () => {
       messages: [],
     });
     assert.match(formatAgentDefinitionSummary(empty), /all user connectors/);
+    assert.match(formatAgentDefinitionSummary(empty), /Expert: Booking/);
+    assert.match(
+      formatAgentDefinitionSummary(empty),
+      /Description \(routing for Cander\)|Description: \(empty/,
+    );
 
     const scoped = {
       ...empty,
@@ -227,5 +232,97 @@ describe("agent definition includes scope", () => {
       formatAgentDefinitionSummary(scoped),
       /booking@company\.com/,
     );
+  });
+});
+
+describe("expert directory privacy and search", () => {
+  it("searchExpertDirectory ranks by description keywords and never needs instructions", async () => {
+    const {
+      searchExpertDirectory,
+      formatExpertDirectoryForPrompt,
+    } = await import("../lib/agents/directory-search.ts");
+
+    const entries = [
+      {
+        id: "e1",
+        projectId: "p1",
+        workspaceId: "ws",
+        name: "Booking",
+        description:
+          "Handles appointment requests, cancellations, rescheduling, and scheduling questions.",
+        status: "active",
+      },
+      {
+        id: "e2",
+        projectId: "p2",
+        workspaceId: "ws",
+        name: "Billing",
+        description:
+          "Handles invoices, payments, failed charges, refunds, and billing questions.",
+        status: "active",
+      },
+      {
+        id: "e3",
+        projectId: "p3",
+        workspaceId: "ws",
+        name: "Support",
+        description:
+          "Handles product questions, customer issues, complaints, and troubleshooting.",
+        status: "active",
+      },
+    ];
+
+    const billed = searchExpertDirectory(
+      entries,
+      "Customer refund for a failed payment charge",
+      3,
+    );
+    assert.equal(billed[0]?.name, "Billing");
+
+    const booked = searchExpertDirectory(
+      entries,
+      "Need to reschedule an appointment cancellation",
+      3,
+    );
+    assert.equal(booked[0]?.name, "Booking");
+
+    const prompt = formatExpertDirectoryForPrompt(entries);
+    assert.match(prompt, /Booking/);
+    assert.match(prompt, /Billing/);
+    assert.doesNotMatch(prompt, /instructions/i);
+    assert.doesNotMatch(JSON.stringify(entries), /"instructions"/);
+  });
+
+  it("assertNoInstructionsLeak rejects payloads with instructions", async () => {
+    const { assertNoInstructionsLeak } = await import(
+      "../lib/agents/directory-search.ts"
+    );
+    assert.equal(
+      assertNoInstructionsLeak({
+        experts: [{ id: "1", name: "Booking", description: "x", status: "active" }],
+      }),
+      true,
+    );
+    assert.equal(
+      assertNoInstructionsLeak({
+        experts: [{ id: "1", instructions: "secret rules" }],
+      }),
+      false,
+    );
+  });
+
+  it("isExpertRoutingIntent unlocks experts domain", async () => {
+    const { isExpertRoutingIntent, resolveAllowedToolsForTurn } = await import(
+      "../lib/ai/tools/domains.ts"
+    );
+    assert.equal(isExpertRoutingIntent("Which expert should handle this?"), true);
+    assert.equal(isExpertRoutingIntent("hello there"), false);
+    const turn = resolveAllowedToolsForTurn({
+      content: "A customer needs help with a refund",
+    });
+    assert.ok(turn.domains.includes("experts"));
+    assert.ok(turn.toolNames.includes("experts.list"));
+    assert.ok(turn.toolNames.includes("experts.search"));
+    assert.ok(!turn.toolNames.some((n) => n.includes("instructions")));
   });
 });

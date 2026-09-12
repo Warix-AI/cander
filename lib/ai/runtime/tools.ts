@@ -145,6 +145,19 @@ export async function executeAuthorizedTool(
     if (agent) return agent;
   }
 
+  if (
+    tool.name.startsWith("experts.") ||
+    tool.name === "list_experts" ||
+    tool.name === "search_experts" ||
+    tool.name === "consult_expert"
+  ) {
+    const { executeExpertTool } = await import(
+      "@/lib/ai/experts/tool-executors"
+    );
+    const experts = await executeExpertTool({ name: tool.name, args });
+    if (experts) return experts;
+  }
+
   if (tool.name.startsWith("health.")) {
     const { executeHealthTool } = await import(
       "@/lib/ai/health/tool-executors"

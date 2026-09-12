@@ -273,7 +273,7 @@ export async function updateProjectAgent(
 ): Promise<ProjectAgent> {
   const admin = createSupabaseAdminClient();
   const row: Record<string, unknown> = {};
-  if (patch.name !== undefined) row.name = patch.name.trim() || "Agent";
+  if (patch.name !== undefined) row.name = patch.name.trim() || "Expert";
   if (patch.description !== undefined) row.description = patch.description;
   if (patch.instructions !== undefined) row.instructions = patch.instructions;
   if (patch.enabled !== undefined) {
@@ -868,26 +868,29 @@ export async function listAgentActivity(opts: {
       limit: 200,
     }),
   ]);
-  const agentName = opts.agentName?.trim() || "Agent";
+  const agentName = opts.agentName?.trim() || "Expert";
   const activity = runs.map((run) =>
     runToActivityItem({ run, agentName }),
   );
   return { runs, messages, activity };
 }
 
-/** Cross-agent Activity feed for the workspace Agents section. */
+/** Cross-Expert Activity feed for the workspace Experts section (~30 days). */
 export async function listWorkspaceAgentActivity(opts: {
   workspaceId: string;
   limit?: number;
 }): Promise<AgentActivityItem[]> {
   const admin = createSupabaseAdminClient();
   const limit = Math.min(100, Math.max(1, opts.limit ?? 40));
+  const since = new Date();
+  since.setDate(since.getDate() - 30);
   const { data, error } = await admin
     .from("agent_runs")
     .select(
       "id, workspace_id, project_id, agent_id, trigger_type, status, started_at, completed_at, summary, error, idempotency_key, trigger_payload",
     )
     .eq("workspace_id", opts.workspaceId)
+    .gte("started_at", since.toISOString())
     .order("started_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
@@ -902,14 +905,14 @@ export async function listWorkspaceAgentActivity(opts: {
       .eq("workspace_id", opts.workspaceId)
       .in("id", agentIds);
     for (const row of agents ?? []) {
-      nameById.set(String(row.id), String(row.name ?? "Agent"));
+      nameById.set(String(row.id), String(row.name ?? "Expert"));
     }
   }
 
   return runs.map((run) =>
     runToActivityItem({
       run,
-      agentName: nameById.get(run.agentId) || "Agent",
+      agentName: nameById.get(run.agentId) || "Expert",
     }),
   );
 }

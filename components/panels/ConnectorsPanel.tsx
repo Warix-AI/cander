@@ -222,7 +222,7 @@ export function ConnectorsPanel() {
               )}
             </div>
             <div className="mt-3">
-              <SectionLabel>Agents using this</SectionLabel>
+              <SectionLabel>Experts using this</SectionLabel>
               {relatedAutomations.length ? (
                 relatedAutomations.map((item) => (
                   <button
@@ -236,7 +236,7 @@ export function ConnectorsPanel() {
                 ))
               ) : (
                 <p className="px-3 py-2 text-[13px] text-muted-foreground">
-                  No agents linked yet.
+                  No experts linked yet.
                 </p>
               )}
             </div>

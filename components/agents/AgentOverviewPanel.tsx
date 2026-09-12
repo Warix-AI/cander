@@ -183,10 +183,10 @@ export function AgentOverviewPanel({
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-            Agent · Activity
+            Expert · Activity
           </p>
           <h1 className="truncate text-[1.1rem] font-semibold tracking-[-0.02em]">
-            {agent?.name ?? projectTitle ?? "Agent"}
+            {agent?.name ?? projectTitle ?? "Expert"}
           </h1>
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
             Outcomes only · dialogue is in the left chat

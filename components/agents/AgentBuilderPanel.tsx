@@ -198,7 +198,7 @@ export function AgentBuilderPanel({
         )}
       >
         <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.6} />
-        Loading agent…
+        Loading expert…
       </div>
     );
   }
@@ -211,7 +211,7 @@ export function AgentBuilderPanel({
           BROWSER_CHROME_BG,
         )}
       >
-        {error ?? "Agent not found."}
+        {error ?? "Expert not found."}
       </div>
     );
   }
@@ -244,7 +244,7 @@ export function AgentBuilderPanel({
           </div>
           <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
             {bundle.agent.description ||
-              "Instructions + Schedule + Scope · Chat configures this agent"}
+              "Description routes Cander · Instructions decide · Schedule wakes"}
           </p>
         </div>
         <button
@@ -384,8 +384,9 @@ function InstructionsEditor({
           Instructions
         </h2>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          Purpose, rules, and what this agent should ask Cander to do. You can
-          also change this from the chat on the left.
+          Private rules for how this Expert decides. Cander does not see these
+          when choosing which Expert to consult — only what the Expert says in
+          conversation.
         </p>
       </div>
       <Field
@@ -394,18 +395,25 @@ function InstructionsEditor({
         disabled={busy}
         onCommit={(value) => onSaveIdentity({ name: value })}
       />
-      <Field
-        label="Description"
-        defaultValue={description}
-        disabled={busy}
-        onCommit={(value) => onSaveIdentity({ description: value })}
-      />
+      <div className="space-y-1.5">
+        <Field
+          label="Description"
+          defaultValue={description}
+          disabled={busy}
+          onCommit={(value) => onSaveIdentity({ description: value })}
+        />
+        <p className="text-[11.5px] leading-snug text-muted-foreground">
+          Description tells Cander when this Expert should be consulted.
+          Describe what this Expert specializes in so Cander knows when to ask
+          for its help.
+        </p>
+      </div>
       <TextArea
         label="Instructions markdown"
         defaultValue={instructions}
         disabled={busy}
         rows={16}
-        placeholder="# Buddy&#10;&#10;When you wake up, ask Cander to…"
+        placeholder="# Booking&#10;&#10;Verify the customer before booking. Never schedule outside business hours…"
         onCommit={(value) => onSaveInstructions(value)}
       />
     </div>
@@ -611,7 +619,7 @@ function ScopeEditor({
       <div>
         <h2 className="text-[14px] font-semibold tracking-[-0.02em]">Scope</h2>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          Which Cander resources may this Agent ask about? Leave empty to allow
+          Which Cander resources may this Expert ask about? Leave empty to allow
           all of your connected apps. This is not agent-owned tools — Cander
           still executes everything.
         </p>

@@ -1135,7 +1135,7 @@ export function ProjectBrowserPanel({
     void createProjectAgentClient({
       workspaceId,
       projectId,
-      name: `Agent ${session.tabs.filter((t) => t.kind === "agent-builder").length + 1}`,
+      name: `Expert ${session.tabs.filter((t) => t.kind === "agent-builder").length + 1}`,
     })
       .then((agent) => {
         const tab = makeAgentBuilderTab({
@@ -3128,7 +3128,7 @@ export function ProjectBrowserPanel({
               className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left text-[15px] hover:bg-muted/70"
             >
               <Bot className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
-              New agent
+              New expert
             </button>
             <button
               type="button"
@@ -4310,7 +4310,7 @@ function AddTabMenu({
               className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] hover:bg-muted"
             >
               <Bot className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.6} />
-              New agent
+              New expert
             </button>
           ) : null}
           {studioMode && onAddStudioMedia ? (

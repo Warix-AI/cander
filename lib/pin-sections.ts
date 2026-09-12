@@ -21,7 +21,7 @@ export type PinSectionId =
   | "searches"
   | "chats";
 
-/** Agents section sits directly under Connectors. */
+/** Agents section sits directly under Connectors (user-facing: Experts). */
 export const PIN_SECTION_ORDER: PinSectionId[] = [
   "connectors",
   "agents",
@@ -32,9 +32,10 @@ export const PIN_SECTION_ORDER: PinSectionId[] = [
   "chats",
 ];
 
+/** Agents section id kept for pin folder keys; label is Experts. */
 export const PIN_SECTION_LABEL: Record<PinSectionId, string> = {
   connectors: "Connectors",
-  agents: "Agents",
+  agents: "Experts",
   websites: "Websites",
   apps: "Apps",
   images: "Images",

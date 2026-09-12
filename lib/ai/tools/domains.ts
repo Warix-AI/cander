@@ -25,6 +25,7 @@ export type ToolDomain =
   | "review"
   | "build"
   | "agent"
+  | "experts"
   | "health";
 
 export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
@@ -107,6 +108,7 @@ export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
     "agent.validate",
     "agent.run",
   ],
+  experts: ["experts.list", "experts.search", "experts.consult"],
   health: ["health.query", "health.compare", "health.workouts"],
 };
 
@@ -239,14 +241,32 @@ export function isAgentBuilderIntent(text: string): boolean {
   const t = (text || "").trim();
   if (!t) return false;
   return (
-    (/\b(agent|automation|workflow|trigger|zap)\b/i.test(t) &&
+    (/\b(agent|expert|automation|workflow|trigger|zap)\b/i.test(t) &&
       /\b(add|create|build|make|set\s*up|configure|update|change|edit|remove|delete|grant|allow|revoke|wait|email|slack|hubspot|gmail|when|whenever|if|then)\b/i.test(
         t,
       )) ||
     /\b(add|create|build)\b[\s\S]{0,40}\b(trigger|action|condition|step|route|workflow)\b/i.test(
       t,
     ) ||
-    /\b(what\s+does\s+this\s+agent|agent\s+currently|validate\s+(the\s+)?(agent|workflow))\b/i.test(
+    /\b(what\s+does\s+this\s+(agent|expert)|(?:agent|expert)\s+currently|validate\s+(the\s+)?(agent|expert|workflow))\b/i.test(
+      t,
+    )
+  );
+}
+
+/** Unlock Expert directory tools when Cander may need specialized routing. */
+export function isExpertRoutingIntent(text: string): boolean {
+  const t = (text || "").trim();
+  if (!t) return false;
+  return (
+    /\b(experts?|specialist)\b/i.test(t) ||
+    /\b(consult|ask|route|hand\s*off)\b[\s\S]{0,48}\b(expert|booking|support|billing|collections|sales)\b/i.test(
+      t,
+    ) ||
+    /\b(who should handle|which expert|list experts|search experts)\b/i.test(
+      t,
+    ) ||
+    /\b(appointment|reschedul|cancell?ation|overdue|failed payment|refund|complaint|troubleshoot)\b/i.test(
       t,
     )
   );
@@ -256,6 +276,7 @@ function domainsForResumeTool(resumeTool?: string): ToolDomain[] {
   if (!resumeTool) return ["clarification"];
   if (resumeTool.startsWith("project.")) return ["projects", "clarification"];
   if (resumeTool.startsWith("agent.")) return ["agent", "clarification"];
+  if (resumeTool.startsWith("experts.")) return ["experts", "clarification"];
   if (resumeTool.startsWith("nav.") || resumeTool.startsWith("panel.")) {
     return ["navigation", "clarification"];
   }
@@ -295,6 +316,10 @@ export function resolveAllowedToolsForTurn(opts: {
   if (isAgentBuilderIntent(content)) {
     domains.add("agent");
     domains.add("clarification");
+  }
+
+  if (isExpertRoutingIntent(content)) {
+    domains.add("experts");
   }
 
   if (refersToActiveBrowserSurface(content)) {

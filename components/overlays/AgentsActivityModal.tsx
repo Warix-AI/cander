@@ -28,7 +28,7 @@ function statusTone(status: string) {
   return "text-muted-foreground";
 }
 
-/** Global Agents Activity feed (sidebar → Activity). */
+/** Global Experts Activity feed (sidebar → Activity). */
 export function AgentsActivityModal() {
   const { overlay, closeOverlay, workspaceId, openProject } = useApp();
   const open = overlay === "agents-activity";
@@ -71,13 +71,13 @@ export function AgentsActivityModal() {
       <div
         role="dialog"
         aria-modal
-        aria-label="Agents Activity"
+        aria-label="Experts Activity"
         className="relative z-[1] flex max-h-[70vh] w-full max-w-lg flex-col overflow-hidden rounded-[16px] border border-border bg-background shadow-xl"
       >
         <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
           <Activity className="h-4 w-4 text-muted-foreground" strokeWidth={1.6} />
           <h2 className="flex-1 text-[15px] font-semibold tracking-[-0.02em]">
-            Agents Activity
+            Experts Activity
           </h2>
           <button
             type="button"

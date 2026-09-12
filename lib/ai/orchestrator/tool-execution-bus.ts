@@ -88,7 +88,13 @@ export function mapToolEventToProgressLabel(
 function detailForToolName(name: string): string {
   if (name.startsWith("agent.")) {
     // Keep in sync with lib/ai/agents/labels.ts — avoid circular imports here.
-    if (name === "agent.get") return "Inspecting agent";
+    if (name === "agent.get") return "Inspecting expert";
+    if (name.startsWith("experts.")) {
+      if (name === "experts.list") return "Listing experts";
+      if (name === "experts.search") return "Searching experts";
+      if (name === "experts.consult") return "Consulting expert";
+      return "Experts";
+    }
     if (name === "agent.skill.create") return "Creating skill";
     if (name === "agent.skill.update") return "Updating skill";
     if (name === "agent.skill.attach") return "Attaching skill";

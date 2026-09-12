@@ -9,6 +9,9 @@ export type AgentMutationResult = {
   summary: string;
 };
 
+/**
+ * Update Expert name / Description (routing) / private Instructions / status.
+ */
 export function mutationUpdateMetadata(opts: {
   name?: string;
   description?: string;
@@ -30,12 +33,12 @@ export function mutationUpdateMetadata(opts: {
   return {
     patch,
     summary: parts.length
-      ? `Updated agent ${parts.join(", ")}`
+      ? `Updated expert ${parts.join(", ")}`
       : "No metadata changes",
   };
 }
 
-/** Writes Instructions markdown (legacy skill tools map here). */
+/** Writes private Instructions markdown (legacy skill tools map here). */
 export function mutationSetInstructions(opts: {
   markdown: string;
   name?: string;
@@ -46,6 +49,6 @@ export function mutationSetInstructions(opts: {
   if (opts.name?.trim()) patch.name = opts.name.trim();
   return {
     patch,
-    summary: "Updated agent instructions",
+    summary: "Updated expert instructions",
   };
 }

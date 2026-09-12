@@ -1,7 +1,7 @@
-/** Project Agent — Instructions + Schedule/Trigger + Scope + Activity.
+/** Project Expert — Description (routing) + Instructions (private) + Schedule + Scope + Activity.
  *
- * Agent decides what needs to happen (delegator).
- * Cander owns intelligence + connector/tool execution.
+ * Expert decides what needs to happen (delegator).
+ * Cander owns intelligence + connector/tool execution + authorization.
  * Conversation (`agent_messages`) is internal continuity only — not the Overview UI.
  */
 
@@ -30,7 +30,7 @@ export type ProjectAgent = {
   projectId: string;
   name: string;
   description: string;
-  /** Human-readable Markdown: purpose, behavior, rules, what to ask Cander. */
+  /** Human-readable Markdown: private decision rules for the Expert (not used for routing). */
   instructions: string;
   enabled: boolean;
   status: AgentStatus;

@@ -214,6 +214,12 @@ function detailForTool(name: string): string {
   if (name.startsWith("agent.")) {
     return labelForAgentTool(name);
   }
+  if (name.startsWith("experts.")) {
+    if (name === "experts.list") return "Listing experts";
+    if (name === "experts.search") return "Searching experts";
+    if (name === "experts.consult") return "Consulting expert";
+    return "Experts";
+  }
   switch (name) {
     case "web.search":
     case "web.research":

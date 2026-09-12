@@ -3,8 +3,8 @@
  */
 
 const LABELS: Record<string, string> = {
-  "agent.get": "Inspecting agent",
-  "agent.update_metadata": "Updating agent",
+  "agent.get": "Inspecting expert",
+  "agent.update_metadata": "Updating expert",
   "agent.skill.create": "Creating skill",
   "agent.skill.update": "Updating skill",
   "agent.skill.attach": "Attaching skill",
@@ -14,12 +14,12 @@ const LABELS: Record<string, string> = {
   "agent.knowledge.attach": "Attaching knowledge",
   "agent.knowledge.remove": "Removing knowledge",
   "agent.trigger.set": "Setting trigger",
-  "agent.validate": "Validating agent",
-  "agent.run": "Running agent",
+  "agent.validate": "Validating expert",
+  "agent.run": "Running expert",
 };
 
 export function labelForAgentTool(name: string): string {
-  return LABELS[name] ?? "Updating agent";
+  return LABELS[name] ?? "Updating expert";
 }
 
 export function isAgentBuilderTool(name: string): boolean {

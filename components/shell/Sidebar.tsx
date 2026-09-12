@@ -26,6 +26,7 @@ import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
+import { useRunningExpertProjectIds } from "@/components/agents/useRunningExpertProjectIds";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import {
@@ -102,7 +103,10 @@ export function Sidebar() {
     workspaceRailOpen,
     canGoBack,
     goBack,
+    workspaceId,
   } = useApp();
+
+  const runningExpertProjects = useRunningExpertProjectIds(workspaceId);
 
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
@@ -305,8 +309,12 @@ export function Sidebar() {
       id={item.id}
       title={item.title}
       leading={<PinPreviewThumb item={item} />}
-      // Stroke marks the active child; blue dot shows in-use (no row fill).
+      // Stroke marks the active child; solid blue = selected; pulse = Expert running.
       inUse={pinRowActive(item)}
+      running={
+        item.projectKind === "automation" &&
+        runningExpertProjects.has(item.id)
+      }
       onOpen={() => {
         if (item.kind === "thread") openThread(item.id);
         else if (item.kind === "connector") openConnector(item.id);
@@ -678,6 +686,7 @@ function PinnedRow({
   id,
   title,
   inUse,
+  running,
   onOpen,
   onReorder,
   leading,
@@ -688,6 +697,7 @@ function PinnedRow({
   id: string;
   title: string;
   inUse: boolean;
+  running?: boolean;
   onOpen: () => void;
   onReorder: (
     from: { kind: PinKind; id: string },
@@ -809,7 +819,13 @@ function PinnedRow({
         <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
       <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
-        {inUse ? (
+        {running ? (
+          <span
+            aria-hidden
+            title="Expert running"
+            className="pointer-events-none absolute h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
+          />
+        ) : inUse ? (
           <span
             aria-hidden
             className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"

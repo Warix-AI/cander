@@ -1,14 +1,16 @@
 /**
- * GET /api/agents/activity?workspaceId=
- * Cross-expert Activity feed for the sidebar Experts section (~30 days).
+ * GET /api/experts/directory?workspaceId=
+ * Lightweight Expert directory — id, name, description, status only.
  */
 
 import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import {
-  assertWorkspaceMember,
-  listWorkspaceAgentActivity,
-} from "@/lib/agents/server";
+  formatExpertDirectoryForPrompt,
+  listExpertDirectory,
+  searchExpertDirectory,
+} from "@/lib/agents/directory";
+import { assertWorkspaceMember } from "@/lib/agents/server";
 
 export const runtime = "nodejs";
 
@@ -20,7 +22,8 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const workspaceId = url.searchParams.get("workspaceId")?.trim();
-  const limitRaw = Number(url.searchParams.get("limit") ?? 40);
+  const projectId = url.searchParams.get("projectId")?.trim() || undefined;
+  const query = url.searchParams.get("q")?.trim() || "";
   if (!workspaceId) {
     return NextResponse.json(
       { error: "workspaceId is required." },
@@ -32,11 +35,24 @@ export async function GET(request: Request) {
   }
 
   try {
-    const activity = await listWorkspaceAgentActivity({
+    const all = await listExpertDirectory({
       workspaceId,
-      limit: Number.isFinite(limitRaw) ? limitRaw : 40,
+      projectId,
+      includeDraft: false,
     });
-    return NextResponse.json({ activity });
+    const experts = query
+      ? searchExpertDirectory(all, query, 8)
+      : all;
+    return NextResponse.json({
+      experts: experts.map((e) => ({
+        id: e.id,
+        projectId: e.projectId,
+        name: e.name,
+        description: e.description,
+        status: e.status,
+      })),
+      summary: formatExpertDirectoryForPrompt(experts),
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed." },

@@ -77,13 +77,15 @@ export function formatAgentDefinitionSummary(def: AgentDefinition): string {
           .map((s) => s.label || `${s.connectorId}:${s.connectionId}`)
           .join(", ")}`;
   return [
-    `Agent: ${def.name} (${def.status})`,
-    def.description ? `Description: ${def.description}` : null,
+    `Expert: ${def.name} (${def.status})`,
+    def.description
+      ? `Description (routing for Cander): ${def.description}`
+      : "Description: (empty — Cander needs this to know when to consult)",
     `Trigger: ${trigger}`,
     def.nextRunAt ? `Next run: ${def.nextRunAt}` : null,
     scopeLine,
     `Runtime messages: ${def.messageCount}`,
-    `Instructions:\n${clipped}`,
+    `Private Instructions:\n${clipped}`,
   ]
     .filter(Boolean)
     .join("\n");

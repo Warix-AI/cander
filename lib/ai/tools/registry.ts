@@ -31,6 +31,7 @@ export type AiToolDefinition = {
     | "review"
     | "build"
     | "agent"
+    | "experts"
     | "health";
   parameters: {
     type: "object";
@@ -811,13 +812,13 @@ function registerAgentTools() {
     {
       name: "agent.get",
       description:
-        "Read the current Agent: status, skills markdown, connector/tool access, knowledge, trigger, recent runs.",
+        "Read the current Expert: name, description (routing), private instructions, schedule, status, scope, recent runs.",
       properties: { agentId: { type: "string" } },
     },
     {
       name: "agent.update_metadata",
       description:
-        "Update agent name, description, or status (draft|active|paused). Active means executable.",
+        "Update Expert name, description (tells Cander when to consult), or status (draft|active|paused).",
       properties: {
         agentId: { type: "string" },
         name: { type: "string" },
@@ -978,6 +979,70 @@ function registerAgentTools() {
 }
 
 registerAgentTools();
+
+function registerExpertDirectoryTools() {
+  const expertTools: Array<{
+    name: string;
+    description: string;
+    required?: string[];
+    properties: AiToolDefinition["parameters"]["properties"];
+  }> = [
+    {
+      name: "experts.list",
+      description:
+        "List available Experts (id, name, description, status). Use when you need specialized judgment. Never returns private Instructions.",
+      properties: {
+        workspaceId: { type: "string" },
+        projectId: { type: "string" },
+      },
+    },
+    {
+      name: "experts.search",
+      description:
+        "Search Experts by situation/query. Returns name + description + status only — never Instructions.",
+      required: ["query"],
+      properties: {
+        query: {
+          type: "string",
+          description: "Situation or keywords to match Expert descriptions",
+        },
+        workspaceId: { type: "string" },
+        projectId: { type: "string" },
+      },
+    },
+    {
+      name: "experts.consult",
+      description:
+        "Consult one Expert about a situation. Opens/resumes Expert↔Cander dialogue. Do not re-consult mid-task unless the Expert says another Expert should handle it.",
+      required: ["expertId", "situation"],
+      properties: {
+        expertId: { type: "string" },
+        situation: {
+          type: "string",
+          description: "What you want the Expert to decide on",
+        },
+        workspaceId: { type: "string" },
+      },
+    },
+  ];
+
+  for (const t of expertTools) {
+    registerAiTool({
+      name: t.name,
+      description: t.description,
+      permission: { requireWorkspaceMember: true },
+      domain: "experts",
+      enabled: true,
+      parameters: {
+        type: "object",
+        required: t.required,
+        properties: t.properties,
+      },
+    });
+  }
+}
+
+registerExpertDirectoryTools();
 
 function registerHealthTools() {
   const healthTools: Array<{
