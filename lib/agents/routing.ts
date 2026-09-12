@@ -4,7 +4,7 @@
  */
 
 import OpenAI from "openai";
-import { resolveOpenAIModel } from "@/lib/ai/openai-model";
+import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
 import {
   formatExpertDirectoryForPrompt,
   listExpertDirectory,

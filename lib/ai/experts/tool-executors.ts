@@ -1,6 +1,6 @@
 /**
  * Expert directory tools for Cander — Name + Description + Status only.
- * Never returns Instructions.
+ * Uses HTTP APIs so this module stays client-safe (no admin/runtime imports).
  */
 
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
@@ -9,31 +9,15 @@ import {
   getTurnWorkspaceId,
 } from "@/lib/ai/runtime/turn-context";
 import {
+  assertNoInstructionsLeak,
   formatExpertDirectoryForPrompt,
-  listExpertDirectory,
-  searchExpertDirectory,
-} from "@/lib/agents/directory";
-import { consultExpert } from "@/lib/agents/routing";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { assertNoInstructionsLeak } from "@/lib/agents/directory-search";
+} from "@/lib/agents/directory-search";
+import {
+  consultExpertClient,
+  listExpertDirectoryClient,
+} from "@/lib/agents/client";
 
 export { assertNoInstructionsLeak };
-
-function directoryPayload(
-  entries: Awaited<ReturnType<typeof listExpertDirectory>>,
-) {
-  const data = entries.map((e) => ({
-    id: e.id,
-    projectId: e.projectId,
-    name: e.name,
-    description: e.description,
-    status: e.status,
-  }));
-  if (!assertNoInstructionsLeak(data)) {
-    throw new Error("Expert directory leaked Instructions.");
-  }
-  return data;
-}
 
 export async function executeExpertDirectoryTool(input: {
   name: string;
@@ -58,17 +42,18 @@ export async function executeExpertDirectoryTool(input: {
 
   try {
     if (name === "experts.list" || name === "list_experts") {
-      const entries = await listExpertDirectory({
+      const listed = await listExpertDirectoryClient({
         workspaceId,
         projectId: projectId || undefined,
-        includeDraft: false,
       });
-      const data = directoryPayload(entries);
+      if (!assertNoInstructionsLeak(listed.experts)) {
+        return { name, ok: false, output: "Expert directory leaked Instructions." };
+      }
       return {
         name,
         ok: true,
-        output: formatExpertDirectoryForPrompt(entries),
-        data: { experts: data },
+        output: listed.summary || formatExpertDirectoryForPrompt(listed.experts),
+        data: { experts: listed.experts },
       };
     }
 
@@ -79,20 +64,21 @@ export async function executeExpertDirectoryTool(input: {
           : typeof args.situation === "string"
             ? args.situation
             : "";
-      const all = await listExpertDirectory({
+      const listed = await listExpertDirectoryClient({
         workspaceId,
         projectId: projectId || undefined,
-        includeDraft: false,
+        query,
       });
-      const entries = searchExpertDirectory(all, query, 8);
-      const data = directoryPayload(entries);
+      if (!assertNoInstructionsLeak(listed.experts)) {
+        return { name, ok: false, output: "Expert directory leaked Instructions." };
+      }
       return {
         name,
         ok: true,
-        output: entries.length
-          ? formatExpertDirectoryForPrompt(entries)
+        output: listed.experts.length
+          ? listed.summary || formatExpertDirectoryForPrompt(listed.experts)
           : "No Experts matched. You may handle this without consulting an Expert.",
-        data: { experts: data },
+        data: { experts: listed.experts },
       };
     }
 
@@ -111,39 +97,10 @@ export async function executeExpertDirectoryTool(input: {
         };
       }
 
-      const entries = await listExpertDirectory({
+      const result = await consultExpertClient({
         workspaceId,
-        includeDraft: true,
-      });
-      const expert = entries.find((e) => e.id === expertId);
-      if (!expert) {
-        return { name, ok: false, output: "Expert not found in directory." };
-      }
-
-      // Resolve acting profile from the Expert's project owner when turn lacks it.
-      const admin = createSupabaseAdminClient();
-      const { data: agentRow } = await admin
-        .from("project_agents")
-        .select("created_by, project_id")
-        .eq("id", expertId)
-        .eq("workspace_id", workspaceId)
-        .maybeSingle();
-      const profileId = String(agentRow?.created_by ?? "").trim();
-      if (!profileId) {
-        return {
-          name,
-          ok: false,
-          output: "Could not resolve profile for Expert consult.",
-        };
-      }
-
-      const result = await consultExpert({
-        agentId: expertId,
-        workspaceId,
-        projectId: expert.projectId || String(agentRow?.project_id ?? ""),
-        profileId,
+        expertId,
         situation,
-        triggerType: "consult",
       });
 
       return {
@@ -158,7 +115,7 @@ export async function executeExpertDirectoryTool(input: {
           "Consult finished.",
         data: {
           expertId,
-          expertName: expert.name,
+          expertName: result.expert.name,
           runId: result.run.id,
           status: result.run.status,
         },

@@ -407,6 +407,62 @@ export async function fetchWorkspaceAgentActivityClient(opts: {
   return data.activity ?? [];
 }
 
+export type ExpertDirectoryClientEntry = {
+  id: string;
+  projectId: string;
+  name: string;
+  description: string;
+  status: string;
+};
+
+export async function listExpertDirectoryClient(opts: {
+  workspaceId: string;
+  projectId?: string;
+  query?: string;
+}): Promise<{
+  experts: ExpertDirectoryClientEntry[];
+  summary: string;
+}> {
+  const headers = await authHeaders();
+  const params = new URLSearchParams({
+    workspaceId: opts.workspaceId,
+  });
+  if (opts.projectId) params.set("projectId", opts.projectId);
+  if (opts.query?.trim()) params.set("q", opts.query.trim());
+  const res = await fetch(`/api/experts/directory?${params}`, { headers });
+  const data = await parseJson<{
+    experts?: ExpertDirectoryClientEntry[];
+    summary?: string;
+  }>(res);
+  return {
+    experts: data.experts ?? [],
+    summary: data.summary ?? "",
+  };
+}
+
+export async function consultExpertClient(opts: {
+  workspaceId: string;
+  expertId: string;
+  situation: string;
+}): Promise<{
+  expert: ExpertDirectoryClientEntry & { projectId: string };
+  run: AgentRun;
+  content: string;
+  toolCount: number;
+}> {
+  const headers = await authHeaders();
+  const res = await fetch("/api/experts/consult", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({
+      workspaceId: opts.workspaceId,
+      expertId: opts.expertId,
+      situation: opts.situation,
+    }),
+  });
+  return parseJson(res);
+}
+
 export async function listUserConnectorConnectionsClient(opts: {
   workspaceId: string;
 }): Promise<

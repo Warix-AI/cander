@@ -6,7 +6,7 @@
 export type ExpertDirectoryEntryLike = {
   id: string;
   projectId: string;
-  workspaceId: string;
+  workspaceId?: string;
   name: string;
   description: string;
   status: string;
@@ -16,11 +16,11 @@ export type ExpertDirectoryEntryLike = {
  * Rank Experts by simple keyword overlap with the situation.
  * Never loads Instructions. Empty query returns the full list (capped).
  */
-export function searchExpertDirectory(
-  entries: ExpertDirectoryEntryLike[],
+export function searchExpertDirectory<T extends ExpertDirectoryEntryLike>(
+  entries: T[],
   query: string,
   limit = 8,
-): ExpertDirectoryEntryLike[] {
+): T[] {
   const q = query.trim().toLowerCase();
   if (!q) return entries.slice(0, limit);
 
