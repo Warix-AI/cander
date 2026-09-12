@@ -12,6 +12,15 @@ export function connectorChatId(workspaceId: string, connectorId: string) {
   return `t-conn-${workspaceId}-${connectorId}`;
 }
 
+/** Observe-only Agent ↔ Cander runtime dialogue for an automation project. */
+export function agentRuntimeChatId(workspaceId: string, projectId: string) {
+  return `t-agent-runtime-${workspaceId}-${projectId}`;
+}
+
+export function isAgentRuntimeChatId(threadId: string | null | undefined) {
+  return Boolean(threadId?.startsWith("t-agent-runtime-"));
+}
+
 /** Active continuous session for a workspace (not per-space). */
 export function continuousChatId(workspaceId: string) {
   return `t-session-${workspaceId}`;
@@ -99,6 +108,7 @@ export function isSpaceAttachedChat(
   if (isUniversalDefaultChat(thread, workspaceId)) return true;
   if (thread.id.startsWith(`t-space-${workspaceId}-`)) return true;
   if (thread.id.startsWith(`t-conn-${workspaceId}-`)) return true;
+  if (thread.id.startsWith(`t-agent-runtime-${workspaceId}-`)) return true;
   return false;
 }
 
@@ -235,7 +245,8 @@ export function findPersistentProjectThread(
       (item) =>
         item.persistent &&
         item.workspaceId === workspaceId &&
-        item.projectId === projectId,
+        item.projectId === projectId &&
+        !isAgentRuntimeChatId(item.id),
     ) ??
     null
   );
@@ -336,6 +347,70 @@ export function upsertPersistentConnectorThread(
     workspaceId,
     connectorId,
     title ?? "Chat",
+  );
+  return { threads: [created, ...threads], id: created.id };
+}
+
+export function findPersistentAgentRuntimeThread(
+  threads: Thread[],
+  workspaceId: string,
+  projectId: string,
+) {
+  const id = agentRuntimeChatId(workspaceId, projectId);
+  return threads.find((item) => item.id === id) ?? null;
+}
+
+export function emptyPersistentAgentRuntimeThread(
+  workspaceId: string,
+  projectId: string,
+  spaceId: SpaceId,
+  title = "Agent",
+): Thread {
+  return {
+    id: agentRuntimeChatId(workspaceId, projectId),
+    title,
+    workspaceId,
+    projectId,
+    spaceId,
+    updatedAt: new Date().toISOString(),
+    snippet: "",
+    messages: [],
+    persistent: true,
+    sessionSummary: null,
+  };
+}
+
+export function upsertPersistentAgentRuntimeThread(
+  threads: Thread[],
+  workspaceId: string,
+  projectId: string,
+  spaceId: SpaceId,
+  title = "Agent",
+): { threads: Thread[]; id: string } {
+  const found = findPersistentAgentRuntimeThread(
+    threads,
+    workspaceId,
+    projectId,
+  );
+  if (found) {
+    const nextTitle = title.trim() || found.title;
+    if (found.spaceId === spaceId && found.title === nextTitle) {
+      return { threads, id: found.id };
+    }
+    return {
+      threads: threads.map((item) =>
+        item.id === found.id
+          ? { ...item, spaceId, title: nextTitle }
+          : item,
+      ),
+      id: found.id,
+    };
+  }
+  const created = emptyPersistentAgentRuntimeThread(
+    workspaceId,
+    projectId,
+    spaceId,
+    title,
   );
   return { threads: [created, ...threads], id: created.id };
 }

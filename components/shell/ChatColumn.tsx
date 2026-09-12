@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
-import { AgentRuntimeTranscript } from "@/components/agents/AgentRuntimeTranscript";
+import { useSyncAgentRuntimeThread } from "@/components/agents/AgentRuntimeTranscript";
 import { useAgentPinSurface } from "@/components/agents/useAgentPinSurface";
 import { upsertChatThread, getChatStoreSnapshot } from "@/lib/api/chat-store";
 import { mergeHydratedThread } from "@/lib/api/chat-sync";
@@ -143,6 +143,7 @@ export function ChatColumn() {
     mobileSurface,
     connectorId,
     resumeConnectorChat,
+    resumeAgentRuntimeChat,
   } =
     useApp();
   const api = useSpaceApi();
@@ -179,6 +180,19 @@ export function ChatColumn() {
     if (!connectorId) return;
     resumeConnectorChat();
   }, [connectorId, resumeConnectorChat]);
+
+  // Agent overview pin → persistent runtime thread (instant local transcript).
+  useEffect(() => {
+    if (!agentOverview) return;
+    resumeAgentRuntimeChat();
+  }, [agentOverview, projectId, resumeAgentRuntimeChat]);
+
+  useSyncAgentRuntimeThread({
+    workspaceId: agentPin.workspaceId,
+    projectId: agentPin.projectId ?? "",
+    spaceId: (spaceId ?? "build") as SpaceId,
+    enabled: agentOverview,
+  });
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
@@ -544,51 +558,6 @@ export function ChatColumn() {
     </>
   );
 
-  if (agentOverview && agentPin.projectId) {
-    return (
-      <section
-        className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
-          mobile && MOBILE_APP_BG,
-        )}
-      >
-        <div
-          ref={bindScrollParent}
-          className={cn(
-            "chat-scroll flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
-            mobile
-              ? "overscroll-contain px-4 pt-[calc(env(safe-area-inset-top,0px)+4.375rem)] pb-6 touch-pan-y"
-              : floating
-                ? centered
-                  ? "px-4 py-5 sm:px-6 sm:py-6"
-                  : "py-5 pl-1.5 pr-2.5 sm:py-6 sm:pl-2 sm:pr-3"
-                : "px-4 py-5 sm:px-6 sm:py-6",
-          )}
-        >
-          <div
-            className={cn(
-              "flex w-full flex-col",
-              chatMaxWidthClass,
-              (!floating || centered || mobile) && "mx-auto",
-            )}
-          >
-            <AgentRuntimeTranscript
-              workspaceId={agentPin.workspaceId}
-              projectId={agentPin.projectId}
-            />
-            <div ref={endRef} />
-            <div
-              ref={spacerRef}
-              className="shrink-0"
-              style={{ height: TRANSCRIPT_BOTTOM_GAP_PX }}
-              aria-hidden
-            />
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   if (browserMode) {
     return (
       <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
@@ -604,7 +573,9 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
+        {agentOverview ? null : (
+          <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
+        )}
       </section>
     );
   }
@@ -631,9 +602,11 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        <div className={cn("sticky bottom-0 z-20 shrink-0", MOBILE_APP_BG)}>
-          <ComposerDock onSend={send} autoFocus={autofocusComposer} />
-        </div>
+        {agentOverview ? null : (
+          <div className={cn("sticky bottom-0 z-20 shrink-0", MOBILE_APP_BG)}>
+            <ComposerDock onSend={send} autoFocus={autofocusComposer} />
+          </div>
+        )}
       </section>
     );
   }
@@ -670,7 +643,7 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding ? null : (
+      {showLanding || agentOverview ? null : (
         <ComposerDock onSend={send} autoFocus={autofocusComposer} />
       )}
     </section>

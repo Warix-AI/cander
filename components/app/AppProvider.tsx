@@ -220,6 +220,7 @@ import {
   threadHasTurns,
   upsertPersistentProjectThread,
   upsertPersistentConnectorThread,
+  upsertPersistentAgentRuntimeThread,
 } from "@/lib/persistent-chat";
 import { dismissNativeKeyboard } from "@/lib/mobile-shell";
 import {
@@ -237,6 +238,8 @@ import { deleteAiChat } from "@/lib/api/ai-chat-api";
 import { deleteThreadsFromSupabase, replaceUniversalDefaultOnSupabase } from "@/lib/api/chat-api.supabase";
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { resolveAgentChatContext } from "@/lib/agents/chat-context";
+import { prefetchAgentRuntimeConversation } from "@/components/agents/AgentRuntimeTranscript";
+import { primeAutomationBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
   provisionalCohortFromInput,
   startLiveTurnLatency,
@@ -264,7 +267,6 @@ import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
 import { sanitizeUserProgress } from "@/lib/build/jobs/user-progress";
 import { openProjectImageTab } from "@/lib/chat-image-attach";
-import { primeAutomationBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
   getSupabaseUserServerSnapshot,
   getSupabaseUserSnapshot,
@@ -510,6 +512,8 @@ type AppContextValue = {
   openConnector: (id: string) => void;
   /** Re-select the persistent one-chat-per-connector thread. */
   resumeConnectorChat: () => void;
+  /** Re-select the observe-only Agent ↔ Cander runtime thread. */
+  resumeAgentRuntimeChat: () => void;
   openJob: (id: string) => void;
   openSkill: (id: string) => void;
   openFile: (id: string) => void;
@@ -4531,13 +4535,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!match) return null;
     const automationKind =
       "kind" in match && match.kind === "automation";
+    const projectTitle =
+      "title" in match && typeof match.title === "string"
+        ? match.title
+        : "name" in match && typeof match.name === "string"
+          ? match.name
+          : "Agent";
     if (automationKind) {
-      const title =
-        "title" in match && typeof match.title === "string"
-          ? match.title
-          : "name" in match && typeof match.name === "string"
-            ? match.name
-            : "Agent";
       const publishedUrl =
         "publishedUrl" in match && typeof match.publishedUrl === "string"
           ? match.publishedUrl
@@ -4547,7 +4551,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         workspaceId: match.workspaceId,
         spaceId: match.space,
         projectId: match.id,
-        title,
+        title: projectTitle,
         publishedUrl,
         agentSurface: opts?.agentSurface ?? "builder",
       });
@@ -4570,12 +4574,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const source = migrateFrom
       ? snapshot.find((item) => item.id === migrateFrom)
       : null;
-    const { threads: next, id: nextId } = upsertPersistentProjectThread(
-      snapshot,
-      itemWorkspaceId,
-      projectKey,
-      space,
-    );
+    const useAgentRuntime =
+      automationKind && opts?.agentSurface === "overview";
+    const { threads: next, id: nextId } = useAgentRuntime
+      ? upsertPersistentAgentRuntimeThread(
+          snapshot,
+          itemWorkspaceId,
+          projectKey,
+          space,
+          projectTitle,
+        )
+      : upsertPersistentProjectThread(
+          snapshot,
+          itemWorkspaceId,
+          projectKey,
+          space,
+        );
     tid = nextId;
     const projectThread = next.find((item) => item.id === nextId);
     const projectEmpty = !threadHasTurns(projectThread);
@@ -4615,6 +4629,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setThreadId(tid);
     });
     setThreads(() => migrated);
+    if (useAgentRuntime) {
+      void prefetchAgentRuntimeConversation({
+        workspaceId: itemWorkspaceId,
+        projectId: projectKey,
+        spaceId: space,
+        title: projectTitle,
+      }).catch(() => {});
+    }
     setView("space");
     setProjectId(projectKey);
     setSpaceId(space);
@@ -5828,6 +5850,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(!hasMessages);
   }, [connectorId, workspaceId, setThreads]);
 
+  /** Re-bind the observe-only Agent ↔ Cander runtime thread. */
+  const resumeAgentRuntimeChat = useCallback(() => {
+    if (!projectId) return;
+    let match:
+      | ReturnType<typeof localSpaceEntityStore.getProject>
+      | ReturnType<typeof findProjectInWorkspace>
+      | undefined;
+    try {
+      match = localSpaceEntityStore.getProject(
+        { workspaceId, actorId: actor.id },
+        projectId,
+      ) ?? undefined;
+    } catch {
+      match = undefined;
+    }
+    if (!match) {
+      try {
+        match = findProjectInWorkspace(workspaceId, projectId);
+      } catch {
+        match = undefined;
+      }
+    }
+    if (!match || !("kind" in match) || match.kind !== "automation") return;
+    const title =
+      "title" in match && typeof match.title === "string"
+        ? match.title
+        : "Agent";
+    const space = match.space;
+    const snapshot = getChatStoreSnapshot().threads;
+    const { threads: next, id: nextId } = upsertPersistentAgentRuntimeThread(
+      snapshot,
+      workspaceId,
+      projectId,
+      space,
+      title,
+    );
+    const runtimeThread = next.find((item) => item.id === nextId);
+    const hasMessages = threadHasTurns(runtimeThread);
+    if (threadIdRef.current !== nextId) {
+      flushSync(() => {
+        threadIdRef.current = nextId;
+        setThreadId(nextId);
+      });
+    }
+    setThreads(() => next);
+    setDrafting(!hasMessages);
+  }, [projectId, workspaceId, actor.id, setThreads]);
+
   const openJob = useCallback((id: string) => {
     const chatActive = Boolean(threadId) || drafting;
     const keepChat = chatActive && spaceId === "build" && jobId === id;
@@ -6066,6 +6136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSettings,
       openConnector,
       resumeConnectorChat,
+      resumeAgentRuntimeChat,
       openJob,
       openSkill,
       openFile,
@@ -6228,6 +6299,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSettings,
       openConnector,
       resumeConnectorChat,
+      resumeAgentRuntimeChat,
       openJob,
       openSkill,
       openFile,

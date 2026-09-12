@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Bot, LoaderCircle, Pencil, Play } from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import {
   fetchAgentConversationClient,
   listProjectAgentsWithStatsClient,
@@ -53,6 +54,7 @@ export function AgentOverviewPanel({
   projectTitle?: string;
   onEditInProject: () => void;
 }) {
+  const { openProject } = useApp();
   const [agents, setAgents] = useState<ProjectAgent[]>(
     () => peekCachedProjectAgents(workspaceId, projectId) ?? [],
   );
@@ -117,6 +119,11 @@ export function AgentOverviewPanel({
     if (!primaryId || runBusy) return;
     setRunBusy(true);
     setError(null);
+    notifyAgentRuntimeRefresh({
+      projectId,
+      agentId: primaryId,
+      pending: true,
+    });
     try {
       await runAgentClient({
         workspaceId,
@@ -127,6 +134,7 @@ export function AgentOverviewPanel({
       notifyAgentRuntimeRefresh({ projectId, agentId: primaryId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed.");
+      notifyAgentRuntimeRefresh({ projectId, agentId: primaryId });
     } finally {
       setRunBusy(false);
     }
@@ -169,7 +177,12 @@ export function AgentOverviewPanel({
           </button>
           <button
             type="button"
-            onClick={onEditInProject}
+            onClick={() => {
+              openProject(projectId, {
+                agentSurface: "builder",
+                landOnPanel: true,
+              });
+            }}
             className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
           >
             <Pencil className="h-3.5 w-3.5" strokeWidth={1.6} />
