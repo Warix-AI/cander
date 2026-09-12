@@ -4,6 +4,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
+import { AgentRuntimeTranscript } from "@/components/agents/AgentRuntimeTranscript";
+import { useAgentPinSurface } from "@/components/agents/useAgentPinSurface";
 import { upsertChatThread, getChatStoreSnapshot } from "@/lib/api/chat-store";
 import { mergeHydratedThread } from "@/lib/api/chat-sync";
 import { isSupabaseConfigured } from "@/lib/data-backend";
@@ -145,6 +147,8 @@ export function ChatColumn() {
     useApp();
   const api = useSpaceApi();
   const ctx = useWorkspaceCtx();
+  const agentPin = useAgentPinSurface();
+  const agentOverview = agentPin.isOverview && Boolean(agentPin.projectId);
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -158,11 +162,16 @@ export function ChatColumn() {
   // thread or any overlay/browser surface must not steal focus.
   // Keep this stable across menu/panel swipes — Composer only focuses while
   // chat owns the screen, so gating here was breaking panel→chat reopen.
-  const autofocusComposer = !browserMode && !hasChatTurns && !overlay;
+  const autofocusComposer =
+    !browserMode && !hasChatTurns && !overlay && !agentOverview;
   const showSpaceNewPrompt =
-    drafting && Boolean(spaceId) && !hasChatTurns && !browserMode;
+    drafting && Boolean(spaceId) && !hasChatTurns && !browserMode && !agentOverview;
   const showLanding =
-    !browserMode && !hasChatTurns && (!thread || drafting) && !showSpaceNewPrompt;
+    !browserMode &&
+    !agentOverview &&
+    !hasChatTurns &&
+    (!thread || drafting) &&
+    !showSpaceNewPrompt;
 
   // Keep the one-chat-per-connector thread selected whenever chat is shown
   // beside a connector (covers panel remounts and Chat|Panel toggles).
@@ -534,6 +543,51 @@ export function ChatColumn() {
       />
     </>
   );
+
+  if (agentOverview && agentPin.projectId) {
+    return (
+      <section
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
+          mobile && MOBILE_APP_BG,
+        )}
+      >
+        <div
+          ref={bindScrollParent}
+          className={cn(
+            "chat-scroll flex-1 overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            mobile
+              ? "overscroll-contain px-4 pt-[calc(env(safe-area-inset-top,0px)+4.375rem)] pb-6 touch-pan-y"
+              : floating
+                ? centered
+                  ? "px-4 py-5 sm:px-6 sm:py-6"
+                  : "py-5 pl-1.5 pr-2.5 sm:py-6 sm:pl-2 sm:pr-3"
+                : "px-4 py-5 sm:px-6 sm:py-6",
+          )}
+        >
+          <div
+            className={cn(
+              "flex w-full flex-col",
+              chatMaxWidthClass,
+              (!floating || centered || mobile) && "mx-auto",
+            )}
+          >
+            <AgentRuntimeTranscript
+              workspaceId={agentPin.workspaceId}
+              projectId={agentPin.projectId}
+            />
+            <div ref={endRef} />
+            <div
+              ref={spacerRef}
+              className="shrink-0"
+              style={{ height: TRANSCRIPT_BOTTOM_GAP_PX }}
+              aria-hidden
+            />
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   if (browserMode) {
     return (

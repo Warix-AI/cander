@@ -27,6 +27,29 @@ import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
 
 const MAX_AGENT_ROUNDS = 6;
 
+/** Private ai_chats row so tool events / loop state can FK to a real chat id. */
+async function ensureAgentRuntimeAiChat(opts: {
+  client: ReturnType<typeof createSupabaseAdminClient>;
+  chatId: string;
+  ownerId: string;
+  workspaceId: string;
+  title: string;
+}) {
+  const { error } = await opts.client.from("ai_chats").upsert(
+    {
+      id: opts.chatId,
+      owner_id: opts.ownerId,
+      workspace_id: opts.workspaceId,
+      title: opts.title.slice(0, 80) || "Agent runtime",
+      conversation_state: {},
+    },
+    { onConflict: "id" },
+  );
+  if (error) {
+    console.warn("[agents] ensure runtime ai_chat skipped:", error.message);
+  }
+}
+
 export type RunAgentInput = {
   agentId: string;
   workspaceId: string;
@@ -223,6 +246,14 @@ export async function runAgent(
     // keep full history including prior wakes.
     const workingHistory = [...history];
     const client = createSupabaseAdminClient();
+    const runtimeChatId = `agent-runtime:${input.agentId}`;
+    await ensureAgentRuntimeAiChat({
+      client,
+      chatId: runtimeChatId,
+      ownerId: input.profileId,
+      workspaceId: input.workspaceId,
+      title: `${bundle.agent.name} · runtime`,
+    });
 
     for (let round = 0; round < MAX_AGENT_ROUNDS; round++) {
       const plan = await planNextAgentMessage({
@@ -274,7 +305,7 @@ export async function runAgent(
           bundle.agent.instructions.slice(0, 4000),
         ].join("\n"),
         agentRunId: run.id,
-        aiChatId: `agent-runtime:${input.agentId}`,
+        aiChatId: runtimeChatId,
         maxIterations: 8,
       });
 

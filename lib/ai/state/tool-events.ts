@@ -40,8 +40,13 @@ export async function persistToolEvent(input: {
     },
   });
   if (error) {
-    // Soft-fail if migration not applied yet or kind check rejects.
-    if (/check|kind|does not exist|22P02|23514/i.test(error.message)) {
+    // Soft-fail if migration not applied yet, kind check rejects, or chat row
+    // is missing (FK 23503) — agent runtime may use ephemeral chat ids.
+    if (
+      /check|kind|does not exist|foreign key|22P02|23514|23503/i.test(
+        error.message,
+      )
+    ) {
       console.warn("[tool-events] persist skipped:", error.message);
       return;
     }

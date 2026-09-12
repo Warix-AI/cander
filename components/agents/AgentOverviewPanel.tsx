@@ -8,15 +8,40 @@ import {
   runAgentClient,
 } from "@/lib/agents/client";
 import { peekCachedProjectAgents } from "@/lib/agents/cache";
-import type {
-  AgentConversationMessage,
-  ProjectAgent,
-} from "@/lib/agents/types";
-import { ChatMessage } from "@/components/chat/MessageBlocks";
-import type { Message } from "@/lib/types";
+import { notifyAgentRuntimeRefresh } from "@/components/agents/AgentRuntimeTranscript";
+import type { AgentRun, ProjectAgent } from "@/lib/agents/types";
+import {
+  SCHEDULE_PRESET_LABELS,
+  type SchedulePreset,
+} from "@/lib/agents/schedule";
 import { cn } from "@/lib/utils";
 import { BROWSER_CHROME_BG } from "@/lib/shell-chrome";
 
+function formatWhen(iso: string | null | undefined) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function scheduleLabel(agent: ProjectAgent | null) {
+  if (!agent) return "—";
+  if (agent.trigger.type === "manual") return "Manual";
+  const preset = agent.trigger.preset as SchedulePreset | undefined;
+  if (preset && SCHEDULE_PRESET_LABELS[preset]) {
+    return SCHEDULE_PRESET_LABELS[preset];
+  }
+  return agent.trigger.cron || "Schedule";
+}
+
+/** Right panel: agent overview stats only (conversation lives in left chat). */
 export function AgentOverviewPanel({
   workspaceId,
   projectId,
@@ -32,7 +57,8 @@ export function AgentOverviewPanel({
     () => peekCachedProjectAgents(workspaceId, projectId) ?? [],
   );
   const [agent, setAgent] = useState<ProjectAgent | null>(null);
-  const [messages, setMessages] = useState<AgentConversationMessage[]>([]);
+  const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [runsLast7d, setRunsLast7d] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [runBusy, setRunBusy] = useState(false);
@@ -46,10 +72,11 @@ export function AgentOverviewPanel({
       force: true,
     });
     setAgents(listed.agents);
+    setRunsLast7d(listed.runsLast7d);
     const id = listed.agents[0]?.id;
     if (!id) {
       setAgent(null);
-      setMessages([]);
+      setRuns([]);
       return;
     }
     const conv = await fetchAgentConversationClient({
@@ -58,7 +85,7 @@ export function AgentOverviewPanel({
       agentId: id,
     });
     setAgent(conv.agent);
-    setMessages(conv.messages);
+    setRuns(conv.runs);
   };
 
   useEffect(() => {
@@ -80,17 +107,11 @@ export function AgentOverviewPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on project change
   }, [workspaceId, projectId]);
 
-  const chatMessages: Message[] = useMemo(() => {
-    return messages
-      .filter((m) => m.role === "agent" || m.role === "cander")
-      .map((m) => ({
-        id: m.id,
-        role: m.role === "agent" ? ("user" as const) : ("assistant" as const),
-        content: m.content,
-        at: m.createdAt,
-        status: "complete" as const,
-      }));
-  }, [messages]);
+  const latestRun = runs[0] ?? null;
+  const failedRecently = useMemo(
+    () => runs.filter((r) => r.status === "failed").slice(0, 3),
+    [runs],
+  );
 
   const handleRun = async () => {
     if (!primaryId || runBusy) return;
@@ -103,6 +124,7 @@ export function AgentOverviewPanel({
         agentId: primaryId,
       });
       await reload();
+      notifyAgentRuntimeRefresh({ projectId, agentId: primaryId });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Run failed.");
     } finally {
@@ -118,13 +140,13 @@ export function AgentOverviewPanel({
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-            Agent · Cander
+            Agent · Overview
           </p>
           <h1 className="truncate text-[1.1rem] font-semibold tracking-[-0.02em]">
             {agent?.name ?? projectTitle ?? "Agent"}
           </h1>
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-            Runtime conversation — observe only
+            Runtime dialogue is in the left chat
             {agent?.status ? ` · ${agent.status}` : ""}
           </p>
         </div>
@@ -170,29 +192,90 @@ export function AgentOverviewPanel({
               strokeWidth={1.75}
             />
           </div>
-        ) : !chatMessages.length ? (
-          <div className="mx-auto flex max-w-md flex-col items-center py-16 text-center">
-            <p className="text-[14px] font-medium tracking-[-0.02em]">
-              No runtime conversation yet
-            </p>
-            <p className="mt-2 text-[12.5px] text-muted-foreground">
-              When this agent wakes on its schedule (or you press Run now), its
-              dialogue with Cander appears here. You watch — you don’t type.
-            </p>
-          </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
-            {chatMessages.map((message) => (
-              <div key={message.id} className="flex flex-col gap-1">
-                <span className="px-1 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
-                  {message.role === "user" ? agent?.name || "Agent" : "Cander"}
-                </span>
-                <ChatMessage message={message} />
-              </div>
-            ))}
+          <div className="mx-auto flex w-full max-w-lg flex-col gap-5">
+            <section className="grid grid-cols-2 gap-3">
+              <Stat label="Status" value={agent?.status ?? "—"} />
+              <Stat label="Schedule" value={scheduleLabel(agent)} />
+              <Stat label="Last wake" value={formatWhen(agent?.lastTriggeredAt)} />
+              <Stat label="Next run" value={formatWhen(agent?.nextRunAt)} />
+              <Stat label="Runs (7d)" value={String(runsLast7d || runs.length)} />
+              <Stat
+                label="Latest"
+                value={
+                  latestRun
+                    ? `${latestRun.status}${latestRun.error ? " · error" : ""}`
+                    : "—"
+                }
+              />
+            </section>
+
+            {latestRun?.error || failedRecently.length ? (
+              <section className="rounded-[12px] border border-border px-3.5 py-3">
+                <p className="font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
+                  Recent issues
+                </p>
+                <ul className="mt-2 space-y-2 text-[12.5px] text-destructive">
+                  {(latestRun?.error
+                    ? [latestRun]
+                    : failedRecently
+                  ).map((run) => (
+                    <li key={run.id}>
+                      <span className="text-muted-foreground">
+                        {formatWhen(run.completedAt ?? run.startedAt)} ·{" "}
+                      </span>
+                      {run.error || "Failed"}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            <section>
+              <p className="mb-2 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
+                Recent runs
+              </p>
+              {!runs.length ? (
+                <p className="text-[12.5px] text-muted-foreground">
+                  No runs yet. Press Run now or wait for the schedule.
+                </p>
+              ) : (
+                <ul className="divide-y divide-border rounded-[12px] border border-border">
+                  {runs.slice(0, 8).map((run) => (
+                    <li
+                      key={run.id}
+                      className="flex items-start justify-between gap-3 px-3.5 py-2.5 text-[12.5px]"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium capitalize">{run.status}</p>
+                        <p className="truncate text-muted-foreground">
+                          {run.summary || run.error || run.triggerType}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatWhen(run.startedAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[12px] border border-border px-3.5 py-3">
+      <p className="font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-[13.5px] font-medium tracking-[-0.02em]">
+        {value}
+      </p>
     </div>
   );
 }
