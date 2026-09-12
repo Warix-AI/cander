@@ -98,11 +98,10 @@ export function ConnectorWorkspaceShareToggle({
             </span>
             <div className="min-w-0">
               <p className="text-[13px] font-medium tracking-[-0.01em]">
-                Can be accessed by other users in the shared workspace
+                Share with workspace
               </p>
-              <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
-                When on, workspace members can use this account without
-                connecting their own. They cannot rename or disconnect it.
+              <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
+                Let other members use this account.
               </p>
             </div>
           </div>

@@ -113,7 +113,7 @@ export function ConnectorSkillsToggles({
                   <p className="text-[13px] font-medium tracking-[-0.01em]">
                     {tool.label}
                   </p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+                  <p className="mt-0.5 text-[12px] leading-snug text-muted-foreground">
                     {tool.description}
                   </p>
                 </div>

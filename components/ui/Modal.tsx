@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
@@ -16,6 +17,8 @@ export function Modal({
   embedded = false,
   edgeToEdge = false,
   sheetOnMobile = false,
+  /** Taller mobile sheet — use for forms that need the keyboard. */
+  sheetSize = "default",
   backdropClassName = "bg-black/72",
 }: {
   open: boolean;
@@ -29,12 +32,18 @@ export function Modal({
   edgeToEdge?: boolean;
   /** On mobile, anchor as a bottom sheet instead of a centered dialog. */
   sheetOnMobile?: boolean;
+  sheetSize?: "default" | "tall";
   backdropClassName?: string;
 }) {
   const shell = useShellStyle();
   const floating = shell === "floating";
   const mobile = useMobileShell();
   const asSheet = sheetOnMobile && mobile && !edgeToEdge && !embedded;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -71,12 +80,13 @@ export function Modal({
     );
   }
 
-  return (
+  const overlay = (
     <>
       <NativeOverlayGate open={open} />
       <div
         className={cn(
-          "fixed inset-0 z-[60] flex",
+          // Above mobile chrome (z-50) and drawers (z-70); match QuickAskHost.
+          "fixed inset-0 z-[100] flex",
           edgeToEdge
             ? "items-stretch justify-stretch p-0"
             : asSheet
@@ -109,7 +119,12 @@ export function Modal({
                   ),
             className,
             asSheet &&
-              "w-full max-w-none max-h-[min(88dvh,720px)] rounded-b-none rounded-t-[22px] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
+              cn(
+                "flex w-full max-w-none flex-col rounded-b-none rounded-t-[22px] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
+                sheetSize === "tall"
+                  ? "min-h-[min(88dvh,760px)] max-h-[94dvh]"
+                  : "max-h-[min(88dvh,720px)]",
+              ),
           )}
         >
           {asSheet ? (
@@ -117,9 +132,20 @@ export function Modal({
               <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
             </div>
           ) : null}
-          {children}
+          <div
+            className={cn(
+              asSheet && "flex min-h-0 flex-1 flex-col overflow-y-auto",
+            )}
+          >
+            {children}
+          </div>
         </div>
       </div>
     </>
   );
+
+  // Portal so fixed overlays escape transformed / overflow parents in space
+  // layouts (otherwise mobile sheets render under chrome or not at all).
+  if (!mounted || typeof document === "undefined") return null;
+  return createPortal(overlay, document.body);
 }

@@ -713,9 +713,10 @@ export function ConnectorDetailModal({
       className={cn("w-full max-w-sm p-4", SHELL_G3_RADIUS)}
       backdropClassName="bg-black/30"
       sheetOnMobile
+      sheetSize="tall"
     >
       {namePrompt ? (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <p
             id={namePromptTitleId}
             className="text-[15px] font-semibold tracking-[-0.02em]"
@@ -727,13 +728,17 @@ export function ConnectorDetailModal({
                 : "Name your account"}
           </p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-            Choose a short Candor label (1–{CONNECTOR_DISPLAY_NAME_MAX}{" "}
+            Choose a short Cander label (1–{CONNECTOR_DISPLAY_NAME_MAX}{" "}
             characters). This does not change the provider account.
           </p>
           <input
             autoFocus
             value={namePrompt.value}
             maxLength={CONNECTOR_DISPLAY_NAME_MAX}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="done"
             onChange={(event) =>
               setNamePrompt({
                 ...namePrompt,
@@ -748,7 +753,7 @@ export function ConnectorDetailModal({
               }
             }}
             placeholder="e.g. Team"
-            className="mt-3 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-space-canvas"
+            className="mt-4 h-12 w-full rounded-[10px] border border-border bg-white px-3 text-[16px] outline-none dark:bg-space-canvas"
           />
           {namePrompt.error ? (
             <p className="mt-2 text-[12px] text-destructive">
@@ -759,13 +764,13 @@ export function ConnectorDetailModal({
               {namePrompt.value.trim().length}/{CONNECTOR_DISPLAY_NAME_MAX}
             </p>
           )}
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-auto flex justify-end gap-2 pt-6">
             <button
               type="button"
               disabled={busy}
               onClick={() => setNamePrompt(null)}
               className={cn(
-                "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
+                "inline-flex h-11 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
                 SHELL_G3_RADIUS,
               )}
             >
@@ -776,7 +781,7 @@ export function ConnectorDetailModal({
               disabled={busy}
               onClick={() => void submitNamePrompt()}
               className={cn(
-                "inline-flex h-9 items-center bg-foreground px-4 text-[13px] font-medium text-background disabled:opacity-50",
+                "inline-flex h-11 items-center bg-foreground px-4 text-[13px] font-medium text-background disabled:opacity-50",
                 SHELL_G3_RADIUS,
               )}
             >
@@ -787,7 +792,7 @@ export function ConnectorDetailModal({
                   : "Continue"}
             </button>
           </div>
-        </>
+        </div>
       ) : null}
     </Modal>
 
