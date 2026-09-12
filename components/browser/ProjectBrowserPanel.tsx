@@ -167,6 +167,7 @@ import {
 } from "@/lib/project-browser-session";
 import { AgentBuilderPanel } from "@/components/agents/AgentBuilderPanel";
 import { AgentOverviewPanel } from "@/components/agents/AgentOverviewPanel";
+import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
 import {
   createProjectAgentClient,
   deleteProjectAgentClient,
@@ -824,8 +825,9 @@ export function ProjectBrowserPanel({
     }
   }, [key, session, spaceId, standalone]);
 
-  // Keep agent-builder tabs in sync with project_agents (one tab per agent).
-  // Do not depend on sessionRevision — that re-fetched on every tab write.
+  // Keep Expert tabs in sync with project_agents (one tab per Expert).
+  // Always reconcile — do not stop after the first bound tab, or newly created
+  // Experts (or ones loaded from another client) never appear in the tab bar.
   useEffect(() => {
     if (!key || standalone || !entity || entity.kind !== "automation") return;
     const current = getProjectBrowserSession(key, fallback);
@@ -842,44 +844,28 @@ export function ProjectBrowserPanel({
       });
       return;
     }
-    if (
-      current.tabs.some((tab) => tab.kind === "agent-overview") &&
-      !current.tabs.some((tab) => tab.kind === "agent-builder")
-    ) {
-      return;
-    }
 
-    const hasBoundAgents = current.tabs.some(
-      (tab) => tab.kind === "agent-builder" && tab.agentId,
-    );
-    if (hasBoundAgents) return;
-
-    // Prefer cache so the first paint after open isn't a blank wait.
-    const cached = peekCachedProjectAgents(workspaceId, entity.id);
-    if (cached?.length) {
+    let cancelled = false;
+    const apply = (agents: Awaited<ReturnType<typeof listProjectAgentsClient>>) => {
+      if (cancelled || !agents.length) return;
       applyAgentsToBrowserSession({
         key,
         projectId: entity.id,
         title: entity.title,
-        agents: cached,
+        agents,
       });
-      return;
-    }
+    };
 
-    let cancelled = false;
+    // Prefer cache for first paint, then force-refresh so all Experts appear.
+    const cached = peekCachedProjectAgents(workspaceId, entity.id);
+    if (cached?.length) apply(cached);
+
     void listProjectAgentsClient({
       workspaceId,
       projectId: entity.id,
+      force: true,
     })
-      .then((agents) => {
-        if (cancelled || !agents.length) return;
-        applyAgentsToBrowserSession({
-          key,
-          projectId: entity.id,
-          title: entity.title,
-          agents,
-        });
-      })
+      .then(apply)
       .catch(() => {});
 
     return () => {
@@ -1018,7 +1004,7 @@ export function ProjectBrowserPanel({
         (item) => item.kind === "agent-builder",
       );
       if (agentTabs.length <= 1) return;
-      if (!window.confirm(`Delete agent “${tab.title}”?`)) return;
+      if (!window.confirm(`Delete expert “${tab.title}”?`)) return;
       const agentId = tab.agentId;
       const tabs = session.tabs.filter((item) => item.id !== id);
       const activeTabId =
@@ -1742,6 +1728,8 @@ export function ProjectBrowserPanel({
     chatCreatingImage,
   ]);
 
+  const runningExpertAgentIds = useRunningExpertState(workspaceId).agentIds;
+
   // Every chat image generation gets its own Studio canvas tab.
   // Do NOT re-steal focus while another canvas generates.
   useEffect(() => {
@@ -2354,6 +2342,7 @@ export function ProjectBrowserPanel({
               onAddProject={addProjectTab}
               extraProjects={extraProjects}
               generatingTabIds={tabGeneratingIds}
+              runningAgentIds={runningExpertAgentIds}
               webOnly
             />
             {panelMode !== "collapsed" ? (
@@ -2456,6 +2445,7 @@ export function ProjectBrowserPanel({
             studioMode={isStudioProject}
             agentMode={isAgentProject}
             generatingTabIds={tabGeneratingIds}
+            runningAgentIds={runningExpertAgentIds}
           />
           {readingPage ? (
             <span
@@ -3483,6 +3473,7 @@ function ProjectBrowserBody({
         workspaceId={workspaceId}
         projectId={projectId ?? tab.projectId ?? ""}
         projectTitle={match?.title ?? fallbackName}
+        agentId={tab.agentId}
         onEditInProject={() => {
           if (!projectId) return;
           // Drop overview; agent sync effect will populate builder tabs.
@@ -3663,6 +3654,7 @@ function ProjectTabStrip({
   agentMode = false,
   webOnly = false,
   generatingTabIds,
+  runningAgentIds,
 }: {
   tabs: ProjectBrowserTab[];
   activeId: string;
@@ -3680,6 +3672,7 @@ function ProjectTabStrip({
   agentMode?: boolean;
   webOnly?: boolean;
   generatingTabIds?: Set<string>;
+  runningAgentIds?: Set<string>;
 }) {
   return (
     <div className="relative z-20 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -3692,6 +3685,9 @@ function ProjectTabStrip({
             : -1;
         const label =
           studioIndex >= 0 ? studioImageTabLabel(studioIndex) : undefined;
+        const running =
+          Boolean(tab.agentId) &&
+          Boolean(runningAgentIds?.has(tab.agentId!));
         return (
           <ProjectTabButton
             key={tab.id}
@@ -3699,6 +3695,7 @@ function ProjectTabStrip({
             active={tab.id === activeId}
             project={projects.find((item) => item.id === tab.projectId)}
             generating={generatingTabIds?.has(tab.id) ?? false}
+            running={running}
             label={label}
             onSelect={() => onSelect(tab.id)}
             onClose={() => onClose(tab.id)}
@@ -4159,6 +4156,7 @@ function ProjectTabButton({
   active,
   project,
   generating = false,
+  running = false,
   label,
   onSelect,
   onClose,
@@ -4168,6 +4166,7 @@ function ProjectTabButton({
   active: boolean;
   project?: SpaceProject;
   generating?: boolean;
+  running?: boolean;
   /** Override title (e.g. Image 2). */
   label?: string;
   onSelect: () => void;
@@ -4181,7 +4180,7 @@ function ProjectTabButton({
   return (
     <button
       type="button"
-      aria-busy={generating || undefined}
+      aria-busy={generating || running || undefined}
       aria-pressed={active}
       onClick={() => onSelect()}
       className={cn(
@@ -4191,10 +4190,15 @@ function ProjectTabButton({
           : cn("text-muted-foreground", BROWSER_CHROME_CHIP_HOVER, "hover:text-foreground"),
       )}
     >
-      {generating ? (
+      {generating || running ? (
         <span
-          className="thinking-dot h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]"
+          className={cn(
+            "h-1.5 w-1.5 shrink-0 rounded-full bg-[#0b4fc4]",
+            (generating || running) && "animate-pulse",
+            generating && "thinking-dot",
+          )}
           aria-hidden
+          title={running ? "Expert running" : undefined}
         />
       ) : (
         <TabGlyph tab={tab} kind={project?.kind} />

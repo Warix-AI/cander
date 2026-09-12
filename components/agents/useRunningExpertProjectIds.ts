@@ -3,18 +3,30 @@
 import { useEffect, useState } from "react";
 import { fetchWorkspaceAgentActivityClient } from "@/lib/agents/client";
 
+export type RunningExpertState = {
+  /** Projects that have at least one running Expert. */
+  projectIds: Set<string>;
+  /** Individual Expert (agent) ids currently running. */
+  agentIds: Set<string>;
+};
+
+const EMPTY: RunningExpertState = {
+  projectIds: new Set(),
+  agentIds: new Set(),
+};
+
 /**
- * Project ids with an Expert currently in `running` status.
- * Used for the pulsating blue pin indicator (separate from selection).
+ * Experts currently in `running` status.
+ * Project set → sidebar pin pulse; agent set → in-project tab pulse.
  */
-export function useRunningExpertProjectIds(workspaceId: string | null | undefined) {
-  const [runningProjectIds, setRunningProjectIds] = useState<Set<string>>(
-    () => new Set(),
-  );
+export function useRunningExpertState(
+  workspaceId: string | null | undefined,
+): RunningExpertState {
+  const [state, setState] = useState<RunningExpertState>(EMPTY);
 
   useEffect(() => {
     if (!workspaceId) {
-      setRunningProjectIds(new Set());
+      setState(EMPTY);
       return;
     }
     let cancelled = false;
@@ -23,13 +35,14 @@ export function useRunningExpertProjectIds(workspaceId: string | null | undefine
       void fetchWorkspaceAgentActivityClient({ workspaceId, limit: 40 })
         .then((rows) => {
           if (cancelled) return;
-          const next = new Set<string>();
+          const projectIds = new Set<string>();
+          const agentIds = new Set<string>();
           for (const row of rows) {
-            if (row.status === "running" && row.projectId) {
-              next.add(row.projectId);
-            }
+            if (row.status !== "running") continue;
+            if (row.projectId) projectIds.add(row.projectId);
+            if (row.agentId) agentIds.add(row.agentId);
           }
-          setRunningProjectIds(next);
+          setState({ projectIds, agentIds });
         })
         .catch(() => {
           /* ignore transient poll errors */
@@ -44,5 +57,12 @@ export function useRunningExpertProjectIds(workspaceId: string | null | undefine
     };
   }, [workspaceId]);
 
-  return runningProjectIds;
+  return state;
+}
+
+/** @deprecated Prefer useRunningExpertState */
+export function useRunningExpertProjectIds(
+  workspaceId: string | null | undefined,
+) {
+  return useRunningExpertState(workspaceId).projectIds;
 }

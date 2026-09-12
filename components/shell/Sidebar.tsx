@@ -26,7 +26,7 @@ import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
-import { useRunningExpertProjectIds } from "@/components/agents/useRunningExpertProjectIds";
+import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import {
@@ -106,7 +106,7 @@ export function Sidebar() {
     workspaceId,
   } = useApp();
 
-  const runningExpertProjects = useRunningExpertProjectIds(workspaceId);
+  const runningExperts = useRunningExpertState(workspaceId);
 
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
@@ -313,7 +313,7 @@ export function Sidebar() {
       inUse={pinRowActive(item)}
       running={
         item.projectKind === "automation" &&
-        runningExpertProjects.has(item.id)
+        runningExperts.projectIds.has(item.id)
       }
       onOpen={() => {
         if (item.kind === "thread") openThread(item.id);

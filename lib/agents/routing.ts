@@ -163,7 +163,10 @@ export async function routeEventToExpert(opts: {
   situation: string;
   projectId?: string | null;
   connectionId?: string;
+  idempotencyKey?: string;
   triggerPayload?: Record<string, unknown>;
+  /** Rewrite the Cander opening after Expert selection (e.g. "Hey Booking, …"). */
+  formatSituationForExpert?: (expertName: string) => string;
 }): Promise<
   | { consulted: false; reason: string }
   | {
@@ -182,13 +185,17 @@ export async function routeEventToExpert(opts: {
     return { consulted: false, reason: selection.reason };
   }
 
+  const situation =
+    opts.formatSituationForExpert?.(selection.expert.name) ?? opts.situation;
+
   const result = await consultExpert({
     agentId: selection.expert.id,
     workspaceId: opts.workspaceId,
     projectId: selection.expert.projectId,
     profileId: opts.profileId,
-    situation: opts.situation,
+    situation,
     triggerType: "event",
+    idempotencyKey: opts.idempotencyKey,
     triggerPayload: {
       ...(opts.triggerPayload ?? {}),
       ...(opts.connectionId ? { connectionId: opts.connectionId } : {}),

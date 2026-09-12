@@ -123,10 +123,15 @@ async function planNextAgentMessage(opts: {
 }): Promise<AgentPlan> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
+    const lastCander = [...opts.history]
+      .reverse()
+      .find((m) => m.role === "cander")?.content;
     return {
       message:
         opts.wakeNudge?.trim() ||
-        "Please help me follow my Expert instructions using my connected apps.",
+        (lastCander
+          ? "Based on that situation and my Instructions, here is what Cander should do next."
+          : "Please help me follow my Expert instructions using my connected apps."),
       done: false,
     };
   }
@@ -186,10 +191,15 @@ Rules:
     };
   } catch {
     if (opts.round === 0) {
+      const lastCander = [...opts.history]
+        .reverse()
+        .find((m) => m.role === "cander")?.content;
       return {
         message:
           opts.wakeNudge?.trim() ||
-          "Please help me carry out my Expert instructions using my connected apps. Start by checking anything that needs attention.",
+          (lastCander
+            ? "Apply my Instructions to the email Cander just described. Tell Cander the next concrete step — do not ask Cander to re-scan the whole inbox first."
+            : "Please help me carry out my Expert instructions using my connected apps. Start by checking anything that needs attention."),
         done: false,
       };
     }

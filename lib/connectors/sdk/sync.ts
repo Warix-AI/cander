@@ -1,13 +1,14 @@
 /**
  * ConnectorSync — runs adapter.sync() and persists domain rows.
- * No LLM / agent runtime.
+ * Detects genuinely new mail, then wakes Expert routing (no AI in sync itself).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "../../supabase/admin.ts";
 import { resolveConnectionForTool } from "../connections.ts";
 import { getConnectorViewAdapter } from "./registry.ts";
-import type { SyncResult } from "./types.ts";
+import type { SyncMessageHeader, SyncResult } from "./types.ts";
+import { dispatchNewMailToExperts } from "@/lib/agents/connector-events";
 
 export type RunConnectorSyncInput = {
   /** User-scoped client for connection resolution (RLS). */
@@ -19,6 +20,8 @@ export type RunConnectorSyncInput = {
   limit?: number;
   /** interactive = user Refresh — adapters may trim work for latency. */
   priority?: "interactive" | "background";
+  /** When false, skip Expert routing (tests / dry-run). Default true. */
+  routeToExperts?: boolean;
 };
 
 export type RunConnectorSyncResult =
@@ -26,8 +29,10 @@ export type RunConnectorSyncResult =
       ok: true;
       connectionId: string;
       upserted: number;
+      newMessages: number;
       lastSyncedAt: string;
       sync: SyncResult;
+      expertDispatches?: Awaited<ReturnType<typeof dispatchNewMailToExperts>>;
     }
   | { ok: false; status: number; error: string };
 
@@ -101,6 +106,7 @@ export async function runConnectorSync(
     });
 
     const now = new Date().toISOString();
+    let newHeaders: SyncMessageHeader[] = [];
 
     if (sync.upserted.length) {
       const providerIds = sync.upserted.map((h) => h.providerMessageId);
@@ -116,6 +122,10 @@ export async function runConnectorSync(
           idByProvider.set(String(row.provider_message_id), String(row.id));
         }
       }
+
+      newHeaders = sync.upserted.filter(
+        (header) => !idByProvider.has(header.providerMessageId),
+      );
 
       const rows = sync.upserted.map((header) => ({
         id: idByProvider.get(header.providerMessageId) ?? newMailRowId(),
@@ -170,12 +180,52 @@ export async function runConnectorSync(
       .eq("id", connection.connectionId)
       .eq("owner_id", input.profileId);
 
+    let expertDispatches:
+      | Awaited<ReturnType<typeof dispatchNewMailToExperts>>
+      | undefined;
+
+    if (
+      input.routeToExperts !== false &&
+      input.connectorId === "gmail" &&
+      newHeaders.length
+    ) {
+      expertDispatches = [];
+      // Cap concurrent Expert wakes per sync pass.
+      const batch = newHeaders.slice(0, 5);
+      for (const message of batch) {
+        try {
+          const dispatched = await dispatchNewMailToExperts({
+            workspaceId: input.workspaceId,
+            profileId: input.profileId,
+            connectionId: connection.connectionId,
+            connectorId: input.connectorId,
+            message,
+          });
+          expertDispatches.push(...dispatched);
+        } catch (err) {
+          console.warn(
+            "[connectors] expert dispatch failed:",
+            err instanceof Error ? err.message : err,
+          );
+          expertDispatches.push({
+            providerMessageId: message.providerMessageId,
+            projectId: "",
+            consulted: false,
+            reason:
+              err instanceof Error ? err.message : "Expert dispatch failed.",
+          });
+        }
+      }
+    }
+
     return {
       ok: true,
       connectionId: connection.connectionId,
       upserted: sync.upserted.length,
+      newMessages: newHeaders.length,
       lastSyncedAt: now,
       sync,
+      ...(expertDispatches ? { expertDispatches } : {}),
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Sync failed.";

@@ -58,11 +58,14 @@ export function AgentOverviewPanel({
   workspaceId,
   projectId,
   projectTitle,
+  agentId: preferredAgentId,
   onEditInProject: _onEditInProject,
 }: {
   workspaceId: string;
   projectId: string;
   projectTitle?: string;
+  /** When set (active Expert tab), load that Expert instead of agents[0]. */
+  agentId?: string | null;
   onEditInProject: () => void;
 }) {
   const { openProject } = useApp();
@@ -76,7 +79,12 @@ export function AgentOverviewPanel({
   const [error, setError] = useState<string | null>(null);
   const [runBusy, setRunBusy] = useState(false);
 
-  const primaryId = agents[0]?.id ?? agent?.id ?? null;
+  const primaryId =
+    preferredAgentId ||
+    agents.find((a) => a.id === preferredAgentId)?.id ||
+    agents[0]?.id ||
+    agent?.id ||
+    null;
 
   const reload = async () => {
     const listed = await listProjectAgentsWithStatsClient({
@@ -86,7 +94,11 @@ export function AgentOverviewPanel({
     });
     setAgents(listed.agents);
     setRunsLast7d(listed.runsLast7d);
-    const id = listed.agents[0]?.id;
+    const id =
+      (preferredAgentId &&
+        listed.agents.some((a) => a.id === preferredAgentId) &&
+        preferredAgentId) ||
+      listed.agents[0]?.id;
     if (!id) {
       setAgent(null);
       setActivity([]);
@@ -132,7 +144,7 @@ export function AgentOverviewPanel({
     void reload()
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load agent.");
+          setError(err instanceof Error ? err.message : "Could not load expert.");
         }
       })
       .finally(() => {
@@ -141,8 +153,8 @@ export function AgentOverviewPanel({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on project change
-  }, [workspaceId, projectId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on project/expert change
+  }, [workspaceId, projectId, preferredAgentId]);
 
   const latest = activity[0] ?? null;
   const issues = useMemo(

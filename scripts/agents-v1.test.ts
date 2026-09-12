@@ -326,3 +326,61 @@ describe("expert directory privacy and search", () => {
     assert.ok(!turn.toolNames.some((n) => n.includes("instructions")));
   });
 });
+
+describe("connector mail → expert situation", () => {
+  it("formats Cander opening with Expert name and email context", async () => {
+    const {
+      formatMailSituation,
+      gmailEventIdempotencyKey,
+    } = await import("../lib/agents/connector-event-format.ts");
+
+    const situation = formatMailSituation({
+      expertName: "Rescheduling",
+      message: {
+        providerMessageId: "msg_1",
+        fromAddr: "Sarah Jones <sarah@example.com>",
+        subject: "Move appointment",
+        snippet:
+          "Hi, I can't make my appointment tomorrow. Can we move it to Friday?",
+      },
+    });
+    assert.match(situation, /Hey Rescheduling/);
+    assert.match(situation, /Sarah Jones/);
+    assert.match(situation, /move it to Friday/);
+    assert.match(situation, /How should we handle this/);
+    assert.doesNotMatch(situation, /instructions/i);
+
+    assert.equal(
+      gmailEventIdempotencyKey("conn_1", "msg_1"),
+      "event:gmail:conn_1:msg_1",
+    );
+  });
+
+  it("ranks Rescheduling Expert for appointment-move mail", async () => {
+    const { searchExpertDirectory } = await import(
+      "../lib/agents/directory-search.ts"
+    );
+    const ranked = searchExpertDirectory(
+      [
+        {
+          id: "e1",
+          projectId: "p1",
+          name: "First",
+          description: "General helper for routine tasks.",
+          status: "active",
+        },
+        {
+          id: "e2",
+          projectId: "p1",
+          name: "Rescheduling",
+          description:
+            "Handles incoming customer requests to move or change scheduled appointments and determines how Cander should respond.",
+          status: "active",
+        },
+      ],
+      "Hi, I can't make my appointment tomorrow. Can we move it to Friday?",
+      3,
+    );
+    assert.equal(ranked[0]?.name, "Rescheduling");
+  });
+});

@@ -72,6 +72,8 @@ export async function POST(request: Request) {
     ok: true,
     connectionId: result.connectionId,
     upserted: result.upserted,
+    newMessages: result.newMessages,
     lastSyncedAt: result.lastSyncedAt,
+    expertDispatches: result.expertDispatches ?? [],
   });
 }

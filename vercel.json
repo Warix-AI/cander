@@ -5,6 +5,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/connector-sync",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/sandbox-gc",
       "schedule": "*/10 * * * *"
     },

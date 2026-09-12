@@ -9,7 +9,6 @@ import {
   defaultProjectBrowserSession,
   getProjectBrowserSession,
   makeAgentBuilderTab,
-  makeAgentOverviewTab,
   setProjectBrowserSession,
   type ProjectBrowserKey,
   type ProjectBrowserSession,
@@ -66,13 +65,10 @@ export function applyAgentsToBrowserSession(opts: {
       agentSurface: "builder",
     }),
   );
-  if (
-    current.tabs.some((tab) => tab.kind === "agent-overview") &&
-    !current.tabs.some((tab) => tab.kind === "agent-builder")
-  ) {
-    return;
-  }
-  const otherTabs = current.tabs.filter((tab) => tab.kind !== "agent-builder");
+  // Overview-only sessions (legacy pin open) are replaced by one tab per Expert.
+  const otherTabs = current.tabs.filter(
+    (tab) => tab.kind !== "agent-builder" && tab.kind !== "agent-overview",
+  );
   const next = sessionFromAgents({
     projectId: opts.projectId,
     title: opts.title,
@@ -112,15 +108,8 @@ export function primeAutomationBrowserSession(opts: {
     projectId: opts.projectId,
   };
 
-  if (opts.agentSurface === "overview") {
-    const tab = makeAgentOverviewTab({
-      projectId: opts.projectId,
-      title: opts.title,
-    });
-    setProjectBrowserSession(key, { tabs: [tab], activeTabId: tab.id });
-    return;
-  }
-
+  // Always aim for one tab per Expert. Overview is per-Expert Activity in the
+  // selected Expert tab — never collapse the project to a single overview tab.
   const cached = peekCachedProjectAgents(opts.workspaceId, opts.projectId);
   if (cached?.length) {
     setProjectBrowserSession(
@@ -155,7 +144,6 @@ export function primeAutomationBrowserSession(opts: {
     const hasBoundAgents = existing.tabs.some(
       (tab) => tab.kind === "agent-builder" && tab.agentId,
     );
-    // Keep a previously bound session so reopen isn't a blank wait.
     if (!hasBoundAgents) {
       setProjectBrowserSession(key, fallback);
     }
@@ -164,6 +152,7 @@ export function primeAutomationBrowserSession(opts: {
   void listProjectAgentsClient({
     workspaceId: opts.workspaceId,
     projectId: opts.projectId,
+    force: true,
   })
     .then((agents) => {
       if (!agents.length) return;
@@ -173,7 +162,6 @@ export function primeAutomationBrowserSession(opts: {
         title: opts.title,
         agents,
       });
-      // Warm the first agent bundle so the canvas paints without a spinner.
       const first = agents[0];
       if (first) {
         void loadAgentBundleClient({
