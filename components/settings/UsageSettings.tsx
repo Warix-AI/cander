@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   SettingsGroup,
@@ -8,40 +7,26 @@ import {
   SettingsPage,
   SettingsSection,
 } from "@/components/settings/SettingsChrome";
-import {
-  USAGE_METER_TONES,
-  buildUsageMeters,
-} from "@/lib/usage-meters";
+import { formatMinutesRemainingLine } from "@/lib/usage/ai-minutes/format";
+import { USAGE_METER_TONES } from "@/lib/usage-meters";
 import { useUsageSnapshot } from "@/lib/use-usage-status";
 import { cn } from "@/lib/utils";
 
 export function UsageSettings() {
-  const { workspaceId, billingPlan } = useApp();
+  const { billingPlan } = useApp();
   const { snapshot, loaded } = useUsageSnapshot();
+  const minutes = snapshot?.aiMinutes;
+  const planLabel = snapshot?.planLabel ?? billingPlan;
 
-  // Prefer account-wide dollar spend; fall back to feature meters.
-  const accountPercent = snapshot?.accountSpend?.percentUsed;
-  const meters = useMemo(
-    () =>
-      buildUsageMeters({
-        plan: snapshot?.plan ?? billingPlan,
-        workspaceId,
-        features: snapshot?.features,
-      }),
-    [billingPlan, snapshot?.features, snapshot?.plan, workspaceId],
-  );
-
-  const mainMeter =
-    meters.find((meter) => meter.id === "chat" && meter.enabled) ??
-    meters.find((meter) => meter.enabled);
-  const overallPercent = accountPercent ?? mainMeter?.percent ?? 0;
-  const usageLabel = !loaded
+  const percent = minutes?.percentUsed ?? 0;
+  const headline = !loaded
     ? "Loading…"
-    : accountPercent != null
-      ? `${overallPercent}%`
-      : mainMeter
-        ? `${overallPercent}%`
-        : "No usage yet";
+    : minutes
+      ? minutes.detailLabel
+      : "No AI usage yet";
+  const remainingLine = minutes
+    ? formatMinutesRemainingLine(minutes.remainingMinutes)
+    : null;
 
   return (
     <SettingsPage>
@@ -51,11 +36,16 @@ export function UsageSettings() {
         <SettingsGroup>
           <div className="settings-glass-row px-4 py-3.5">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-[13.5px] font-medium tracking-[-0.01em]">
-                Account usage
-              </p>
-              <p className="tabular-nums text-[12.5px] text-foreground/50 dark:text-zinc-400">
-                {usageLabel}
+              <div className="min-w-0">
+                <p className="text-[13.5px] font-medium tracking-[-0.01em]">
+                  AI Usage
+                </p>
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
+                  {planLabel} plan · active AI minutes this period
+                </p>
+              </div>
+              <p className="shrink-0 tabular-nums text-[12.5px] text-foreground/50 dark:text-zinc-400">
+                {headline}
               </p>
             </div>
             <div
@@ -64,19 +54,29 @@ export function UsageSettings() {
                 USAGE_METER_TONES.chat.track,
               )}
               role="meter"
-              aria-valuenow={overallPercent}
+              aria-valuenow={percent}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label="Account usage"
+              aria-label="AI usage minutes"
             >
               <div
                 className={cn(
                   "h-full rounded-full transition-[width] duration-500",
                   USAGE_METER_TONES.chat.bar,
                 )}
-                style={{ width: `${overallPercent}%` }}
+                style={{ width: `${percent}%` }}
               />
             </div>
+            {remainingLine ? (
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                {remainingLine}
+              </p>
+            ) : null}
+            {snapshot?.notices?.[0] ? (
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                {snapshot.notices[0]}
+              </p>
+            ) : null}
           </div>
         </SettingsGroup>
       </SettingsSection>

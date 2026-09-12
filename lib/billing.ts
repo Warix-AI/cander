@@ -13,6 +13,8 @@ export const courierSeat: Record<BillingPlan, number> = {
   free: 0,
   pro: 20,
   max: 50,
+  ultra: 150,
+  enterprise: 0,
 };
 
 export const courierPlans: {
@@ -82,6 +84,8 @@ export function money(n: number) {
 }
 
 export function planLabel(plan: BillingPlan) {
+  if (plan === "ultra") return "Ultra";
+  if (plan === "enterprise") return "Enterprise";
   return courierPlans.find((item) => item.id === plan)?.name ?? "Pro";
 }
 
@@ -98,7 +102,13 @@ export { hasVoice };
 export type SeatMix = Record<BillingPlan, number>;
 
 export function orgSeatMix(members: Member[]): SeatMix {
-  const mix: SeatMix = { free: 0, pro: 0, max: 0 };
+  const mix: SeatMix = {
+    free: 0,
+    pro: 0,
+    max: 0,
+    ultra: 0,
+    enterprise: 0,
+  };
   for (const member of members) {
     if (member.kind !== "org" || member.seatStatus !== "active") continue;
     mix[member.plan] += 1;

@@ -126,14 +126,11 @@ export function ConnectorWorkspaceShareToggle({
           id={`share-confirm-${connection.id}`}
           className="text-[15px] font-semibold tracking-[-0.02em]"
         >
-          Share this account with the workspace?
+          Share this account?
         </p>
-        <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-          Anyone in this workspace will be able to use “
-          {connection.displayName}” for {connection.connectorId} — including
-          reading and writing through Cander — even if they never signed in to
-          that provider account themselves. Only turn this on if you trust every
-          member of this workspace.
+        <p className="mt-1.5 text-[13px] leading-snug text-muted-foreground">
+          Other members can use “{connection.displayName}” in Cander without
+          connecting it themselves. Only enable if you trust this workspace.
         </p>
         <div className="mt-4 flex justify-end gap-2">
           <button

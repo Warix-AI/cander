@@ -1,98 +1,64 @@
-# Usage protection architecture
+# Usage protection & AI active minutes
 
-Cander centralizes plan limits, durable usage accounting, distributed rate limiting, cost safeguards, Codex readiness hooks, and rich AI response validation in `lib/usage/`.
+Cander meters AI work in two complementary layers:
 
-## What exists today
+1. **User-facing unit = AI minutes** — universal active-time ledger (`ai_usage_events`)
+2. **Internal economics = dollars** — request-weighted micros + `account_usage_periods` usable budget
 
-| Layer | Location |
-| --- | --- |
-| Plan matrix (Free / Pro / Max) | `lib/usage/plan-config.ts` |
-| Account monthly $ periods | `supabase/migrations/060_account_usage_periods.sql`, `lib/usage/account-period.ts` |
-| Enforcement entrypoint | `lib/usage/enforce.ts` |
-| Route helper | `lib/usage/server/guard-route.ts` |
-| Workspace + plan resolution | `lib/usage/server/context.ts` |
-| Postgres event ledger | `supabase/migrations/038_usage_protection.sql` |
-| Memory store (tests/local fallback) | `lib/usage/store/memory-store.ts` |
-| Kill switches | `lib/usage/kill-switches.ts` |
-| Customer usage UI | Settings Usage + General popup via `/api/usage/status` |
-| Usage status API | `app/api/usage/status/route.ts` |
+Customers never see credits, tokens, or API spend. They see:
 
-## Account spend (single meter)
+`7 / 10 minutes`
 
-- Billing plan is per **profile** (seat). Workspaces under that account **share one** monthly usable-dollar budget.
-- Example: Pro bill `$20` → `usableBudgetMicros` `$15` (`plan-config` v3). Max: `$50` bill → `$40` usable. Free: `$1` usable.
-- Paid actions reserve estimated cost on `account_usage_periods`, journal to `usage_events` (with `period_id` in metadata), then confirm/release on finalize.
-- Hard stop when `spent + reserved >= usable_budget`. Workspace rate/concurrency ceilings remain as abuse controls.
-- `/api/usage/status` returns `accountSpend.percentUsed` for Settings + General popup (no demo hourly % when a live snapshot exists).
-- Max org seats: **per seat/profile** pool (not one org-wide pool yet).
+## Plan minute allocations (admin-editable)
 
-## Enforcement flow
+Source of truth: `ai_plan_minute_configs` (seeded by migration `073`), with code defaults in `lib/usage/ai-minutes/plan-minutes-config.ts`.
 
-1. Authenticate request
-2. Resolve workspace membership + billing plan
-3. Check feature entitlement from centralized plan config
-4. Apply rate, concurrency, monthly fair-use, and workspace cost ceilings
-5. Reserve against **account** usable budget (when periods table is available)
-6. Reserve usage in the durable ledger (`usage_events`)
-7. Execute paid work
-8. Reconcile reservation as `confirmed`, `released`, or `failed` (adjusts account period)
+| Plan | Default | Range | Internal budget default |
+| --- | --- | --- | --- |
+| Free | **10** | 10 | $1 |
+| Pro | **50** | 10–50 | $15 |
+| Max | **150** | 50–150 | $40 |
+| Ultra | **500** | 200–500 | $120 |
+| Enterprise | **1000+** | 501+, no hard max | $250 (custom) |
 
-Routes currently wired:
+Admin API: `GET/PATCH /api/admin/ai-minutes-plans` (platform admin only via `requirePlatformAdmin` — org Owner/Admin is not enough). See `docs/admin-platform.md`.
 
-- `app/api/ai/raw-openai/route.ts` — AI chat (+ rich response v2 parsing)
-- `app/api/ai/raw-openai/image-jobs/route.ts` — image generation
-- `app/api/ai/raw-openai/transcribe/route.ts` — audio transcription
-- `app/api/computer/session/route.ts` — Vercel sandbox runtime (cookie auth)
-- `app/api/computer/build/route.ts` — Vercel sandbox builds (cookie auth)
+**Period snapshots:** changing admin defaults does **not** rewrite open `account_usage_periods.included_minutes`. Only new periods pick up the new allocation. Per-account Enterprise overrides live on `profiles.ai_minutes_override`.
 
-Web research and knowledge retrieval run inside the AI chat route (billed as `ai_chat`). Computer routes accept Supabase cookie sessions when `allowCookieAuth: true`.
+## Architecture
 
-Additional paid routes should call `enforceUsageForRequest()` before provider work and `finalizeUsageReservation()` afterward.
+```text
+AI execution
+  → startAIUsageExecution / withAIUsageMeter / enforceUsageForRequest
+  → ai_usage_events (raw ledger, ms precision)
+  → overlap-merged aggregates (ai_usage_period_aggregates)
+  → period included_minutes snapshot
+  → /api/usage/status.aiMinutes → Usage bar
+```
 
-## Configuration
+## Nested / parallel work
 
-Plan allowances live in `lib/usage/plan-config.ts` (`USAGE_PLAN_CONFIG_VERSION`).
+- Root executions (`parent_execution_id` null) → `billable_to_user = true`
+- Child executions → cost recorded; do **not** inflate user-facing minutes
+- Billable intervals are **merged** when overlapping
 
-Environment controls:
+## Wired entry points
 
-| Variable | Purpose |
-| --- | --- |
-| `USAGE_ENFORCEMENT_ENABLED` | Master switch (default **on**; set `false`/`0`/`off` to bypass) |
-| `USAGE_KILL_SWITCH_*` | Per-feature emergency blocks |
-| `USAGE_GLOBAL_DAILY_CEILING_MICROS` | Platform daily spend ceiling |
-| `USAGE_GLOBAL_MONTHLY_CEILING_MICROS` | Platform monthly spend ceiling |
-| `CODING_AGENT_ENABLED` | Enables coding-agent model route (still no customer UI) |
-| `CODING_AGENT_MODEL` / `OPENAI_CODING_MODEL` | Server-side Codex model id |
-
-## Database
-
-Migration `038_usage_protection.sql` adds:
-
-- `usage_events` — idempotent reservation + reconciliation ledger
-- `usage_window_counters` — distributed rolling windows
-- `usage_audit_log` — allow/block/throttle audit trail
-- `increment_usage_window_counter()` — atomic counter RPC
-
-Tables are service-role only. Clients never write usage directly.
-
-## Rich response formats
-
-Models may return `version: 2` structured payloads validated by `validateRichResponse()`. Invalid payloads fall back to safe Markdown via `coerceRichResponse()`. Mapped UI blocks are produced through `richBlocksToChatBlocks()`.
-
-Codex/coding-agent responses should use `job_progress`, `file_changes`, `sandbox_preview`, and `approval` blocks once that workflow ships.
+| Surface | Path | Metering |
+| --- | --- | --- |
+| Chat | `app/api/ai/raw-openai` | enforce → root `chat` |
+| Agent v2 | `app/api/ai/agent` | enforce → root |
+| Front agent | `app/api/projects/.../agent/turn` | enforce → root `website_build` |
+| Project / expert agents | `lib/agents/runtime.runAgent` | start/finish → root `agent`/`expert`/`background_agent`/`automation` |
+| Expert consult | via `runAgent` | root `expert` |
+| Speculate draft | `app/api/ai/speculate/draft` | enforce → root `speculation` |
+| Speculate warm | `.../warm` | **no AI** (route classify only) |
+| Images | image-jobs, studio edit | enforce → root `image` |
+| Voice | transcribe, realtime-token | enforce → root `voice` |
+| Builds | build-jobs create/retry | enforce → root `app_build` |
 
 ## Tests
 
 ```bash
 npm run test:usage
 ```
-
-## Approved plan limits (v2)
-
-Limits in `lib/usage/plan-config.ts` are approved for launch:
-
-- **Free:** 150 AI chat/month, 5 images/month, 20 web research/month, tight rate limits; knowledge/sandbox deploy/coding disabled
-- **Pro / Max:** fair-use unlimited monthly units with rate + cost ceilings; coding agent still off until `CODING_AGENT_ENABLED=1`
-- **Cost ceilings:** ~$0.50/day free workspace, $15/day pro, $40/day max (micro-dollar fields)
-
-Migration `038_usage_protection.sql` is applied on Supabase. Set `USAGE_ENFORCEMENT_ENABLED=true` in production env (default is on when unset).

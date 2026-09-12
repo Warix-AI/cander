@@ -17,6 +17,10 @@ import {
 } from "@/lib/ai/composer-speculation/server-cache";
 import { normalizeSpeculationText } from "@/lib/ai/composer-speculation/fingerprint";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import {
+  enforceUsageForRequest,
+  finalizeUsageReservation,
+} from "@/lib/usage/server/guard-route";
 
 export const runtime = "nodejs";
 
@@ -122,6 +126,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const usage = await enforceUsageForRequest({
+    request,
+    feature: "ai_chat",
+    workspaceId: body.workspaceId,
+    threadId: body.threadId,
+    idempotencyKey: `speculate-draft:${warmHandle}:${fingerprint}:${crypto.randomUUID()}`,
+    provider: "openai",
+    model: resolveOpenAIModel(),
+    metadata: {
+      surface: "speculation",
+      aiSource: "speculation",
+      billable: true,
+    },
+  });
+  if (!usage.ok) return usage.response;
+
   const model = resolveOpenAIModel();
   try {
     const client = new OpenAI({ apiKey });
@@ -133,6 +153,13 @@ export async function POST(request: Request) {
     });
     const draftText = (response.output_text || "").trim();
     if (!draftText) {
+      await finalizeUsageReservation({
+        reservationId: usage.reservationId,
+        status: "confirmed",
+        aiExecutionId: usage.aiExecutionId,
+        model,
+        metadata: { skipped: "empty_draft" },
+      });
       return NextResponse.json({
         skipped: true,
         reason: "empty_draft",
@@ -148,6 +175,13 @@ export async function POST(request: Request) {
       model,
     });
 
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "confirmed",
+      aiExecutionId: usage.aiExecutionId,
+      model,
+    });
+
     return NextResponse.json({
       speculateId: body.speculateId ?? null,
       gen: body.gen ?? null,
@@ -159,6 +193,12 @@ export async function POST(request: Request) {
       latencyMs: Date.now() - started,
     });
   } catch (e) {
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "failed",
+      aiExecutionId: usage.aiExecutionId,
+      model,
+    });
     const message = e instanceof Error ? e.message.slice(0, 200) : "draft_failed";
     return NextResponse.json(
       { error: message, latencyMs: Date.now() - started },

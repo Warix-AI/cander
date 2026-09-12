@@ -64,10 +64,16 @@ export function UsageStatusPanel() {
   return (
     <SettingsSection
       title="Usage"
-      description="Plain-language status for your workspace. Normal use on paid plans should feel unlimited."
+      description="AI minutes used this billing period. Active AI time only — idle time does not count."
     >
       <SettingsGroup>
         <SettingsRow label="Current plan" description={usage?.planLabel ?? planLabel(plan)} />
+        {usage?.aiMinutes ? (
+          <SettingsRow
+            label="AI minutes"
+            description={usage.aiMinutes.detailLabel}
+          />
+        ) : null}
         {usage?.notices.map((notice) => (
           <SettingsRow key={notice} label="Note" description={notice} />
         ))}

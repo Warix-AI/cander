@@ -58,6 +58,32 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
     sharedWorkspaceKnowledge: true,
     organizationControls: true,
   },
+  ultra: {
+    aiCapacity: "maximum",
+    voice: true,
+    workspaceLimit: Infinity,
+    persistentMemory: true,
+    advancedMemory: true,
+    knowledgeBases: true,
+    sharedWorkspaces: true,
+    inviteMembers: true,
+    rolesAndPermissions: true,
+    sharedWorkspaceKnowledge: true,
+    organizationControls: true,
+  },
+  enterprise: {
+    aiCapacity: "maximum",
+    voice: true,
+    workspaceLimit: Infinity,
+    persistentMemory: true,
+    advancedMemory: true,
+    knowledgeBases: true,
+    sharedWorkspaces: true,
+    inviteMembers: true,
+    rolesAndPermissions: true,
+    sharedWorkspaceKnowledge: true,
+    organizationControls: true,
+  },
 };
 
 export function capabilitiesFor(plan: BillingPlan): PlanCapabilities {
@@ -109,15 +135,17 @@ export function hasOrganizationControls(plan: BillingPlan) {
 export function nextPlanTier(plan: BillingPlan): BillingPlan | null {
   if (plan === "free") return "pro";
   if (plan === "pro") return "max";
+  if (plan === "max") return "ultra";
+  if (plan === "ultra") return "enterprise";
   return null;
 }
 
-/** Pricing comparison rows — plan cells are boolean only. */
+/** Pricing comparison rows — self-serve plans only in marketing matrix. */
 export function planComparisonRows(): {
   label: string;
-  values: Record<BillingPlan, boolean>;
+  values: Record<"free" | "pro" | "max", boolean>;
 }[] {
-  const all = (values: Record<BillingPlan, boolean>) => values;
+  const all = (values: Record<"free" | "pro" | "max", boolean>) => values;
   return [
     {
       label: "Unlimited AI usage",

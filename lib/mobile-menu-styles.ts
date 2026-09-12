@@ -56,6 +56,8 @@ export const PRIMARY_NAV_CARD_HOVER =
 /** Card is G3 (20px) with 3px padding — inner highlight follows the outer curve. */
 export const PRIMARY_NAV_CARD_RADIUS_FIRST = "primary-nav-card-first";
 export const PRIMARY_NAV_CARD_RADIUS_LAST = "primary-nav-card-last";
+/** Single-row inset (product switcher) — all four corners; first+last conflict in CSS. */
+export const PRIMARY_NAV_CARD_RADIUS_SOLO = "primary-nav-card-solo";
 /** Mobile New/Canvas card uses 12px shell — slightly tighter inner curve. */
 export const PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE =
   "primary-nav-card-first-mobile";

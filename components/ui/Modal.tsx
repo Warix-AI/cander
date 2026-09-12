@@ -85,7 +85,6 @@ export function Modal({
       <NativeOverlayGate open={open} />
       <div
         className={cn(
-          // Above mobile chrome (z-50) and drawers (z-70); match QuickAskHost.
           "fixed inset-0 z-[100] flex",
           edgeToEdge
             ? "items-stretch justify-stretch p-0"
@@ -108,24 +107,26 @@ export function Modal({
           aria-modal="true"
           aria-labelledby={labelledBy}
           className={cn(
-            "relative z-10 overflow-hidden light-surface bg-popover text-popover-foreground shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-zinc-900 dark:shadow-[0_20px_56px_rgba(0,0,0,0.45)]",
+            "relative z-10 overflow-hidden light-surface bg-popover text-popover-foreground dark:border dark:border-border dark:bg-zinc-900",
             edgeToEdge
               ? "h-full max-h-none w-full rounded-none"
               : asSheet
-                ? null
+                ? cn(
+                    // Full-bleed bottom sheet — ignore caller max-width / radius.
+                    "flex w-full max-w-none flex-col rounded-none rounded-t-[22px]",
+                    "pb-[max(1rem,env(safe-area-inset-bottom))]",
+                    "shadow-[0_-12px_40px_rgba(0,0,0,0.18)] dark:shadow-[0_-12px_40px_rgba(0,0,0,0.45)]",
+                    sheetSize === "tall"
+                      ? "min-h-[min(88dvh,760px)] max-h-[94dvh]"
+                      : "max-h-[min(88dvh,720px)]",
+                  )
                 : cn(
-                    "max-h-[calc(100vh-2rem)]",
+                    "max-h-[calc(100vh-2rem)] shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_56px_rgba(0,0,0,0.45)]",
                     floating ? SHELL_G3_RADIUS : "rounded-[10px]",
+                    className,
                   ),
-            className,
-            asSheet &&
-              cn(
-                "flex w-full max-w-none flex-col rounded-b-none rounded-t-[22px] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
-                sheetSize === "tall"
-                  ? "min-h-[min(88dvh,760px)] max-h-[94dvh]"
-                  : "max-h-[min(88dvh,720px)]",
-              ),
           )}
+          style={asSheet ? { width: "100vw", maxWidth: "100vw" } : undefined}
         >
           {asSheet ? (
             <div className="flex shrink-0 justify-center pt-2.5 pb-1" aria-hidden>
@@ -134,7 +135,9 @@ export function Modal({
           ) : null}
           <div
             className={cn(
-              asSheet && "flex min-h-0 flex-1 flex-col overflow-y-auto",
+              asSheet
+                ? "flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-1"
+                : null,
             )}
           >
             {children}

@@ -172,22 +172,34 @@ const PLANS: {
 
 const PLAN_PANEL_BULLETS: Record<BillingPlan, string[]> = {
   free: [
-    "Unlimited AI at standard capacity",
+    "10 AI minutes per month",
     "Home, Build, Studio, and Connectors",
     "Persistent memory included",
     "Upgrade anytime for more power",
   ],
   pro: [
-    "Unlimited AI at expanded capacity",
+    "Up to 50 AI minutes per month",
     "Voice, advanced memory, knowledge bases",
     "Up to three visible workspaces",
     "Built for individuals",
   ],
   max: [
-    "Unlimited AI at maximum capacity",
+    "Up to 150 AI minutes per month",
     "Shared workspaces and member invites",
     "Roles, permissions, and org controls",
     "Built for teams and power users",
+  ],
+  ultra: [
+    "Up to 500 AI minutes per month",
+    "Maximum AI capacity",
+    "Shared workspaces and org controls",
+    "Built for heavy AI workloads",
+  ],
+  enterprise: [
+    "Custom AI minutes (500+)",
+    "Negotiated pricing and model access",
+    "Organization controls and support",
+    "Contact sales to get started",
   ],
 };
 

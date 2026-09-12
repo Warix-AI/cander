@@ -50,6 +50,13 @@ export function costCeilingMessage(plan: BillingPlan): string {
   return "Your workspace reached a temporary usage safeguard due to unusually high activity. Try again later today.";
 }
 
+export function aiMinutesExhaustedMessage(plan: BillingPlan): string {
+  if (plan === "free") {
+    return "You've used all of this month's AI minutes on the Free plan. Upgrade for more AI time.";
+  }
+  return "You've used all of this month's AI minutes. Usage resets at the start of your next billing period.";
+}
+
 export function featureDisabledMessage(feature: UsageFeatureCategory, plan: BillingPlan): string {
   const label = usageFeatureLabel(feature);
   const upgrade = nextPlanTier(plan);

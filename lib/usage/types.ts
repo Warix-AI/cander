@@ -1,7 +1,7 @@
 import type { BillingPlan } from "../types.ts";
 
-/** Versioned plan config — bump when allowance structure changes. Account spend budgets 2026-09-08. */
-export const USAGE_PLAN_CONFIG_VERSION = 3;
+/** Versioned plan config — bump when allowance structure changes. AI minutes Free=10 / Pro=50 / Max=150 / Ultra=500 2026-09-12. */
+export const USAGE_PLAN_CONFIG_VERSION = 5;
 
 /** Normalized feature categories for metering and enforcement. */
 export type UsageFeatureCategory =
@@ -75,6 +75,16 @@ export type PlanUsagePolicy = {
   billAmountMicros: number;
   /** Usable AI spend for the account this period (shared across workspaces). */
   usableBudgetMicros: number;
+  /**
+   * User-facing AI-minute allowance for the billing period.
+   * Editable independently from usableBudgetMicros (internal economics).
+   * Prefer resolveIncludedMinutesForPlan() / ai_plan_minute_configs for live values.
+   */
+  includedMinutes: number;
+  minimumMinutes: number | null;
+  maximumMinutes: number | null;
+  /** soft = warn only; hard = block new AI work when minutes exhausted. */
+  usageLimitBehavior: "soft" | "hard";
 };
 
 export type UsageGuardInput = {
@@ -158,5 +168,22 @@ export type UsageStatusSnapshot = {
     periodStart: string;
     periodEnd: string;
     status: "ok" | "approaching" | "exhausted";
+  };
+  /**
+   * Canonical user-facing AI usage — active minutes from the universal ledger.
+   * Prefer this over accountSpend / feature request counters in customer UI.
+   */
+  aiMinutes?: {
+    includedMinutes: number;
+    usedMinutes: number;
+    remainingMinutes: number;
+    percentUsed: number;
+    periodStart: string;
+    periodEnd: string;
+    status: "ok" | "approaching" | "exhausted";
+    limitBehavior: "soft" | "hard";
+    usedLabel: string;
+    remainingLabel: string;
+    detailLabel: string;
   };
 };

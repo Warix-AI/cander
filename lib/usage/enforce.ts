@@ -351,6 +351,46 @@ export async function guardUsage(
     return failure;
   }
 
+  // Hard stop when the universal AI-minute allowance is exhausted.
+  try {
+    const { isAiMeteredFeature } = await import("./ai-minutes/feature-map.ts");
+    if (isAiMeteredFeature(input.feature) && policy.usageLimitBehavior === "hard") {
+      const { getAIMinutesSnapshot } = await import("./ai-minutes/aggregate.ts");
+      const { aiMinutesExhaustedMessage } = await import("./messages.ts");
+      const minutes = await getAIMinutesSnapshot({
+        profileId: input.profileId,
+        plan,
+        refresh: false,
+      });
+      if (minutes && minutes.status === "exhausted") {
+        const failure = toGuardFailure(
+          {
+            ok: false,
+            status: 429,
+            code: "quota_exceeded",
+            message: aiMinutesExhaustedMessage(plan),
+          },
+          plan,
+          input.feature,
+        );
+        await store.writeAudit({
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          feature: input.feature,
+          decision: "blocked",
+          reason: failure.message,
+          metadata: {
+            usedMinutes: minutes.usedMinutes,
+            includedMinutes: minutes.includedMinutes,
+          },
+        });
+        return failure;
+      }
+    }
+  } catch {
+    // Minutes check is best-effort when ledger/admin unavailable.
+  }
+
   let throttled = false;
   let notice: string | undefined;
   if (limit.monthlyUnits != null) {
@@ -625,14 +665,48 @@ export async function buildUsageStatusSnapshot(input: {
   } catch {
     accountSpend = undefined;
   }
+
+  let aiMinutes: UsageStatusSnapshot["aiMinutes"];
+  try {
+    const { getAIMinutesSnapshot } = await import("./ai-minutes/aggregate.ts");
+    const snap = await getAIMinutesSnapshot({
+      profileId: input.profileId,
+      plan: input.plan,
+      refresh: true,
+    });
+    aiMinutes = snap
+      ? {
+          includedMinutes: snap.includedMinutes,
+          usedMinutes: snap.usedMinutes,
+          remainingMinutes: snap.remainingMinutes,
+          percentUsed: snap.percentUsed,
+          periodStart: snap.periodStart,
+          periodEnd: snap.periodEnd,
+          status: snap.status,
+          limitBehavior: snap.limitBehavior,
+          usedLabel: snap.usedLabel,
+          remainingLabel: snap.remainingLabel,
+          detailLabel: snap.detailLabel,
+        }
+      : undefined;
+  } catch {
+    aiMinutes = undefined;
+  }
+
   const notices = [
     ...(policy.marketingUnlimited
       ? ["Your plan includes generous fair-use limits for normal work."]
       : []),
-    ...(accountSpend?.status === "approaching"
+    ...(aiMinutes?.status === "approaching"
+      ? ["You're approaching this month's AI minute allowance."]
+      : []),
+    ...(aiMinutes?.status === "exhausted"
+      ? ["You've used all of this month's AI minutes."]
+      : []),
+    ...(accountSpend?.status === "approaching" && !aiMinutes
       ? ["You're approaching this month's account usage budget."]
       : []),
-    ...(accountSpend?.status === "exhausted"
+    ...(accountSpend?.status === "exhausted" && !aiMinutes
       ? ["You've reached this month's account usage budget."]
       : []),
   ];
@@ -643,7 +717,17 @@ export async function buildUsageStatusSnapshot(input: {
     configVersion: usagePlanConfigVersion(),
     features,
     notices,
-    upgradePlan: input.plan === "free" ? "pro" : input.plan === "pro" ? "max" : null,
+    upgradePlan:
+      input.plan === "free"
+        ? "pro"
+        : input.plan === "pro"
+          ? "max"
+          : input.plan === "max"
+            ? "ultra"
+            : input.plan === "ultra"
+              ? "enterprise"
+              : null,
     accountSpend,
+    aiMinutes,
   };
 }

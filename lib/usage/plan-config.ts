@@ -197,7 +197,11 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     workspaceMonthlyCostCeilingMicros: 5_000_000,
     userDailyExpensiveActionCeilingMicros: 200_000,
     billAmountMicros: 0,
-    usableBudgetMicros: 1_000_000, // $1 usable
+    usableBudgetMicros: 1_000_000, // $1 usable (internal)
+    includedMinutes: 10,
+    minimumMinutes: 10,
+    maximumMinutes: 10,
+    usageLimitBehavior: "hard",
   },
   pro: {
     plan: "pro",
@@ -208,7 +212,11 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     workspaceMonthlyCostCeilingMicros: 150_000_000,
     userDailyExpensiveActionCeilingMicros: 5_000_000,
     billAmountMicros: 20_000_000, // $20
-    usableBudgetMicros: 15_000_000, // $15 usable threshold
+    usableBudgetMicros: 15_000_000, // $15 usable (internal)
+    includedMinutes: 50,
+    minimumMinutes: 10,
+    maximumMinutes: 50,
+    usageLimitBehavior: "hard",
   },
   max: {
     plan: "max",
@@ -219,7 +227,41 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     workspaceMonthlyCostCeilingMicros: 400_000_000,
     userDailyExpensiveActionCeilingMicros: 12_000_000,
     billAmountMicros: 50_000_000, // $50
-    usableBudgetMicros: 40_000_000, // $40 usable
+    usableBudgetMicros: 40_000_000, // $40 usable (internal)
+    includedMinutes: 150,
+    minimumMinutes: 50,
+    maximumMinutes: 150,
+    usageLimitBehavior: "hard",
+  },
+  ultra: {
+    plan: "ultra",
+    label: "Ultra",
+    marketingUnlimited: true,
+    features: maxFeatures(),
+    workspaceDailyCostCeilingMicros: 80_000_000,
+    workspaceMonthlyCostCeilingMicros: 800_000_000,
+    userDailyExpensiveActionCeilingMicros: 25_000_000,
+    billAmountMicros: 150_000_000, // $150 placeholder
+    usableBudgetMicros: 120_000_000, // $120 usable (internal)
+    includedMinutes: 500,
+    minimumMinutes: 200,
+    maximumMinutes: 500,
+    usageLimitBehavior: "hard",
+  },
+  enterprise: {
+    plan: "enterprise",
+    label: "Enterprise",
+    marketingUnlimited: true,
+    features: maxFeatures(),
+    workspaceDailyCostCeilingMicros: 200_000_000,
+    workspaceMonthlyCostCeilingMicros: 2_000_000_000,
+    userDailyExpensiveActionCeilingMicros: 80_000_000,
+    billAmountMicros: 0, // custom contract
+    usableBudgetMicros: 250_000_000, // $250 default internal (overridable)
+    includedMinutes: 1000,
+    minimumMinutes: 501,
+    maximumMinutes: null,
+    usageLimitBehavior: "hard",
   },
 };
 

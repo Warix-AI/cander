@@ -5,6 +5,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hourlyUsage } from "@/lib/hourly-usage";
+import { formatMinutesRemainingLine } from "@/lib/usage/ai-minutes/format";
 import type { UsageStatusSnapshot } from "@/lib/usage/types";
 
 const USAGE_BAR_THRESHOLD = 70;
@@ -67,9 +68,25 @@ export function useUsageSnapshot(): {
 export function useUsageStatusPercent(): {
   percent: number;
   label: string;
+  detail: string | null;
   loaded: boolean;
 } {
   const { snapshot, loaded } = useUsageSnapshot();
+
+  if (snapshot?.aiMinutes) {
+    const minutes = snapshot.aiMinutes;
+    return {
+      percent: minutes.percentUsed,
+      label:
+        minutes.status === "exhausted"
+          ? "AI minutes used up"
+          : minutes.status === "approaching"
+            ? "Approaching AI minute limit"
+            : minutes.detailLabel,
+      detail: formatMinutesRemainingLine(minutes.remainingMinutes),
+      loaded,
+    };
+  }
 
   if (snapshot?.accountSpend) {
     const spend = snapshot.accountSpend;
@@ -81,6 +98,7 @@ export function useUsageStatusPercent(): {
           : spend.status === "approaching"
             ? "Approaching account usage budget"
             : `${spend.percentUsed}% of account usage`,
+      detail: null,
       loaded,
     };
   }
@@ -95,18 +113,19 @@ export function useUsageStatusPercent(): {
           : aiChat.status === "limited"
             ? "Monthly allowance reached"
             : `${aiChat.percentUsed}% of monthly AI usage`,
+      detail: null,
       loaded,
     };
   }
 
-  // Only use demo % when we have no live snapshot at all.
   if (!loaded) {
-    return { percent: 0, label: "Loading…", loaded };
+    return { percent: 0, label: "Loading…", detail: null, loaded };
   }
   if (snapshot) {
     return {
       percent: 0,
-      label: "Account usage",
+      label: "AI Usage",
+      detail: null,
       loaded,
     };
   }
@@ -115,6 +134,7 @@ export function useUsageStatusPercent(): {
   return {
     percent: demo.percent,
     label: `${demo.percent}% hourly usage`,
+    detail: null,
     loaded,
   };
 }

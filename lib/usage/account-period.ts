@@ -18,6 +18,8 @@ export type AccountUsagePeriod = {
   spentMicros: number;
   reservedMicros: number;
   status: "open" | "exhausted" | "closed";
+  includedMinutes?: number;
+  usageLimitBehavior?: "soft" | "hard";
 };
 
 function periodEndFromStart(periodStartIso: string): string {
@@ -40,6 +42,12 @@ function mapPeriod(row: Record<string, unknown>): AccountUsagePeriod {
     spentMicros: Number(row.spent_micros ?? 0),
     reservedMicros: Number(row.reserved_micros ?? 0),
     status: (row.status as AccountUsagePeriod["status"]) ?? "open",
+    includedMinutes:
+      row.included_minutes != null ? Number(row.included_minutes) : undefined,
+    usageLimitBehavior:
+      row.usage_limit_behavior === "soft" || row.usage_limit_behavior === "hard"
+        ? row.usage_limit_behavior
+        : undefined,
   };
 }
 
@@ -62,6 +70,39 @@ export async function ensureAccountUsagePeriod(opts: {
       .maybeSingle();
     if (existing) return mapPeriod(existing);
 
+    // Live admin config for NEW periods only — never rewrite open periods.
+    let includedMinutes = policy.includedMinutes;
+    let usageLimitBehavior = policy.usageLimitBehavior;
+    let usableBudgetMicros = policy.usableBudgetMicros;
+    try {
+      const { resolveIncludedMinutesForPlan } = await import(
+        "./ai-minutes/plan-minutes-config.ts"
+      );
+      const resolved = await resolveIncludedMinutesForPlan(opts.plan);
+      includedMinutes = resolved.includedMinutes;
+      usageLimitBehavior = resolved.usageLimitBehavior;
+      usableBudgetMicros = Math.round(resolved.internalBudgetUsd * 1_000_000);
+    } catch {
+      /* keep policy defaults */
+    }
+
+    // Per-profile Enterprise / contract override.
+    try {
+      const { data: profile } = await admin
+        .from("profiles")
+        .select("ai_minutes_override")
+        .eq("id", opts.profileId)
+        .maybeSingle();
+      if (
+        profile?.ai_minutes_override != null &&
+        Number.isFinite(Number(profile.ai_minutes_override))
+      ) {
+        includedMinutes = Number(profile.ai_minutes_override);
+      }
+    } catch {
+      /* ignore */
+    }
+
     const { data, error } = await admin
       .from("account_usage_periods")
       .upsert(
@@ -71,7 +112,9 @@ export async function ensureAccountUsagePeriod(opts: {
           period_start: periodStart,
           period_end: periodEnd,
           bill_amount_micros: policy.billAmountMicros,
-          usable_budget_micros: policy.usableBudgetMicros,
+          usable_budget_micros: usableBudgetMicros,
+          included_minutes: includedMinutes,
+          usage_limit_behavior: usageLimitBehavior,
           spent_micros: 0,
           reserved_micros: 0,
           status: "open",

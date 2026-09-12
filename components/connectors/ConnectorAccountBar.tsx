@@ -7,9 +7,7 @@ import {
   connectorAccountLimitMessage,
 } from "@/lib/connectors/account-names";
 import type { ConnectorConnection } from "@/lib/connectors/types";
-import {
-  CONNECTOR_CONTROL_RADIUS,
-} from "@/lib/shell-chrome";
+import { CONNECTOR_CONTROL_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 const glassShell = cn(
@@ -18,8 +16,8 @@ const glassShell = cn(
 );
 
 /**
- * Account selector for connector detail — ScopeToggle-style segmented
- * control (same as Connectors / Installed) with + directly to the right.
+ * Account selector — only shown once at least one account exists.
+ * Empty/connect CTA lives in the detail header actions (filter slot).
  */
 export function ConnectorAccountBar({
   connectorIcon,
@@ -27,9 +25,7 @@ export function ConnectorAccountBar({
   activeId,
   onSelect,
   onAdd,
-  onConnect,
   addDisabled,
-  connectDisabled,
   className,
 }: {
   connectorIcon: string;
@@ -37,14 +33,13 @@ export function ConnectorAccountBar({
   activeId: string | null;
   onSelect: (connectionId: string) => void;
   onAdd: () => void;
-  onConnect: () => void;
   addDisabled?: boolean;
-  connectDisabled?: boolean;
   className?: string;
 }) {
   const atLimit = accounts.length >= MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR;
   const disableAdd = Boolean(addDisabled) || atLimit;
-  const empty = accounts.length === 0;
+
+  if (!accounts.length) return null;
 
   return (
     <div className={cn("w-full", className)}>
@@ -52,86 +47,61 @@ export function ConnectorAccountBar({
         aria-label="Connected accounts"
         className="flex max-w-full flex-wrap items-center gap-2"
       >
-        {empty ? (
-          <button
-            type="button"
-            aria-label="Connect account"
-            disabled={connectDisabled}
-            onClick={onConnect}
-            className={cn(
-              "inline-flex h-9 items-center gap-2 px-3 text-[13px] font-medium tracking-[-0.01em]",
-              glassShell,
-              connectDisabled
-                ? "cursor-not-allowed text-muted-foreground/40"
-                : "text-foreground hover:bg-white/65 dark:hover:bg-white/[0.1]",
-            )}
-          >
-            <ConnectorMark
-              id={connectorIcon}
-              size="nav"
-              className="shrink-0 opacity-80"
-            />
-            Connect
-          </button>
-        ) : (
-          <>
-            <div
-              className={cn(
-                "inline-flex max-w-full items-center gap-0.5 overflow-x-auto p-1",
-                glassShell,
-              )}
-            >
-              {accounts.map((account) => {
-                const active = account.id === activeId;
-                const label =
-                  String(account.displayName ?? "").trim() || "Account";
-                return (
-                  <button
-                    key={account.id}
-                    type="button"
-                    aria-pressed={active}
-                    title={label}
-                    onClick={() => onSelect(account.id)}
-                    className={cn(
-                      "inline-flex h-8 max-w-[9.5rem] shrink-0 items-center gap-1.5 px-3 text-[13px] font-medium tracking-[-0.01em] transition-colors duration-200",
-                      CONNECTOR_CONTROL_RADIUS,
-                      active
-                        ? "bg-black/[0.06] text-foreground dark:bg-white/[0.1]"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    <ConnectorMark
-                      id={connectorIcon}
-                      size="nav"
-                      className="shrink-0 opacity-80"
-                    />
-                    <span className="min-w-0 truncate">{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              aria-label={
-                atLimit ? connectorAccountLimitMessage() : "Add another account"
-              }
-              title={atLimit ? connectorAccountLimitMessage() : "Add account"}
-              disabled={disableAdd}
-              onClick={onAdd}
-              className={cn(
-                "inline-flex h-9 w-9 shrink-0 items-center justify-center",
-                glassShell,
-                disableAdd
-                  ? "cursor-not-allowed text-muted-foreground/40"
-                  : "text-muted-foreground hover:bg-white/65 hover:text-foreground dark:hover:bg-white/[0.1]",
-              )}
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.8} />
-            </button>
-          </>
-        )}
+        <div
+          className={cn(
+            "inline-flex max-w-full items-center gap-0.5 overflow-x-auto p-1",
+            glassShell,
+          )}
+        >
+          {accounts.map((account) => {
+            const active = account.id === activeId;
+            const label =
+              String(account.displayName ?? "").trim() || "Account";
+            return (
+              <button
+                key={account.id}
+                type="button"
+                aria-pressed={active}
+                title={label}
+                onClick={() => onSelect(account.id)}
+                className={cn(
+                  "inline-flex h-8 max-w-[9.5rem] shrink-0 items-center gap-1.5 px-3 text-[13px] font-medium tracking-[-0.01em] transition-colors duration-200",
+                  CONNECTOR_CONTROL_RADIUS,
+                  active
+                    ? "bg-black/[0.06] text-foreground dark:bg-white/[0.1]"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <ConnectorMark
+                  id={connectorIcon}
+                  size="nav"
+                  className="shrink-0 opacity-80"
+                />
+                <span className="min-w-0 truncate">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          aria-label={
+            atLimit ? connectorAccountLimitMessage() : "Add another account"
+          }
+          title={atLimit ? connectorAccountLimitMessage() : "Add account"}
+          disabled={disableAdd}
+          onClick={onAdd}
+          className={cn(
+            "inline-flex h-9 w-9 shrink-0 items-center justify-center transition-colors duration-200",
+            CONNECTOR_CONTROL_RADIUS,
+            disableAdd
+              ? "cursor-not-allowed text-muted-foreground/40"
+              : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <Plus className="h-4 w-4" strokeWidth={1.8} />
+        </button>
       </nav>
-      {!empty && atLimit ? (
+      {atLimit ? (
         <p className="mt-2 px-0.5 text-[11px] text-muted-foreground">
           {connectorAccountLimitMessage()}
         </p>
@@ -139,3 +109,5 @@ export function ConnectorAccountBar({
     </div>
   );
 }
+
+export const connectorAccountChipShell = glassShell;

@@ -13,6 +13,10 @@ import { assertProjectAccess } from "@/lib/security/project-access";
 import { getProjectBuildPhase } from "@/lib/build/build-phase";
 import { resolveProjectRuntime } from "@/lib/build/project-runtime";
 import { runFrontAgentTurn } from "@/lib/ai/agent/front-agent";
+import {
+  enforceUsageForRequest,
+  finalizeUsageReservation,
+} from "@/lib/usage/server/guard-route";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -55,6 +59,16 @@ export async function POST(request: Request, ctx: RouteCtx) {
     )
     .slice(-12);
 
+  const usage = await enforceUsageForRequest({
+    request,
+    feature: "sandbox_build",
+    workspaceId,
+    idempotencyKey: `front-agent:${projectId}:${crypto.randomUUID()}`,
+    provider: "openai",
+    metadata: { projectId, aiSource: "website_build", surface: "front_agent" },
+  });
+  if (!usage.ok) return usage.response;
+
   try {
     const [phase, rt] = await Promise.all([
       getProjectBuildPhase({ projectId, workspaceId }),
@@ -75,8 +89,19 @@ export async function POST(request: Request, ctx: RouteCtx) {
       alreadyBuilt: phase === "ready" || Boolean(rt.repo.draftSha),
       publishState,
     });
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "confirmed",
+      aiExecutionId: usage.aiExecutionId,
+      metadata: { kind: decision?.kind ?? null },
+    });
     return NextResponse.json({ ok: true, decision });
   } catch (err) {
+    await finalizeUsageReservation({
+      reservationId: usage.reservationId,
+      status: "failed",
+      aiExecutionId: usage.aiExecutionId,
+    });
     const msg = err instanceof Error ? err.message : String(err);
     console.warn("[cander:front-agent] turn failed", { projectId, error: msg.slice(0, 300) });
     return NextResponse.json({ ok: false, error: "The assistant is unavailable right now." }, { status: 502 });

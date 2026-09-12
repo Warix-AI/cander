@@ -36,8 +36,21 @@ import {
 import { runAgentServerLoop } from "@/lib/ai/runtime/agent-loop-server";
 import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
 import { sanitizeExpertVisibleMessage } from "@/lib/agents/expert-voice";
+import {
+  finishAIUsageExecution,
+  startAIUsageExecution,
+  type AIUsageSource,
+} from "@/lib/usage/ai-minutes";
+import { resolveBillingPlanForProfile } from "@/lib/usage/ai-minutes/resolve-plan";
 
 const MAX_AGENT_ROUNDS = 6;
+
+function aiSourceForAgentTrigger(triggerType: string): AIUsageSource {
+  if (triggerType === "schedule") return "background_agent";
+  if (triggerType === "event") return "automation";
+  if (triggerType === "consult") return "expert";
+  return "agent";
+}
 
 /** Private ai_chats row so tool events / loop state can FK to a real chat id. */
 async function ensureAgentRuntimeAiChat(opts: {
@@ -78,6 +91,8 @@ export type RunAgentInput = {
   existingRunId?: string;
   idempotencyKey?: string;
   triggerPayload?: Record<string, unknown>;
+  /** When set, this run is a child of an active AI execution (cost-only minutes). */
+  parentExecutionId?: string | null;
 };
 
 export type RunAgentResult = {
@@ -424,6 +439,25 @@ export async function runAgent(
     };
   }
 
+  const billingPlan = await resolveBillingPlanForProfile(input.profileId);
+  const aiSource = aiSourceForAgentTrigger(input.triggerType);
+  const aiExecution = await startAIUsageExecution({
+    userId: input.profileId,
+    workspaceId: input.workspaceId,
+    planId: billingPlan,
+    plan: billingPlan,
+    source: aiSource,
+    feature: `agent:${input.triggerType}`,
+    parentExecutionId: input.parentExecutionId ?? null,
+    provider: "openai",
+    metadata: {
+      agentId: input.agentId,
+      projectId: input.projectId,
+      runId: run.id,
+      triggerType: input.triggerType,
+    },
+  });
+
   const nowIso = new Date().toISOString();
   let toolCount = 0;
   let lastCander = "";
@@ -707,6 +741,21 @@ export async function runAgent(
       );
     }
 
+    try {
+      await finishAIUsageExecution({
+        executionId: aiExecution.executionId,
+        status: pausedWaiting ? "interrupted" : "completed",
+        plan: billingPlan,
+        userId: input.profileId,
+        metadata: {
+          toolCount,
+          runStatus: pausedWaiting ? "waiting" : "completed",
+        },
+      });
+    } catch {
+      /* ignore meter failures */
+    }
+
     return {
       run: completed,
       content: lastCander,
@@ -714,6 +763,17 @@ export async function runAgent(
     };
   } catch (err) {
     const message = errorMessageFromUnknown(err);
+    try {
+      await finishAIUsageExecution({
+        executionId: aiExecution.executionId,
+        status: "failed",
+        plan: billingPlan,
+        userId: input.profileId,
+        metadata: { error: message },
+      });
+    } catch {
+      /* ignore meter failures */
+    }
     try {
       await appendAgentMessage({
         workspaceId: input.workspaceId,

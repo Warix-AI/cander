@@ -151,12 +151,14 @@ Do not force a match.`,
 export async function consultExpert(opts: {
   agentId: string;
   workspaceId: string;
-  projectId: string;
   profileId: string;
+  projectId: string;
   situation: string;
   triggerType?: "consult" | "event";
   idempotencyKey?: string;
   triggerPayload?: Record<string, unknown>;
+  /** When called from an active chat/front-agent turn, nest under that root. */
+  parentExecutionId?: string | null;
 }): Promise<RunAgentResult> {
   return runAgent({
     agentId: opts.agentId,
@@ -167,6 +169,7 @@ export async function consultExpert(opts: {
     consultSituation: opts.situation,
     idempotencyKey: opts.idempotencyKey,
     triggerPayload: opts.triggerPayload,
+    parentExecutionId: opts.parentExecutionId,
   });
 }
 
