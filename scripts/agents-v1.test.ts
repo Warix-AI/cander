@@ -378,7 +378,7 @@ describe("connector mail → expert situation", () => {
   });
 
   it("ranks Rescheduling Expert for appointment-move mail", async () => {
-    const { searchExpertDirectory } = await import(
+    const { scoreExpertDirectory, searchExpertDirectory } = await import(
       "../lib/agents/directory-search.ts"
     );
     const ranked = searchExpertDirectory(
@@ -403,6 +403,32 @@ describe("connector mail → expert situation", () => {
       3,
     );
     assert.equal(ranked[0]?.name, "Rescheduling");
+
+    const scored = scoreExpertDirectory(
+      [
+        {
+          id: "e1",
+          projectId: "p1",
+          name: "First",
+          description: "Gmail assistant that drafts replies for your approval.",
+          status: "active",
+        },
+        {
+          id: "e2",
+          projectId: "p1",
+          name: "Rescheduling Expert",
+          description:
+            "Handles incoming Gmail messages about rescheduling appointments and tells Cander how to respond to the customer.",
+          status: "active",
+        },
+      ],
+      "Subject: Reschedule Appointment\nI'd like to reschedule my appointment tomorrow",
+    );
+    assert.equal(scored[0]?.entry.name, "Rescheduling Expert");
+    assert.ok(
+      scored[0]!.score >= (scored[1]?.score ?? 0) + 2,
+      "Rescheduling should clearly outrank generic Gmail assistant",
+    );
   });
 });
 

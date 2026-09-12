@@ -8,7 +8,7 @@ import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
 import {
   formatExpertDirectoryForPrompt,
   listExpertDirectory,
-  searchExpertDirectory,
+  scoreExpertDirectory,
   type ExpertDirectoryEntry,
 } from "@/lib/agents/directory";
 import { runAgent, type RunAgentResult } from "@/lib/agents/runtime";
@@ -40,44 +40,61 @@ export async function selectExpertForSituation(opts: {
     return { expert: null, reason: "No active Experts in the directory." };
   }
 
-  const ranked = searchExpertDirectory(entries, situation, 5);
-  if (ranked.length === 1) {
-    return {
-      expert: ranked[0]!,
-      reason: `Matched ${ranked[0]!.name} from directory descriptions.`,
-    };
-  }
-  if (
-    ranked.length >= 2 &&
-    ranked[0] &&
-    // Strong name mention wins without LLM.
-    situation.toLowerCase().includes(ranked[0].name.toLowerCase())
-  ) {
-    return {
-      expert: ranked[0],
-      reason: `Situation mentions ${ranked[0].name}.`,
-    };
-  }
-
-  const candidates = ranked.length ? ranked : entries;
-  const picked = await pickExpertWithLlm({
-    candidates,
-    situation,
-  });
-  if (!picked) {
+  const scored = scoreExpertDirectory(entries, situation);
+  if (!scored.length) {
     return {
       expert: null,
       reason:
         "No Expert clearly matches this situation; Cander can handle it without consulting.",
     };
   }
-  const expert = candidates.find((e) => e.id === picked) ?? null;
-  if (!expert) {
-    return { expert: null, reason: "Selected Expert id was not in directory." };
+
+  const top = scored[0]!;
+  const second = scored[1];
+
+  // Single keyword match → consult immediately (no LLM).
+  if (scored.length === 1) {
+    return {
+      expert: top.entry,
+      reason: `Matched ${top.entry.name} from directory descriptions.`,
+    };
   }
+
+  // Situation literally names the top Expert.
+  if (situation.toLowerCase().includes(top.entry.name.toLowerCase())) {
+    return {
+      expert: top.entry,
+      reason: `Situation mentions ${top.entry.name}.`,
+    };
+  }
+
+  // Clear keyword leader (e.g. Rescheduling vs generic Gmail assistant).
+  if (!second || top.score >= second.score + 2) {
+    return {
+      expert: top.entry,
+      reason: `Best directory match: ${top.entry.name}.`,
+    };
+  }
+
+  // Close scores → ask LLM; if it abstains, still use the keyword leader so
+  // clearly relevant mail (reschedule, etc.) is not silently dropped.
+  const picked = await pickExpertWithLlm({
+    candidates: scored.map((row) => row.entry),
+    situation,
+  });
+  if (picked) {
+    const expert = scored.find((row) => row.entry.id === picked)?.entry ?? null;
+    if (expert) {
+      return {
+        expert,
+        reason: `Selected ${expert.name} from Expert directory descriptions.`,
+      };
+    }
+  }
+
   return {
-    expert,
-    reason: `Selected ${expert.name} from Expert directory descriptions.`,
+    expert: top.entry,
+    reason: `Fallback to best directory match: ${top.entry.name}.`,
   };
 }
 

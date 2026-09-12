@@ -8,6 +8,7 @@ import type { AgentStatus } from "@/lib/agents/types";
 import { agentStatusFromRow } from "@/lib/agents/types";
 import {
   formatExpertDirectoryForPrompt,
+  scoreExpertDirectory,
   searchExpertDirectory,
   type ExpertDirectoryEntryLike,
 } from "@/lib/agents/directory-search";
@@ -18,6 +19,7 @@ export type ExpertDirectoryEntry = ExpertDirectoryEntryLike & {
 
 export {
   formatExpertDirectoryForPrompt,
+  scoreExpertDirectory,
   searchExpertDirectory,
   assertNoInstructionsLeak,
 } from "@/lib/agents/directory-search";
