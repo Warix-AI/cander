@@ -1,33 +1,42 @@
 /**
- * Agents V1 unit tests — schedule helpers, approval mode defaults, triggers.
+ * Agents simplified model — schedule helpers + trigger parse.
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildScheduleTrigger,
+  coerceSchedulePreset,
   computeNextRunAt,
   cronFromPreset,
   scheduleIdempotencyKey,
 } from "../lib/agents/schedule.ts";
 import {
-  defaultApprovalModeForTool,
-  isHighImpactTool,
+  errorMessageFromUnknown,
   parseAgentTrigger,
 } from "../lib/agents/types.ts";
 
 describe("schedule presets", () => {
-  it("includes every_few_hours", () => {
-    assert.equal(cronFromPreset("every_few_hours", "09:15"), "15 */3 * * *");
+  it("supports minute-level presets", () => {
+    assert.equal(cronFromPreset("every_1_minute"), "* * * * *");
+    assert.equal(cronFromPreset("every_5_minutes"), "*/5 * * * *");
+    assert.equal(cronFromPreset("every_15_minutes"), "*/15 * * * *");
+    assert.equal(cronFromPreset("every_30_minutes"), "*/30 * * * *");
+    assert.equal(cronFromPreset("hourly", "09:15"), "15 * * * *");
     const trigger = buildScheduleTrigger({
-      preset: "every_few_hours",
-      time: "09:15",
+      preset: "every_15_minutes",
       timezone: "America/Denver",
     });
     assert.equal(trigger.type, "schedule");
-    assert.equal(trigger.preset, "every_few_hours");
+    assert.equal(trigger.preset, "every_15_minutes");
     const next = computeNextRunAt(trigger, new Date("2026-09-11T15:00:00Z"));
     assert.ok(next instanceof Date);
+  });
+
+  it("coerces legacy presets", () => {
+    assert.equal(coerceSchedulePreset("weekday"), "daily");
+    assert.equal(coerceSchedulePreset("every_few_hours"), "hourly");
+    assert.equal(coerceSchedulePreset("every_5_minutes"), "every_5_minutes");
   });
 
   it("builds stable schedule idempotency keys", () => {
@@ -44,39 +53,35 @@ describe("schedule presets", () => {
   });
 });
 
-describe("gmail trigger parse", () => {
-  it("parses gmail_new_message with cursor", () => {
+describe("trigger parse", () => {
+  it("maps legacy gmail trigger to manual", () => {
     const t = parseAgentTrigger({
       type: "gmail_new_message",
       connectionId: "conn_1",
-      filter: { fromContains: "boss@", query: "is:unread" },
-      cursor: { lastCheckedAt: "2026-09-11T00:00:00.000Z" },
+      filter: { fromContains: "boss@" },
     });
-    assert.equal(t.type, "gmail_new_message");
-    if (t.type === "gmail_new_message") {
-      assert.equal(t.connectionId, "conn_1");
-      assert.equal(t.filter.fromContains, "boss@");
-      assert.equal(t.cursor?.lastCheckedAt, "2026-09-11T00:00:00.000Z");
+    assert.equal(t.type, "manual");
+  });
+
+  it("parses schedule triggers", () => {
+    const t = parseAgentTrigger({
+      type: "schedule",
+      cron: "*/5 * * * *",
+      timezone: "UTC",
+      preset: "every_5_minutes",
+    });
+    assert.equal(t.type, "schedule");
+    if (t.type === "schedule") {
+      assert.equal(t.preset, "every_5_minutes");
     }
   });
 });
 
-describe("approval modes", () => {
-  it("marks send/reply high impact", () => {
-    assert.equal(isHighImpactTool("gmail.send"), true);
-    assert.equal(isHighImpactTool("gmail.reply"), true);
-    assert.equal(isHighImpactTool("gmail.search"), false);
-  });
-
-  it("defaults send to require_approval and reads to auto", () => {
-    assert.equal(defaultApprovalModeForTool("gmail.send"), "require_approval");
-    assert.equal(defaultApprovalModeForTool("gmail.search"), "auto");
-  });
-});
-
-describe("gmail idempotency key shape", () => {
-  it("uses gmail:agent:messageId", () => {
-    const key = `gmail:pag_x:msg_123`;
-    assert.match(key, /^gmail:[^:]+:.+/);
+describe("errorMessageFromUnknown", () => {
+  it("reads plain object message fields", () => {
+    assert.equal(
+      errorMessageFromUnknown({ message: "openai timeout" }),
+      "openai timeout",
+    );
   });
 });

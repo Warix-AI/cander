@@ -1,26 +1,22 @@
-/** Project Agent types — Instructions + Connections + Schedule + Activity. */
+/** Project Agent — Instructions + Schedule + Conversation. */
 
 export type AgentStatus = "draft" | "active" | "paused";
-
-export type AgentApprovalMode = "auto" | "draft" | "require_approval";
 
 export type AgentTrigger =
   | { type: "manual" }
   | {
       type: "schedule";
-      /** Friendly preset: hourly | every_few_hours | daily | weekday | weekly | custom */
+      /**
+       * Friendly preset:
+       * every_1_minute | every_5_minutes | every_15_minutes | every_30_minutes |
+       * hourly | daily | custom
+       */
       preset?: string;
       /** Derived cron expression */
       cron: string;
       timezone: string;
-      /** Local time HH:mm when applicable */
+      /** Local time HH:mm when applicable (daily/custom) */
       time?: string;
-    }
-  | {
-      type: "gmail_new_message";
-      connectionId: string;
-      filter: { fromContains?: string; query?: string };
-      cursor?: { lastCheckedAt?: string };
     };
 
 export type ProjectAgent = {
@@ -29,7 +25,7 @@ export type ProjectAgent = {
   projectId: string;
   name: string;
   description: string;
-  /** Human-readable Markdown behavioral definition. */
+  /** Human-readable Markdown: purpose, behavior, rules, what to ask Cander. */
   instructions: string;
   enabled: boolean;
   status: AgentStatus;
@@ -44,89 +40,25 @@ export type ProjectAgent = {
   updatedAt: string;
 };
 
-/** Workspace-scoped reusable skill. */
-export type AgentSkill = {
+/** Runtime conversation turn — Agent speaks as the user to Cander. */
+export type AgentMessageRole = "agent" | "cander" | "system";
+
+export type AgentConversationMessage = {
   id: string;
   workspaceId: string;
-  name: string;
-  description: string;
-  markdown: string;
+  projectId: string;
+  agentId: string;
+  runId: string | null;
+  role: AgentMessageRole;
+  content: string;
   createdAt: string;
-  updatedAt: string;
-};
-
-export type AgentSkillAssignment = {
-  id: string;
-  agentId: string;
-  /** FK to agent_skills.id (also stored as skill_id for uniqueness). */
-  skillId: string;
-  skillLabel: string;
-  skill?: AgentSkill | null;
-};
-
-export type AgentKnowledgeAssignment = {
-  id: string;
-  agentId: string;
-  sourceKind: "knowledge_base" | "file" | "project_resource";
-  sourceId: string;
-  sourceLabel: string;
-};
-
-export type AgentConnectorScope = {
-  id: string;
-  agentId: string;
-  connectionId: string;
-  connectorId: string;
-  enabled: boolean;
-};
-
-export type AgentToolPermission = {
-  id: string;
-  agentId: string;
-  connectionId: string;
-  toolId: string;
-  enabled: boolean;
-  approvalMode: AgentApprovalMode;
-};
-
-/** Dormant Zapier-style routes — kept for future deterministic workflows. */
-export type AgentRouteTrigger = {
-  type?: string;
-  label?: string;
-  config?: Record<string, unknown>;
-};
-
-export type AgentRouteCondition = {
-  type?: string;
-  expression?: string;
-  config?: Record<string, unknown>;
-};
-
-export type AgentRouteAction = {
-  type?: string;
-  label?: string;
-  config?: Record<string, unknown>;
-};
-
-export type AgentRoute = {
-  id: string;
-  agentId: string;
-  name: string;
-  enabled: boolean;
-  sortOrder: number;
-  trigger: AgentRouteTrigger;
-  condition: AgentRouteCondition;
-  actions: AgentRouteAction[];
-  createdAt: string;
-  updatedAt: string;
 };
 
 export type AgentRunStatus =
   | "running"
   | "completed"
   | "failed"
-  | "cancelled"
-  | "approval_needed";
+  | "cancelled";
 
 export type AgentRun = {
   id: string;
@@ -143,39 +75,9 @@ export type AgentRun = {
   triggerPayload: Record<string, unknown>;
 };
 
-export type AgentRunEventType =
-  | "trigger_received"
-  | "work_started"
-  | "tool_called"
-  | "draft_created"
-  | "approval_needed"
-  | "approved"
-  | "rejected"
-  | "revised"
-  | "completed"
-  | "error"
-  | "user_message";
-
-export type AgentRunEvent = {
-  id: string;
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  runId: string;
-  seq: number;
-  eventType: AgentRunEventType | string;
-  payload: Record<string, unknown>;
-  createdAt: string;
-};
-
 export type ProjectAgentBundle = {
   agent: ProjectAgent;
-  skills: AgentSkillAssignment[];
-  knowledge: AgentKnowledgeAssignment[];
-  connectors: AgentConnectorScope[];
-  tools: AgentToolPermission[];
-  /** Dormant — not used by V1 product UI. */
-  routes: AgentRoute[];
+  messages?: AgentConversationMessage[];
   runs?: AgentRun[];
 };
 
@@ -189,41 +91,19 @@ export type AgentConfigPatch = {
   icon?: string | null;
   color?: string | null;
   pinned?: boolean;
-  addSkills?: Array<{ skillId: string; skillLabel?: string }>;
-  removeSkillIds?: string[];
-  /** Create a new workspace skill and attach it. */
+  /** @deprecated Mapped to instructions for builder-chat compatibility */
   createSkill?: {
     name: string;
     description?: string;
     markdown: string;
   };
+  /** @deprecated Mapped to instructions for builder-chat compatibility */
   updateSkill?: {
     skillId: string;
     name?: string;
     description?: string;
     markdown?: string;
   };
-  addKnowledge?: Array<{
-    sourceKind: AgentKnowledgeAssignment["sourceKind"];
-    sourceId: string;
-    sourceLabel?: string;
-  }>;
-  removeKnowledgeIds?: string[];
-  setConnectorEnabled?: Array<{
-    connectionId: string;
-    connectorId: string;
-    enabled: boolean;
-  }>;
-  setToolPermissions?: Array<{
-    connectionId: string;
-    toolId: string;
-    enabled: boolean;
-    approvalMode?: AgentApprovalMode;
-  }>;
-  /** @deprecated V1 product — routes dormant */
-  upsertRoutes?: Array<Partial<AgentRoute> & { id?: string }>;
-  /** @deprecated V1 product — routes dormant */
-  deleteRouteIds?: string[];
 };
 
 export type AgentConfigProposal = {
@@ -235,19 +115,17 @@ export type AgentConfigProposal = {
 
 export const BUDDY_STARTER_INSTRUCTIONS = `# Buddy
 
-You watch Gmail for messages that need a reply.
+You are an automated extension of the user. On each wake-up, talk to Cander AI and ask it to do the work — you never call Gmail or other apps yourself.
 
 ## Goals
-- Look for new messages matching the configured filter (e.g. from a specific person).
-- Decide whether they need a response.
-- Draft a concise, friendly reply.
-- Do **not** promise deadlines or make commitments the user did not authorize.
-- **Never send** email unless the user has approved the draft (or send is set to automatic).
+- Check whether **matt@warix.co** emailed within the last 24 hours (ask Cander to look).
+- If there is a new message that needs a reply, ask Cander what it says, then ask Cander to draft a professional reply.
+- Only ask Cander to send after you are satisfied with the draft, and only when sending is appropriate under the user’s usual approval rules.
+- Do not invent deadlines or commitments the user did not authorize.
 
 ## Style
-- Short paragraphs.
-- Warm but professional.
-- Ask clarifying questions only when necessary.
+- Short, clear requests to Cander.
+- Warm but professional tone in any draft you request.
 `;
 
 export function parseAgentTrigger(raw: unknown): AgentTrigger {
@@ -265,34 +143,9 @@ export function parseAgentTrigger(raw: unknown): AgentTrigger {
       ...(typeof t.time === "string" ? { time: t.time } : {}),
     };
   }
-  if (t.type === "gmail_new_message" && typeof t.connectionId === "string") {
-    const filter =
-      t.filter && typeof t.filter === "object"
-        ? (t.filter as Record<string, unknown>)
-        : {};
-    const cursor =
-      t.cursor && typeof t.cursor === "object"
-        ? (t.cursor as Record<string, unknown>)
-        : undefined;
-    return {
-      type: "gmail_new_message",
-      connectionId: t.connectionId,
-      filter: {
-        ...(typeof filter.fromContains === "string"
-          ? { fromContains: filter.fromContains }
-          : {}),
-        ...(typeof filter.query === "string" ? { query: filter.query } : {}),
-      },
-      ...(cursor
-        ? {
-            cursor: {
-              ...(typeof cursor.lastCheckedAt === "string"
-                ? { lastCheckedAt: cursor.lastCheckedAt }
-                : {}),
-            },
-          }
-        : {}),
-    };
+  // Legacy gmail_new_message → manual (runtime no longer polls).
+  if (t.type === "gmail_new_message") {
+    return { type: "manual" };
   }
   return { type: "manual" };
 }
@@ -307,27 +160,48 @@ export function agentStatusFromRow(
   return enabled ? "active" : "paused";
 }
 
-export function parseApprovalMode(raw: unknown): AgentApprovalMode {
-  if (raw === "auto" || raw === "draft" || raw === "require_approval") {
-    return raw;
+export function errorMessageFromUnknown(err: unknown): string {
+  if (err instanceof Error && err.message.trim()) return err.message;
+  if (typeof err === "string" && err.trim()) return err;
+  if (err && typeof err === "object") {
+    const row = err as Record<string, unknown>;
+    if (typeof row.message === "string" && row.message.trim()) {
+      return row.message;
+    }
+    try {
+      return JSON.stringify(err).slice(0, 500);
+    } catch {
+      /* ignore */
+    }
   }
-  return "require_approval";
+  return "Agent run failed.";
 }
 
-/** Tools that must never auto-run without explicit promotion. */
-export function isHighImpactTool(toolId: string): boolean {
-  const id = toolId.toLowerCase();
-  return (
-    /\.(send|reply|delete|archive|create|update|write|refund|charge|pay|purchase|transfer)/.test(
-      id,
-    ) ||
-    id.includes("gmail.send") ||
-    id.includes("gmail.reply")
-  );
-}
-
-export function defaultApprovalModeForTool(toolId: string): AgentApprovalMode {
-  if (isHighImpactTool(toolId)) return "require_approval";
-  if (/\.(search|list|read|get|fetch)/i.test(toolId)) return "auto";
-  return "draft";
-}
+/** @deprecated Dormant workflow canvas types — not used by V1 product UI. */
+export type AgentRouteTrigger = {
+  type?: string;
+  label?: string;
+  config?: Record<string, unknown>;
+};
+export type AgentRouteCondition = {
+  type?: string;
+  expression?: string;
+  config?: Record<string, unknown>;
+};
+export type AgentRouteAction = {
+  type?: string;
+  label?: string;
+  config?: Record<string, unknown>;
+};
+export type AgentRoute = {
+  id: string;
+  agentId: string;
+  name: string;
+  enabled: boolean;
+  sortOrder: number;
+  trigger: AgentRouteTrigger;
+  condition: AgentRouteCondition;
+  actions: AgentRouteAction[];
+  createdAt: string;
+  updatedAt: string;
+};

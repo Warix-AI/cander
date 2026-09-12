@@ -1,13 +1,9 @@
 /**
  * POST /api/cron/agent-schedules
- * Vercel cron tick — claim due scheduled agents + poll Gmail triggers.
+ * Claim due scheduled agents and wake them (Agent ↔ Cander).
  */
 
 import { NextResponse } from "next/server";
-import {
-  listActiveGmailTriggerAgents,
-  pollGmailTriggerAgent,
-} from "@/lib/agents/gmail-poll";
 import {
   claimDueScheduledAgents,
   clearScheduleClaim,
@@ -21,7 +17,6 @@ export const maxDuration = 300;
 function authorizeCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET?.trim();
   if (!secret) {
-    // Dev fallback: allow when unset only in non-production
     return process.env.NODE_ENV !== "production";
   }
   const auth = request.headers.get("authorization") || "";
@@ -41,7 +36,6 @@ export async function POST(request: Request) {
     ok: boolean;
     runId?: string;
     error?: string;
-    kind: "schedule" | "gmail";
   }> = [];
 
   for (const row of claimed) {
@@ -56,67 +50,23 @@ export async function POST(request: Request) {
       });
       results.push({
         agentId: row.agentId,
-        ok:
-          result.run.status === "completed" ||
-          result.run.status === "approval_needed",
+        ok: result.run.status === "completed",
         runId: result.run.id,
         error: result.run.error ?? undefined,
-        kind: "schedule",
       });
     } catch (err) {
       results.push({
         agentId: row.agentId,
         ok: false,
         error: err instanceof Error ? err.message : "failed",
-        kind: "schedule",
       });
     } finally {
       await clearScheduleClaim(row.agentId, row.workspaceId);
     }
   }
 
-  const gmailAgents = await listActiveGmailTriggerAgents(6);
-  const gmailResults: Array<{
-    agentId: string;
-    checked: number;
-    createdRuns: string[];
-  }> = [];
-
-  for (const row of gmailAgents) {
-    try {
-      const polled = await pollGmailTriggerAgent({
-        agentId: row.agent.id,
-        workspaceId: row.agent.workspaceId,
-        projectId: row.agent.projectId,
-        profileId: row.createdBy,
-      });
-      gmailResults.push({
-        agentId: row.agent.id,
-        checked: polled.checked,
-        createdRuns: polled.createdRuns,
-      });
-      for (const runId of polled.createdRuns) {
-        results.push({
-          agentId: row.agent.id,
-          ok: true,
-          runId,
-          kind: "gmail",
-        });
-      }
-    } catch (err) {
-      results.push({
-        agentId: row.agent.id,
-        ok: false,
-        error: err instanceof Error ? err.message : "gmail poll failed",
-        kind: "gmail",
-      });
-    }
-  }
-
   return NextResponse.json({
     claimed: claimed.length,
-    gmailPolled: gmailAgents.length,
-    gmailResults,
     results,
   });
 }

@@ -13,15 +13,8 @@ import {
 
 export const runtime = "nodejs";
 
-function patchNeedsConfirmation(patch: AgentConfigPatch): boolean {
-  return Boolean(
-    patch.setToolPermissions?.length ||
-      patch.setConnectorEnabled?.length ||
-      patch.addKnowledge?.length ||
-      patch.removeKnowledgeIds?.length ||
-      patch.deleteRouteIds?.length ||
-      patch.upsertRoutes?.length,
-  );
+function patchNeedsConfirmation(_patch: AgentConfigPatch): boolean {
+  return false;
 }
 
 export async function PATCH(

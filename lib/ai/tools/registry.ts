@@ -923,13 +923,21 @@ function registerAgentTools() {
     {
       name: "agent.trigger.set",
       description:
-        "Set the agent trigger to manual or a schedule. Use preset hourly|daily|weekday|weekly with time HH:mm and timezone.",
+        "Set the agent trigger to manual or a schedule. Presets: every_1_minute|every_5_minutes|every_15_minutes|every_30_minutes|hourly|daily|custom.",
       properties: {
         agentId: { type: "string" },
         type: { type: "string", enum: ["manual", "schedule"] },
         preset: {
           type: "string",
-          enum: ["hourly", "daily", "weekday", "weekly", "custom"],
+          enum: [
+            "every_1_minute",
+            "every_5_minutes",
+            "every_15_minutes",
+            "every_30_minutes",
+            "hourly",
+            "daily",
+            "custom",
+          ],
         },
         time: { type: "string" },
         timezone: { type: "string" },
@@ -939,13 +947,13 @@ function registerAgentTools() {
     {
       name: "agent.validate",
       description:
-        "Validate the agent has skills and sensible access before activating.",
+        "Validate the agent has instructions before activating.",
       properties: { agentId: { type: "string" } },
     },
     {
       name: "agent.run",
       description:
-        "Manually start an Agent run now (skills + scoped tools). Prefer after configuring skill/access.",
+        "Wake the agent now so it talks to Cander using the user’s connectors.",
       properties: {
         agentId: { type: "string" },
         message: { type: "string" },

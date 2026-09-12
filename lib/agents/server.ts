@@ -1,25 +1,20 @@
 /**
  * Server helpers for project agents (admin client + membership).
  * Server-only — do not import from client components.
+ *
+ * Model: Agent = Instructions + Schedule + Conversation.
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { computeNextRunAt } from "@/lib/agents/schedule";
 import type {
-  AgentApprovalMode,
   AgentConfigPatch,
   AgentConfigProposal,
-  AgentConnectorScope,
-  AgentKnowledgeAssignment,
-  AgentRoute,
+  AgentConversationMessage,
+  AgentMessageRole,
   AgentRun,
-  AgentRunEvent,
-  AgentRunEventType,
   AgentRunStatus,
-  AgentSkill,
-  AgentSkillAssignment,
   AgentStatus,
-  AgentToolPermission,
   AgentTrigger,
   ProjectAgent,
   ProjectAgentBundle,
@@ -27,9 +22,7 @@ import type {
 import {
   agentStatusFromRow,
   BUDDY_STARTER_INSTRUCTIONS,
-  defaultApprovalModeForTool,
   parseAgentTrigger,
-  parseApprovalMode,
 } from "@/lib/agents/types";
 import {
   assertProjectAccess,
@@ -41,16 +34,12 @@ export function newProjectAgentId() {
   return `pag_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-export function newAgentChildId(prefix: string) {
-  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-}
-
-export function newAgentSkillId() {
-  return `askill_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
 export function newAgentRunId() {
   return `arun_${crypto.randomUUID().replace(/-/g, "")}`;
+}
+
+export function newAgentMessageId() {
+  return `amsg_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
 export async function assertWorkspaceMember(
@@ -76,7 +65,6 @@ export async function assertProjectInWorkspace(
   return { ok: true, kind: (data?.kind as string | null) ?? null };
 }
 
-/** Prefer this over assertProjectInWorkspace for mutating routes. */
 export async function assertProjectAccessForUser(
   projectId: string,
   workspaceId: string,
@@ -113,44 +101,28 @@ function mapAgent(row: Record<string, unknown>): ProjectAgent {
   };
 }
 
-function mapSkillRow(row: Record<string, unknown>): AgentSkill {
-  return {
-    id: String(row.id),
-    workspaceId: String(row.workspace_id),
-    name: String(row.name ?? ""),
-    description: String(row.description ?? ""),
-    markdown: String(row.markdown ?? ""),
-    createdAt: String(row.created_at ?? ""),
-    updatedAt: String(row.updated_at ?? ""),
-  };
-}
-
-function mapSkillAssignment(
-  row: Record<string, unknown>,
-  skill?: AgentSkill | null,
-): AgentSkillAssignment {
-  const skillId = String(row.skill_ref_id ?? row.skill_id ?? "");
-  return {
-    id: String(row.id),
-    agentId: String(row.agent_id),
-    skillId,
-    skillLabel: String(row.skill_label ?? skill?.name ?? ""),
-    skill: skill ?? null,
-  };
-}
-
 function mapRun(row: Record<string, unknown>): AgentRun {
   const payload =
     row.trigger_payload && typeof row.trigger_payload === "object"
       ? (row.trigger_payload as Record<string, unknown>)
       : {};
+  const status = String(row.status ?? "running");
+  const normalized: AgentRunStatus =
+    status === "approval_needed"
+      ? "cancelled"
+      : status === "completed" ||
+          status === "failed" ||
+          status === "cancelled" ||
+          status === "running"
+        ? status
+        : "failed";
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     projectId: String(row.project_id),
     agentId: String(row.agent_id),
     triggerType: String(row.trigger_type ?? "manual"),
-    status: row.status as AgentRun["status"],
+    status: normalized,
     startedAt: String(row.started_at ?? ""),
     completedAt: row.completed_at ? String(row.completed_at) : null,
     summary: row.summary != null ? String(row.summary) : null,
@@ -161,73 +133,16 @@ function mapRun(row: Record<string, unknown>): AgentRun {
   };
 }
 
-function mapRunEvent(row: Record<string, unknown>): AgentRunEvent {
+function mapMessage(row: Record<string, unknown>): AgentConversationMessage {
   return {
     id: String(row.id),
     workspaceId: String(row.workspace_id),
     projectId: String(row.project_id),
     agentId: String(row.agent_id),
-    runId: String(row.run_id),
-    seq: Number(row.seq ?? 0),
-    eventType: String(row.event_type ?? ""),
-    payload:
-      row.payload && typeof row.payload === "object"
-        ? (row.payload as Record<string, unknown>)
-        : {},
+    runId: row.run_id != null ? String(row.run_id) : null,
+    role: String(row.role ?? "system") as AgentMessageRole,
+    content: String(row.content ?? ""),
     createdAt: String(row.created_at ?? ""),
-  };
-}
-
-function mapKnowledge(row: Record<string, unknown>): AgentKnowledgeAssignment {
-  return {
-    id: String(row.id),
-    agentId: String(row.agent_id),
-    sourceKind: row.source_kind as AgentKnowledgeAssignment["sourceKind"],
-    sourceId: String(row.source_id),
-    sourceLabel: String(row.source_label ?? ""),
-  };
-}
-
-function mapConnector(row: Record<string, unknown>): AgentConnectorScope {
-  return {
-    id: String(row.id),
-    agentId: String(row.agent_id),
-    connectionId: String(row.connection_id),
-    connectorId: String(row.connector_id),
-    enabled: Boolean(row.enabled),
-  };
-}
-
-function mapTool(row: Record<string, unknown>): AgentToolPermission {
-  return {
-    id: String(row.id),
-    agentId: String(row.agent_id),
-    connectionId: String(row.connection_id),
-    toolId: String(row.tool_id),
-    enabled: Boolean(row.enabled),
-    approvalMode: parseApprovalMode(row.approval_mode),
-  };
-}
-
-function mapRoute(row: Record<string, unknown>): AgentRoute {
-  const actions = Array.isArray(row.actions) ? row.actions : [];
-  return {
-    id: String(row.id),
-    agentId: String(row.agent_id),
-    name: String(row.name ?? "Route"),
-    enabled: Boolean(row.enabled),
-    sortOrder: Number(row.sort_order ?? 0),
-    trigger:
-      row.trigger && typeof row.trigger === "object"
-        ? (row.trigger as AgentRoute["trigger"])
-        : {},
-    condition:
-      row.condition && typeof row.condition === "object"
-        ? (row.condition as AgentRoute["condition"])
-        : {},
-    actions: actions as AgentRoute["actions"],
-    createdAt: String(row.created_at ?? ""),
-    updatedAt: String(row.updated_at ?? ""),
   };
 }
 
@@ -296,7 +211,9 @@ export async function createProjectAgent(opts: {
       workspace_id: opts.workspaceId,
       project_id: opts.projectId,
       name: opts.name.trim() || "Buddy",
-      description: opts.description ?? "Gmail assistant that drafts replies for your approval.",
+      description:
+        opts.description ??
+        "Automated extension of you that talks to Cander on a schedule.",
       instructions,
       enabled: opts.enabled ?? true,
       status: opts.enabled === false ? "paused" : "draft",
@@ -307,16 +224,7 @@ export async function createProjectAgent(opts: {
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message || "Could not create agent.");
-  const agent = mapAgent(data as Record<string, unknown>);
-  await createAndAttachSkill({
-    workspaceId: opts.workspaceId,
-    projectId: opts.projectId,
-    agentId: agent.id,
-    userId: opts.userId,
-    name: "Instructions",
-    markdown: instructions,
-  });
-  return agent;
+  return mapAgent(data as Record<string, unknown>);
 }
 
 export async function getProjectAgent(
@@ -379,9 +287,6 @@ export async function updateProjectAgent(
     ) {
       const next = computeNextRunAt(patch.trigger);
       row.next_run_at = next ? next.toISOString() : null;
-    } else if (patch.trigger.type === "gmail_new_message") {
-      // Polled each cron tick while active — no next_run_at required.
-      row.next_run_at = null;
     }
   }
   if (patch.nextRunAt !== undefined) row.next_run_at = patch.nextRunAt;
@@ -438,44 +343,66 @@ export async function duplicateProjectAgent(opts: {
     name: `${bundle.agent.name} copy`,
     description: bundle.agent.description,
     instructions: bundle.agent.instructions,
-    enabled: bundle.agent.enabled,
+    enabled: false,
   });
-  await applyAgentConfigPatch({
-    agentId: copy.id,
-    workspaceId: opts.workspaceId,
-    projectId: opts.projectId,
-    patch: {
-      addSkills: bundle.skills.map((s) => ({
-        skillId: s.skillId,
-        skillLabel: s.skillLabel,
-      })),
-      addKnowledge: bundle.knowledge.map((k) => ({
-        sourceKind: k.sourceKind,
-        sourceId: k.sourceId,
-        sourceLabel: k.sourceLabel,
-      })),
-      setConnectorEnabled: bundle.connectors.map((c) => ({
-        connectionId: c.connectionId,
-        connectorId: c.connectorId,
-        enabled: c.enabled,
-      })),
-      setToolPermissions: bundle.tools.map((t) => ({
-        connectionId: t.connectionId,
-        toolId: t.toolId,
-        enabled: t.enabled,
-      })),
-      upsertRoutes: bundle.routes.map((r) => ({
-        name: r.name,
-        enabled: r.enabled,
-        trigger: r.trigger,
-        condition: r.condition,
-        actions: r.actions,
-      })),
-    },
+  await updateProjectAgent(copy.id, opts.workspaceId, opts.projectId, {
+    trigger: bundle.agent.trigger,
+    status: "draft",
   });
   const next = await loadAgentBundle(copy.id, opts.workspaceId, opts.projectId);
   if (!next) throw new Error("Could not load duplicated agent.");
   return next;
+}
+
+export async function listAgentMessages(opts: {
+  agentId: string;
+  workspaceId: string;
+  limit?: number;
+}): Promise<AgentConversationMessage[]> {
+  const admin = createSupabaseAdminClient();
+  const limit = Math.min(500, Math.max(1, opts.limit ?? 200));
+  const { data, error } = await admin
+    .from("agent_messages")
+    .select("*")
+    .eq("agent_id", opts.agentId)
+    .eq("workspace_id", opts.workspaceId)
+    .order("created_at", { ascending: true })
+    .limit(limit);
+  if (error) {
+    // Migration may not be applied yet in some envs.
+    if (/does not exist|42P01/i.test(error.message)) return [];
+    throw new Error(error.message);
+  }
+  return (data ?? []).map((row) => mapMessage(row as Record<string, unknown>));
+}
+
+export async function appendAgentMessage(opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  role: AgentMessageRole;
+  content: string;
+  runId?: string | null;
+}): Promise<AgentConversationMessage> {
+  const admin = createSupabaseAdminClient();
+  const id = newAgentMessageId();
+  const { data, error } = await admin
+    .from("agent_messages")
+    .insert({
+      id,
+      workspace_id: opts.workspaceId,
+      project_id: opts.projectId,
+      agent_id: opts.agentId,
+      run_id: opts.runId ?? null,
+      role: opts.role,
+      content: opts.content,
+    })
+    .select("*")
+    .single();
+  if (error || !data) {
+    throw new Error(error?.message || "Could not append agent message.");
+  }
+  return mapMessage(data as Record<string, unknown>);
 }
 
 export async function loadAgentBundle(
@@ -485,174 +412,11 @@ export async function loadAgentBundle(
 ): Promise<ProjectAgentBundle | null> {
   const agent = await getProjectAgent(agentId, workspaceId, projectId);
   if (!agent) return null;
-  const admin = createSupabaseAdminClient();
-  const [skillsRes, knowledge, connectors, tools, routes, runsRes] =
-    await Promise.all([
-      admin
-        .from("agent_skill_assignments")
-        .select("*")
-        .eq("agent_id", agentId)
-        .eq("workspace_id", workspaceId),
-      admin
-        .from("agent_knowledge_assignments")
-        .select("*")
-        .eq("agent_id", agentId)
-        .eq("workspace_id", workspaceId),
-      admin
-        .from("agent_connector_scopes")
-        .select("*")
-        .eq("agent_id", agentId)
-        .eq("workspace_id", workspaceId),
-      admin
-        .from("agent_tool_permissions")
-        .select("*")
-        .eq("agent_id", agentId)
-        .eq("workspace_id", workspaceId),
-      admin
-        .from("agent_routes")
-        .select("*")
-        .eq("agent_id", agentId)
-        .eq("workspace_id", workspaceId)
-        .order("sort_order", { ascending: true }),
-      admin
-        .from("agent_runs")
-        .select("*")
-        .eq("agent_id", agentId)
-        .eq("workspace_id", workspaceId)
-        .order("started_at", { ascending: false })
-        .limit(20),
-    ]);
-
-  const assignmentRows = (skillsRes.data ?? []) as Record<string, unknown>[];
-  const skillIds = [
-    ...new Set(
-      assignmentRows
-        .map((r) => String(r.skill_ref_id ?? r.skill_id ?? ""))
-        .filter(Boolean),
-    ),
-  ];
-  const skillMap = new Map<string, AgentSkill>();
-  if (skillIds.length) {
-    const { data: skillRows } = await admin
-      .from("agent_skills")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .in("id", skillIds);
-    for (const s of skillRows ?? []) {
-      const mapped = mapSkillRow(s as Record<string, unknown>);
-      skillMap.set(mapped.id, mapped);
-    }
-  }
-
-  return {
-    agent,
-    skills: assignmentRows.map((r) => {
-      const sid = String(r.skill_ref_id ?? r.skill_id ?? "");
-      return mapSkillAssignment(r, skillMap.get(sid) ?? null);
-    }),
-    knowledge: (knowledge.data ?? []).map((r) =>
-      mapKnowledge(r as Record<string, unknown>),
-    ),
-    connectors: (connectors.data ?? []).map((r) =>
-      mapConnector(r as Record<string, unknown>),
-    ),
-    tools: (tools.data ?? []).map((r) => mapTool(r as Record<string, unknown>)),
-    routes: (routes.data ?? []).map((r) => mapRoute(r as Record<string, unknown>)),
-    runs: (runsRes.data ?? []).map((r) => mapRun(r as Record<string, unknown>)),
-  };
-}
-
-export async function listWorkspaceSkills(
-  workspaceId: string,
-): Promise<AgentSkill[]> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("agent_skills")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("updated_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((r) => mapSkillRow(r as Record<string, unknown>));
-}
-
-export async function createAndAttachSkill(opts: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  userId?: string;
-  name: string;
-  description?: string;
-  markdown: string;
-}): Promise<{ skill: AgentSkill; assignment: AgentSkillAssignment }> {
-  const admin = createSupabaseAdminClient();
-  const skillId = newAgentSkillId();
-  const { data, error } = await admin
-    .from("agent_skills")
-    .insert({
-      id: skillId,
-      workspace_id: opts.workspaceId,
-      name: opts.name.trim() || "Skill",
-      description: opts.description ?? "",
-      markdown: opts.markdown,
-      created_by: opts.userId ?? null,
-    })
-    .select("*")
-    .single();
-  if (error || !data) throw new Error(error?.message || "Could not create skill.");
-  const skill = mapSkillRow(data as Record<string, unknown>);
-  const assignId = newAgentChildId("ask");
-  await admin.from("agent_skill_assignments").upsert(
-    {
-      id: assignId,
-      workspace_id: opts.workspaceId,
-      project_id: opts.projectId,
-      agent_id: opts.agentId,
-      skill_id: skill.id,
-      skill_label: skill.name,
-      skill_ref_id: skill.id,
-    },
-    { onConflict: "agent_id,skill_id" },
-  );
-  return {
-    skill,
-    assignment: {
-      id: assignId,
-      agentId: opts.agentId,
-      skillId: skill.id,
-      skillLabel: skill.name,
-      skill,
-    },
-  };
-}
-
-export async function updateWorkspaceSkill(opts: {
-  workspaceId: string;
-  skillId: string;
-  patch: Partial<{ name: string; description: string; markdown: string }>;
-}): Promise<AgentSkill> {
-  const admin = createSupabaseAdminClient();
-  const row: Record<string, unknown> = {};
-  if (opts.patch.name !== undefined) row.name = opts.patch.name.trim() || "Skill";
-  if (opts.patch.description !== undefined) {
-    row.description = opts.patch.description;
-  }
-  if (opts.patch.markdown !== undefined) row.markdown = opts.patch.markdown;
-  const { data, error } = await admin
-    .from("agent_skills")
-    .update(row)
-    .eq("id", opts.skillId)
-    .eq("workspace_id", opts.workspaceId)
-    .select("*")
-    .single();
-  if (error || !data) throw new Error(error?.message || "Could not update skill.");
-  if (opts.patch.name !== undefined) {
-    await admin
-      .from("agent_skill_assignments")
-      .update({ skill_label: opts.patch.name.trim() || "Skill" })
-      .eq("skill_ref_id", opts.skillId)
-      .eq("workspace_id", opts.workspaceId);
-  }
-  return mapSkillRow(data as Record<string, unknown>);
+  const [messages, runs] = await Promise.all([
+    listAgentMessages({ agentId, workspaceId, limit: 200 }),
+    listAgentRuns({ agentId, workspaceId, limit: 20 }),
+  ]);
+  return { agent, messages, runs };
 }
 
 export async function createAgentRun(opts: {
@@ -702,10 +466,7 @@ export async function completeAgentRun(opts: {
   error?: string;
 }): Promise<AgentRun> {
   const admin = createSupabaseAdminClient();
-  const terminal =
-    opts.status === "running" || opts.status === "approval_needed"
-      ? null
-      : new Date().toISOString();
+  const terminal = opts.status === "running" ? null : new Date().toISOString();
   const { data, error } = await admin
     .from("agent_runs")
     .update({
@@ -722,92 +483,6 @@ export async function completeAgentRun(opts: {
   return mapRun(data as Record<string, unknown>);
 }
 
-export function newAgentRunEventId() {
-  return `arev_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
-}
-
-export async function appendAgentRunEvent(opts: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  runId: string;
-  eventType: AgentRunEventType | string;
-  payload?: Record<string, unknown>;
-  seq?: number;
-}): Promise<AgentRunEvent> {
-  const admin = createSupabaseAdminClient();
-  let seq = opts.seq;
-  if (seq == null) {
-    const { count } = await admin
-      .from("agent_run_events")
-      .select("id", { count: "exact", head: true })
-      .eq("run_id", opts.runId);
-    seq = (count ?? 0) + 1;
-  }
-  const id = newAgentRunEventId();
-  const { data, error } = await admin
-    .from("agent_run_events")
-    .insert({
-      id,
-      workspace_id: opts.workspaceId,
-      project_id: opts.projectId,
-      agent_id: opts.agentId,
-      run_id: opts.runId,
-      seq,
-      event_type: opts.eventType,
-      payload: opts.payload ?? {},
-    })
-    .select("*")
-    .single();
-  if (error || !data) {
-    throw new Error(error?.message || "Could not append event.");
-  }
-  return mapRunEvent(data as Record<string, unknown>);
-}
-
-export async function listAgentRunEvents(opts: {
-  runId: string;
-  workspaceId: string;
-}): Promise<AgentRunEvent[]> {
-  const admin = createSupabaseAdminClient();
-  const { data, error } = await admin
-    .from("agent_run_events")
-    .select("*")
-    .eq("run_id", opts.runId)
-    .eq("workspace_id", opts.workspaceId)
-    .order("seq", { ascending: true })
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(error.message);
-  return (data ?? []).map((row) => mapRunEvent(row as Record<string, unknown>));
-}
-
-export async function listAgentActivity(opts: {
-  agentId: string;
-  workspaceId: string;
-  limit?: number;
-}): Promise<{ runs: AgentRun[]; events: AgentRunEvent[] }> {
-  const runs = await listAgentRuns({
-    agentId: opts.agentId,
-    workspaceId: opts.workspaceId,
-    limit: opts.limit ?? 40,
-  });
-  const admin = createSupabaseAdminClient();
-  const runIds = runs.map((r) => r.id);
-  if (!runIds.length) return { runs, events: [] };
-  const { data, error } = await admin
-    .from("agent_run_events")
-    .select("*")
-    .eq("agent_id", opts.agentId)
-    .eq("workspace_id", opts.workspaceId)
-    .in("run_id", runIds)
-    .order("created_at", { ascending: true });
-  if (error) throw new Error(error.message);
-  return {
-    runs,
-    events: (data ?? []).map((row) => mapRunEvent(row as Record<string, unknown>)),
-  };
-}
-
 export async function getAgentRun(
   runId: string,
   workspaceId: string,
@@ -818,23 +493,6 @@ export async function getAgentRun(
     .select("*")
     .eq("id", runId)
     .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  return data ? mapRun(data as Record<string, unknown>) : null;
-}
-
-export async function getLatestSuccessfulRun(
-  agentId: string,
-  workspaceId: string,
-): Promise<AgentRun | null> {
-  const admin = createSupabaseAdminClient();
-  const { data } = await admin
-    .from("agent_runs")
-    .select("*")
-    .eq("agent_id", agentId)
-    .eq("workspace_id", workspaceId)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false })
-    .limit(1)
     .maybeSingle();
   return data ? mapRun(data as Record<string, unknown>) : null;
 }
@@ -856,7 +514,6 @@ export async function listAgentRuns(opts: {
   return (data ?? []).map((r) => mapRun(r as Record<string, unknown>));
 }
 
-/** Count agent runs for a project since `sinceIso` (inclusive). */
 export async function countProjectAgentRunsSince(opts: {
   workspaceId: string;
   projectId: string;
@@ -880,12 +537,19 @@ export async function applyAgentConfigPatch(opts: {
   patch: AgentConfigPatch;
 }): Promise<ProjectAgentBundle> {
   const { agentId, workspaceId, projectId, patch } = opts;
-  const admin = createSupabaseAdminClient();
+
+  let instructions = patch.instructions;
+  if (instructions === undefined && patch.createSkill?.markdown) {
+    instructions = patch.createSkill.markdown;
+  }
+  if (instructions === undefined && patch.updateSkill?.markdown) {
+    instructions = patch.updateSkill.markdown;
+  }
 
   if (
     patch.name !== undefined ||
     patch.description !== undefined ||
-    patch.instructions !== undefined ||
+    instructions !== undefined ||
     patch.enabled !== undefined ||
     patch.status !== undefined ||
     patch.trigger !== undefined ||
@@ -896,7 +560,7 @@ export async function applyAgentConfigPatch(opts: {
     await updateProjectAgent(agentId, workspaceId, projectId, {
       name: patch.name,
       description: patch.description,
-      instructions: patch.instructions,
+      instructions,
       enabled: patch.enabled,
       status: patch.status,
       trigger: patch.trigger,
@@ -906,259 +570,89 @@ export async function applyAgentConfigPatch(opts: {
     });
   }
 
-  // Keep primary "Instructions" skill in sync with instructions markdown.
-  if (patch.instructions !== undefined) {
-    const bundle = await loadAgentBundle(agentId, workspaceId, projectId);
-    const primary =
-      bundle?.skills.find((s) => s.skillLabel === "Instructions") ??
-      bundle?.skills[0];
-    if (primary?.skillId) {
-      await updateWorkspaceSkill({
-        workspaceId,
-        skillId: primary.skillId,
-        patch: { markdown: patch.instructions },
-      });
-    } else {
-      await createAndAttachSkill({
-        workspaceId,
-        projectId,
-        agentId,
-        name: "Instructions",
-        markdown: patch.instructions,
-      });
-    }
-  }
-
-  if (patch.createSkill) {
-    await createAndAttachSkill({
-      workspaceId,
-      projectId,
-      agentId,
-      name: patch.createSkill.name,
-      description: patch.createSkill.description,
-      markdown: patch.createSkill.markdown,
-    });
-  }
-
-  if (patch.updateSkill) {
-    await updateWorkspaceSkill({
-      workspaceId,
-      skillId: patch.updateSkill.skillId,
-      patch: {
-        name: patch.updateSkill.name,
-        description: patch.updateSkill.description,
-        markdown: patch.updateSkill.markdown,
-      },
-    });
-  }
-
-  if (patch.addSkills?.length) {
-    await admin.from("agent_skill_assignments").upsert(
-      patch.addSkills.map((s) => ({
-        id: newAgentChildId("ask"),
-        workspace_id: workspaceId,
-        project_id: projectId,
-        agent_id: agentId,
-        skill_id: s.skillId,
-        skill_label: s.skillLabel ?? s.skillId,
-        skill_ref_id: s.skillId,
-      })),
-      { onConflict: "agent_id,skill_id", ignoreDuplicates: false },
-    );
-  }
-  if (patch.removeSkillIds?.length) {
-    await admin
-      .from("agent_skill_assignments")
-      .delete()
-      .eq("agent_id", agentId)
-      .in("skill_id", patch.removeSkillIds);
-  }
-
-  if (patch.addKnowledge?.length) {
-    for (const k of patch.addKnowledge) {
-      await admin.from("agent_knowledge_assignments").upsert(
-        {
-          id: newAgentChildId("akn"),
-          workspace_id: workspaceId,
-          project_id: projectId,
-          agent_id: agentId,
-          source_kind: k.sourceKind,
-          source_id: k.sourceId,
-          source_label: k.sourceLabel ?? k.sourceId,
-        },
-        { onConflict: "agent_id,source_kind,source_id" },
-      );
-    }
-  }
-  if (patch.removeKnowledgeIds?.length) {
-    await admin
-      .from("agent_knowledge_assignments")
-      .delete()
-      .eq("agent_id", agentId)
-      .in("id", patch.removeKnowledgeIds);
-  }
-
-  if (patch.setConnectorEnabled?.length) {
-    for (const c of patch.setConnectorEnabled) {
-      await admin.from("agent_connector_scopes").upsert(
-        {
-          id: newAgentChildId("acs"),
-          workspace_id: workspaceId,
-          project_id: projectId,
-          agent_id: agentId,
-          connection_id: c.connectionId,
-          connector_id: c.connectorId,
-          enabled: c.enabled,
-        },
-        { onConflict: "agent_id,connection_id" },
-      );
-    }
-  }
-
-  if (patch.setToolPermissions?.length) {
-    for (const t of patch.setToolPermissions) {
-      const mode =
-        t.approvalMode ?? defaultApprovalModeForTool(t.toolId);
-      await admin.from("agent_tool_permissions").upsert(
-        {
-          id: newAgentChildId("atp"),
-          workspace_id: workspaceId,
-          project_id: projectId,
-          agent_id: agentId,
-          connection_id: t.connectionId,
-          tool_id: t.toolId,
-          enabled: t.enabled,
-          approval_mode: mode,
-        },
-        { onConflict: "agent_id,connection_id,tool_id" },
-      );
-    }
-  }
-
-  if (patch.deleteRouteIds?.length) {
-    await admin
-      .from("agent_routes")
-      .delete()
-      .eq("agent_id", agentId)
-      .in("id", patch.deleteRouteIds);
-  }
-
-  if (patch.upsertRoutes?.length) {
-    const existing = await loadAgentBundle(agentId, workspaceId, projectId);
-    let order = existing?.routes.length ?? 0;
-    for (const r of patch.upsertRoutes) {
-      if (r.id) {
-        await admin
-          .from("agent_routes")
-          .update({
-            name: r.name ?? "Route",
-            enabled: r.enabled ?? true,
-            trigger: r.trigger ?? {},
-            condition: r.condition ?? {},
-            actions: r.actions ?? [],
-            ...(r.sortOrder !== undefined ? { sort_order: r.sortOrder } : {}),
-          })
-          .eq("id", r.id)
-          .eq("agent_id", agentId);
-      } else {
-        await admin.from("agent_routes").insert({
-          id: newAgentChildId("art"),
-          workspace_id: workspaceId,
-          project_id: projectId,
-          agent_id: agentId,
-          name: r.name ?? "Route",
-          enabled: r.enabled ?? true,
-          sort_order: r.sortOrder ?? order++,
-          trigger: r.trigger ?? {},
-          condition: r.condition ?? {},
-          actions: r.actions ?? [],
-        });
-      }
-    }
-  }
-
   const bundle = await loadAgentBundle(agentId, workspaceId, projectId);
   if (!bundle) throw new Error("Agent not found after patch.");
   return bundle;
 }
 
-/** Heuristic NL → structured patch for v1 (no live model required). */
 export function proposeAgentConfigFromMessage(
-  message: string,
+  text: string,
   current: ProjectAgentBundle,
 ): AgentConfigProposal {
-  const text = message.trim();
-  const lower = text.toLowerCase();
   const patch: AgentConfigPatch = {};
-  const confirmationReasons: string[] = [];
-
-  const nameMatch = text.match(
-    /(?:rename|call(?:ed)?|name)\s+(?:(?:it|this|the agent)\s+)?["“]?([^"”\n.]+)["”]?/i,
-  );
-  if (nameMatch?.[1]) {
-    patch.name = nameMatch[1].trim();
-  }
-
-  const descMatch = text.match(
-    /(?:description|describe)\s*[:=]\s*["“]?([^"”\n]+)["”]?/i,
-  );
-  if (descMatch?.[1]) {
-    patch.description = descMatch[1].trim();
-  }
+  const reasons: string[] = [];
+  const lower = text.toLowerCase();
 
   if (
     /instructions?\s*[:=]/i.test(text) ||
-    /(?:set|update|change)\s+instructions/i.test(text)
+    /(?:set|update|change|rewrite)\s+instructions/i.test(text) ||
+    /more professional/i.test(lower)
   ) {
     const after = text.split(/instructions?\s*[:=]/i)[1]?.trim();
     if (after) {
-      patch.createSkill = {
-        name: "Primary skill",
-        markdown: `# Skill\n\n${after}`,
-      };
+      patch.instructions = after.slice(0, 8000);
+      reasons.push("Update instructions");
+    } else if (/more professional/i.test(lower)) {
+      patch.instructions = `${current.agent.instructions.trim()}\n\n## Tone\nUse a more professional, polished voice in every request to Cander.`;
+      reasons.push("Make instructions more professional");
     }
-  } else if (/you (?:are|should)|always |never /i.test(text) && text.length > 40) {
-    patch.createSkill = {
-      name: "Primary skill",
-      markdown: `# Skill\n\n${text}`,
-    };
   }
 
-  if (/\benable\b/.test(lower) && /\bagent\b/.test(lower)) {
-    patch.enabled = true;
-  }
-  if (/\bdisable\b/.test(lower) && /\bagent\b/.test(lower)) {
-    patch.enabled = false;
-  }
-
-  if (/\badd skill\b|\bcreate skill\b/i.test(lower) && text.length > 20) {
-    patch.createSkill = {
-      name: "Generated skill",
-      markdown: `# Skill\n\n${text}`,
-    };
+  if (/only respond to\s+([^\n.]+)/i.test(text)) {
+    const who = text.match(/only respond to\s+([^\n.]+)/i)?.[1]?.trim();
+    if (who) {
+      patch.instructions = `${current.agent.instructions.trim()}\n\n## Filter\nOnly consider messages from **${who}**.`;
+      reasons.push(`Only respond to ${who}`);
+    }
   }
 
-  const skillRemove = text.match(/remove skill\s+["“]?([^"”\n.]+)["”]?/i);
-  if (skillRemove?.[1]) {
-    const label = skillRemove[1].trim().toLowerCase();
-    const match = current.skills.find(
-      (s) =>
-        s.skillLabel.toLowerCase() === label ||
-        s.skillId.toLowerCase() === label,
-    );
-    if (match) patch.removeSkillIds = [match.skillId];
-  }
-
-  if (/\bevery weekday\b|\bweekdays?\b.*\b(am|pm|morning)\b/i.test(lower)) {
+  if (/\bevery\s+minute\b/i.test(lower) || /\bevery\s+1\s*min/i.test(lower)) {
     patch.trigger = {
       type: "schedule",
-      preset: "weekday",
-      cron: "0 9 * * 1-5",
+      preset: "every_1_minute",
+      cron: "* * * * *",
       timezone: "America/Denver",
-      time: "09:00",
     };
     patch.status = "active";
-  } else if (/\bevery day\b|\bdaily\b/i.test(lower)) {
+    reasons.push("Schedule every minute");
+  } else if (/\bevery\s+5\s*min/i.test(lower)) {
+    patch.trigger = {
+      type: "schedule",
+      preset: "every_5_minutes",
+      cron: "*/5 * * * *",
+      timezone: "America/Denver",
+    };
+    patch.status = "active";
+    reasons.push("Schedule every 5 minutes");
+  } else if (/\bevery\s+15\s*min/i.test(lower)) {
+    patch.trigger = {
+      type: "schedule",
+      preset: "every_15_minutes",
+      cron: "*/15 * * * *",
+      timezone: "America/Denver",
+    };
+    patch.status = "active";
+    reasons.push("Schedule every 15 minutes");
+  } else if (/\bevery\s+30\s*min/i.test(lower)) {
+    patch.trigger = {
+      type: "schedule",
+      preset: "every_30_minutes",
+      cron: "*/30 * * * *",
+      timezone: "America/Denver",
+    };
+    patch.status = "active";
+    reasons.push("Schedule every 30 minutes");
+  } else if (/\bevery\s+hour|hourly\b/i.test(lower)) {
+    patch.trigger = {
+      type: "schedule",
+      preset: "hourly",
+      cron: "0 * * * *",
+      timezone: "America/Denver",
+      time: "00:00",
+    };
+    patch.status = "active";
+    reasons.push("Schedule hourly");
+  } else if (/\bdaily\b|every\s+day\b/i.test(lower)) {
     patch.trigger = {
       type: "schedule",
       preset: "daily",
@@ -1167,47 +661,58 @@ export function proposeAgentConfigFromMessage(
       time: "09:00",
     };
     patch.status = "active";
-  } else if (/\bmanual(ly)?\b.*\brun\b|\brun manually\b/i.test(lower)) {
+    reasons.push("Schedule daily");
+  } else if (/\bmanual\b|only when i run\b/i.test(lower)) {
     patch.trigger = { type: "manual" };
+    reasons.push("Manual only");
   }
 
-  if (/\ballow all tools?\b|\benable all tools?\b/i.test(text)) {
-    confirmationReasons.push("Enabling all tools requires confirmation.");
-    patch.setToolPermissions = current.tools.map((t) => ({
-      connectionId: t.connectionId,
-      toolId: t.toolId,
-      enabled: true,
-    }));
+  if (/\bpause\b/i.test(lower)) {
+    patch.status = "paused";
+    reasons.push("Pause agent");
+  } else if (/\bactivate\b|\bresume\b|\bunpause\b/i.test(lower)) {
+    patch.status = "active";
+    reasons.push("Activate agent");
   }
-  if (/\bdisable all tools?\b|\bread only\b/i.test(text)) {
-    confirmationReasons.push("Changing tool permissions requires confirmation.");
-    patch.setToolPermissions = current.tools.map((t) => ({
-      connectionId: t.connectionId,
-      toolId: t.toolId,
-      enabled: false,
-    }));
-  }
-
-  const keys = Object.keys(patch);
-  if (!keys.length) {
-    return {
-      summary:
-        "I could not map that to a config change. Try describing the skill, schedule, or tool access you want.",
-      patch: {},
-      requiresConfirmation: false,
-      confirmationReasons: [],
-    };
-  }
-
-  const identityOnly =
-    keys.every((k) =>
-      ["name", "description", "enabled", "status"].includes(k),
-    ) && !confirmationReasons.length;
 
   return {
-    summary: `Proposed updates: ${keys.join(", ")}.`,
+    summary: reasons.length
+      ? reasons.join(" · ")
+      : "No configuration change detected.",
     patch,
-    requiresConfirmation: !identityOnly,
-    confirmationReasons,
+    requiresConfirmation: false,
+    confirmationReasons: [],
   };
+}
+
+/** @deprecated Kept for older imports; runtime no longer writes run events. */
+export async function appendAgentRunEvent(_opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  runId: string;
+  eventType: string;
+  payload?: Record<string, unknown>;
+}): Promise<void> {
+  /* no-op — conversation uses agent_messages */
+}
+
+export async function listAgentActivity(opts: {
+  agentId: string;
+  workspaceId: string;
+  limit?: number;
+}): Promise<{ runs: AgentRun[]; messages: AgentConversationMessage[] }> {
+  const [runs, messages] = await Promise.all([
+    listAgentRuns({
+      agentId: opts.agentId,
+      workspaceId: opts.workspaceId,
+      limit: opts.limit ?? 40,
+    }),
+    listAgentMessages({
+      agentId: opts.agentId,
+      workspaceId: opts.workspaceId,
+      limit: 200,
+    }),
+  ]);
+  return { runs, messages };
 }

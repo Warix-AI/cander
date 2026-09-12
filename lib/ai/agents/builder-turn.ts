@@ -24,28 +24,27 @@ const MAX_ROUNDS = 8;
 
 const AGENT_BUILDER_INSTRUCTIONS = `You are helping the user configure a Cander Agent.
 
-Architecture (do not invent workflow nodes):
-- Skills (markdown) define behavior — what the agent should do
-- Tools define capability — what connectors/MCP tools it may call
-- Triggers decide when the AI wakes up (manual or schedule)
+An Agent is simply: Instructions (Markdown) + Schedule + a runtime conversation with Cander.
+There are NO agent-specific connections or tool grants. Cander already has the user's connectors.
 
-The right panel shows live Agent configuration. Mutate it ONLY through agent.* tools.
+The right panel shows Instructions and Schedule. Mutate them ONLY through agent.* tools.
 Never claim you changed the agent unless a tool succeeded.
-Never build Zapier-style steps, branches, waits, or action graphs.
 
 How to work:
-1. agent.get when you need current skills/access/trigger.
-2. Prefer agent.skill.create / agent.skill.update for the job description.
-3. Propose Access with agent.tools.grant — never silently grant send/delete without stating it.
-4. Set schedule with agent.trigger.set (weekday/daily/hourly + time + timezone) or manual.
-5. agent.validate before calling the setup complete. agent.run only when the user asks to run now.
+1. agent.get when you need current name/instructions/schedule/status.
+2. Update the job via agent.skill.create or agent.skill.update (these write Instructions markdown).
+3. Set schedule with agent.trigger.set — presets:
+   every_1_minute | every_5_minutes | every_15_minutes | every_30_minutes | hourly | daily | custom
+   or type=manual.
+4. agent.update_metadata for name/description/status (draft|active|paused).
+5. agent.run only when the user asks to run now.
 
-Example user ask:
-"Every morning look through new leads and email ones nobody responded to"
-→ create skill markdown describing that goal
-→ propose CRM read + Gmail search/read/send tools (ask before granting send)
-→ trigger weekday 9:00 AM
-→ activate status`;
+Examples:
+- "Only respond to Matt" → rewrite instructions to include that filter.
+- "Change this to run every hour" → agent.trigger.set schedule hourly.
+- "Rewrite the instructions to be more professional" → agent.skill.update with polished markdown.
+
+Never grant Gmail/tools on the agent itself. Never invent connector permission UIs.`;
 
 function agentToolNames(): string[] {
   return [...TOOL_DOMAINS.agent];
@@ -189,7 +188,7 @@ export async function runAgentBuilderTurn(
             AGENT_BUILDER_INSTRUCTIONS,
             formatToolResultsNote(toolResults),
             "CRITICAL: Call a mutation tool now. Example:",
-            '{"tool":"agent.skill.create","arguments":{"name":"Lead Follow-up","markdown":"# Lead Follow-up\\n\\nWhen this skill runs:\\n1. ..."}}',
+            '{"tool":"agent.skill.create","arguments":{"name":"Buddy","markdown":"# Buddy\\n\\nWhen you wake, ask Cander to…"}}',
           ].join("\n\n"),
           content: [
             request.content,

@@ -5,11 +5,12 @@
 import type { AgentTrigger } from "@/lib/agents/types";
 
 export type SchedulePreset =
+  | "every_1_minute"
+  | "every_5_minutes"
+  | "every_15_minutes"
+  | "every_30_minutes"
   | "hourly"
-  | "every_few_hours"
   | "daily"
-  | "weekday"
-  | "weekly"
   | "custom";
 
 export function cronFromPreset(
@@ -20,17 +21,18 @@ export function cronFromPreset(
   const hour = Math.min(23, Math.max(0, Number(hRaw) || 9));
   const minute = Math.min(59, Math.max(0, Number(mRaw) || 0));
   switch (preset) {
+    case "every_1_minute":
+      return `* * * * *`;
+    case "every_5_minutes":
+      return `*/5 * * * *`;
+    case "every_15_minutes":
+      return `*/15 * * * *`;
+    case "every_30_minutes":
+      return `*/30 * * * *`;
     case "hourly":
       return `${minute} * * * *`;
-    case "every_few_hours":
-      // Every 3 hours at :minute
-      return `${minute} */3 * * *`;
     case "daily":
       return `${minute} ${hour} * * *`;
-    case "weekday":
-      return `${minute} ${hour} * * 1-5`;
-    case "weekly":
-      return `${minute} ${hour} * * 1`;
     case "custom":
     default:
       return `${minute} ${hour} * * *`;
@@ -73,7 +75,7 @@ export function computeNextRunAt(
     candidate.setMinutes(candidate.getMinutes() + 1);
     const minute = candidate.getMinutes();
     const hour = candidate.getHours();
-    const dow = candidate.getDay(); // 0=Sun
+    const dow = candidate.getDay();
 
     if (!matchCronField(minPart!, minute)) continue;
     if (!matchCronField(hourPart!, hour)) continue;
@@ -101,16 +103,16 @@ function matchCronField(field: string, value: number): boolean {
 
 function matchDow(field: string, dow: number): boolean {
   if (field === "*") return true;
-  // Cron often uses 0/7 = Sunday
   return matchCronField(field, dow) || (dow === 0 && matchCronField(field, 7));
 }
 
 export const SCHEDULE_PRESET_LABELS: Record<SchedulePreset, string> = {
+  every_1_minute: "Every minute",
+  every_5_minutes: "Every 5 minutes",
+  every_15_minutes: "Every 15 minutes",
+  every_30_minutes: "Every 30 minutes",
   hourly: "Every hour",
-  every_few_hours: "Every few hours",
   daily: "Daily",
-  weekday: "Weekdays",
-  weekly: "Weekly",
   custom: "Custom",
 };
 
@@ -118,4 +120,22 @@ export const SCHEDULE_PRESET_LABELS: Record<SchedulePreset, string> = {
 export function scheduleIdempotencyKey(agentId: string, dueAt: string): string {
   const slot = dueAt.replace(/[^0-9T]/g, "").slice(0, 15);
   return `schedule:${agentId}:${slot || "unknown"}`;
+}
+
+/** Normalize legacy presets onto the simplified set. */
+export function coerceSchedulePreset(raw: unknown): SchedulePreset {
+  if (
+    raw === "every_1_minute" ||
+    raw === "every_5_minutes" ||
+    raw === "every_15_minutes" ||
+    raw === "every_30_minutes" ||
+    raw === "hourly" ||
+    raw === "daily" ||
+    raw === "custom"
+  ) {
+    return raw;
+  }
+  if (raw === "every_few_hours") return "hourly";
+  if (raw === "weekday" || raw === "weekly") return "daily";
+  return "hourly";
 }

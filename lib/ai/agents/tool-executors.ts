@@ -1,5 +1,5 @@
 /**
- * Agent builder tool executors — mutate Skills / Access / Trigger via shared patches.
+ * Agent builder tool executors — mutate Instructions + Schedule via shared patches.
  */
 
 import type { AiToolCallResult } from "@/lib/ai/runtime/tools";
@@ -20,14 +20,14 @@ import {
   validateAgentDefinition,
 } from "@/lib/agents/definition";
 import {
-  mutationAttachKnowledge,
-  mutationGrantTools,
-  mutationRemoveKnowledge,
-  mutationRemoveSkill,
-  mutationRevokeTools,
+  mutationSetInstructions,
   mutationUpdateMetadata,
 } from "@/lib/agents/mutations";
-import { buildScheduleTrigger } from "@/lib/agents/schedule";
+import {
+  buildScheduleTrigger,
+  coerceSchedulePreset,
+  type SchedulePreset,
+} from "@/lib/agents/schedule";
 import type { AgentStatus, AgentTrigger } from "@/lib/agents/types";
 
 async function resolveContext(args: Record<string, unknown>) {
@@ -49,7 +49,11 @@ async function resolveContext(args: Record<string, unknown>) {
   }
 
   if (!agentId) {
-    const agents = await listProjectAgentsClient({ workspaceId, projectId });
+    const agents = await listProjectAgentsClient({
+      workspaceId,
+      projectId,
+      force: true,
+    });
     agentId = agents[0]?.id ?? "";
   }
   if (!agentId) {
@@ -59,23 +63,11 @@ async function resolveContext(args: Record<string, unknown>) {
   return { workspaceId, projectId, agentId } as const;
 }
 
-function toolIdsFromArgs(args: Record<string, unknown>): string[] {
-  if (Array.isArray(args.toolIds)) {
-    return args.toolIds.map(String).filter(Boolean);
-  }
-  if (typeof args.toolId === "string" && args.toolId.trim()) {
-    return [args.toolId.trim()];
-  }
-  return [];
-}
-
-export async function executeAgentTool(opts: {
+export async function executeAgentBuilderTool(input: {
   name: string;
-  args: Record<string, unknown>;
-}): Promise<AiToolCallResult | null> {
-  const { name, args } = opts;
-  if (!name.startsWith("agent.")) return null;
-
+  arguments: Record<string, unknown>;
+}): Promise<AiToolCallResult> {
+  const { name, arguments: args } = input;
   const ctx = await resolveContext(args);
   if ("error" in ctx) {
     return { name, ok: false, output: String(ctx.error) };
@@ -95,7 +87,7 @@ export async function executeAgentTool(opts: {
         name,
         ok: true,
         output: formatAgentDefinitionSummary(def),
-        data: { agentId: def.id, skillCount: def.skills.length },
+        data: { agentId: def.id },
       };
     }
 
@@ -149,181 +141,70 @@ export async function executeAgentTool(opts: {
       };
     }
 
-    if (name === "agent.skill.create") {
+    if (name === "agent.skill.create" || name === "agent.skill.update") {
       const markdown = String(args.markdown ?? "").trim();
       if (!markdown) {
-        return { name, ok: false, output: "markdown is required for a skill." };
+        return {
+          name,
+          ok: false,
+          output: "markdown is required for instructions.",
+        };
       }
+      const mutation = mutationSetInstructions({
+        markdown,
+        name: args.name != null ? String(args.name) : undefined,
+      });
       const bundle = await applyAgentConfigPatchClient({
         workspaceId,
         projectId,
         agentId,
-        patch: {
-          createSkill: {
-            name: String(args.name ?? "Skill").trim() || "Skill",
-            description:
-              args.description != null ? String(args.description) : "",
-            markdown,
-          },
-          status: "active",
-        },
+        patch: mutation.patch,
         confirmed: true,
       });
       return {
         name,
         ok: true,
-        output: `Created skill and attached to ${bundle.agent.name}`,
-        data: { skills: bundle.skills.length },
+        output: `Updated instructions for ${bundle.agent.name}`,
+        data: { instructionsLength: bundle.agent.instructions.length },
       };
     }
 
-    if (name === "agent.skill.update") {
-      const skillId = String(args.skillId ?? "").trim();
-      if (!skillId) {
-        return { name, ok: false, output: "skillId is required." };
-      }
-      await applyAgentConfigPatchClient({
-        workspaceId,
-        projectId,
-        agentId,
-        patch: {
-          updateSkill: {
-            skillId,
-            name: args.name != null ? String(args.name) : undefined,
-            description:
-              args.description != null ? String(args.description) : undefined,
-            markdown:
-              args.markdown != null ? String(args.markdown) : undefined,
-          },
-        },
-        confirmed: true,
-      });
-      return { name, ok: true, output: "Updated skill", data: { skillId } };
-    }
-
-    if (name === "agent.skill.attach") {
-      const skillId = String(args.skillId ?? "").trim();
-      if (!skillId) {
-        return { name, ok: false, output: "skillId is required." };
-      }
-      await applyAgentConfigPatchClient({
-        workspaceId,
-        projectId,
-        agentId,
-        patch: {
-          addSkills: [
-            {
-              skillId,
-              skillLabel:
-                typeof args.skillLabel === "string"
-                  ? args.skillLabel
-                  : skillId,
-            },
-          ],
-        },
-        confirmed: true,
-      });
-      return { name, ok: true, output: "Attached skill", data: { skillId } };
-    }
-
-    if (name === "agent.skill.remove") {
-      const skillId = String(args.skillId ?? "").trim();
-      if (!skillId) {
-        return { name, ok: false, output: "skillId is required." };
-      }
-      const mutation = mutationRemoveSkill({ skillId });
-      await applyAgentConfigPatchClient({
-        workspaceId,
-        projectId,
-        agentId,
-        patch: mutation.patch,
-        confirmed: true,
-      });
-      return { name, ok: true, output: mutation.summary };
+    if (
+      name === "agent.skill.attach" ||
+      name === "agent.skill.remove" ||
+      name === "agent.knowledge.attach" ||
+      name === "agent.knowledge.remove"
+    ) {
+      return {
+        name,
+        ok: true,
+        output:
+          "Skipped — agents no longer use separate skills/knowledge grants. Put everything in Instructions.",
+      };
     }
 
     if (name === "agent.tools.grant" || name === "agent.tools.revoke") {
-      const connectionId = String(args.connectionId ?? "").trim();
-      const connectorId = String(args.connectorId ?? "").trim();
-      const toolIds = toolIdsFromArgs(args);
-      if (!connectionId || !connectorId || !toolIds.length) {
-        return {
-          name,
-          ok: false,
-          output: "connectionId, connectorId, and toolIds are required.",
-        };
-      }
-      const mutation =
-        name === "agent.tools.grant"
-          ? mutationGrantTools({ connectionId, connectorId, toolIds })
-          : mutationRevokeTools({ connectionId, connectorId, toolIds });
-      await applyAgentConfigPatchClient({
-        workspaceId,
-        projectId,
-        agentId,
-        patch: mutation.patch,
-        confirmed: true,
-      });
-      return { name, ok: true, output: mutation.summary };
-    }
-
-    if (name === "agent.knowledge.attach") {
-      const sourceId = String(args.sourceId ?? "").trim();
-      if (!sourceId) {
-        return { name, ok: false, output: "sourceId is required." };
-      }
-      const mutation = mutationAttachKnowledge({
-        sourceId,
-        sourceLabel:
-          typeof args.sourceLabel === "string" ? args.sourceLabel : sourceId,
-        sourceKind:
-          args.sourceKind === "file" || args.sourceKind === "project_resource"
-            ? args.sourceKind
-            : "knowledge_base",
-      });
-      await applyAgentConfigPatchClient({
-        workspaceId,
-        projectId,
-        agentId,
-        patch: mutation.patch,
-        confirmed: true,
-      });
-      return { name, ok: true, output: mutation.summary };
-    }
-
-    if (name === "agent.knowledge.remove") {
-      const knowledgeId = String(args.knowledgeId ?? "").trim();
-      if (!knowledgeId) {
-        return { name, ok: false, output: "knowledgeId is required." };
-      }
-      const mutation = mutationRemoveKnowledge({ knowledgeId });
-      await applyAgentConfigPatchClient({
-        workspaceId,
-        projectId,
-        agentId,
-        patch: mutation.patch,
-        confirmed: true,
-      });
-      return { name, ok: true, output: mutation.summary };
+      return {
+        name,
+        ok: true,
+        output:
+          "Skipped — agents do not own connector tools. Cander already has the user’s connectors; describe desired behavior in Instructions.",
+      };
     }
 
     if (name === "agent.trigger.set") {
       const type = String(args.type ?? "manual");
       let trigger: AgentTrigger;
       if (type === "schedule") {
+        const preset = coerceSchedulePreset(args.preset);
         trigger = buildScheduleTrigger({
-          preset:
-            (String(args.preset || "weekday") as
-              | "hourly"
-              | "daily"
-              | "weekday"
-              | "weekly"
-              | "custom") || "weekday",
+          preset: preset as SchedulePreset,
           time: typeof args.time === "string" ? args.time : "09:00",
           timezone:
             typeof args.timezone === "string" && args.timezone.trim()
               ? args.timezone
-              : "America/Denver",
+              : Intl.DateTimeFormat().resolvedOptions().timeZone ||
+                "America/Denver",
           cron: typeof args.cron === "string" ? args.cron : undefined,
         });
       } else {
@@ -341,7 +222,7 @@ export async function executeAgentTool(opts: {
         ok: true,
         output:
           trigger.type === "schedule"
-            ? `Scheduled · ${trigger.cron} (${trigger.timezone})`
+            ? `Scheduled · ${trigger.preset ?? "custom"} · ${trigger.cron} (${trigger.timezone})`
             : "Trigger set to manual",
         data: { trigger: bundle.agent.trigger },
       };
@@ -379,4 +260,15 @@ export async function executeAgentTool(opts: {
       output: err instanceof Error ? err.message : "Agent tool failed.",
     };
   }
+}
+
+export async function executeAgentTool(input: {
+  name: string;
+  args?: Record<string, unknown>;
+  arguments?: Record<string, unknown>;
+}): Promise<AiToolCallResult | null> {
+  return executeAgentBuilderTool({
+    name: input.name,
+    arguments: input.arguments ?? input.args ?? {},
+  });
 }

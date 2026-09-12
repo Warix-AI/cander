@@ -17,6 +17,8 @@ import {
 import type {
   AgentConfigPatch,
   AgentConfigProposal,
+  AgentConversationMessage,
+  AgentRun,
   ProjectAgent,
   ProjectAgentBundle,
 } from "@/lib/agents/types";
@@ -297,7 +299,7 @@ export async function runAgentClient(opts: {
   agentId: string;
   message?: string;
 }): Promise<{
-  run: import("@/lib/agents/types").AgentRun;
+  run: AgentRun;
   content: string;
   toolCount: number;
 }> {
@@ -316,13 +318,14 @@ export async function runAgentClient(opts: {
   return parseJson(res);
 }
 
-export async function fetchAgentActivityClient(opts: {
+export async function fetchAgentConversationClient(opts: {
   workspaceId: string;
   projectId: string;
   agentId: string;
 }): Promise<{
-  runs: import("@/lib/agents/types").AgentRun[];
-  events: import("@/lib/agents/types").AgentRunEvent[];
+  agent: ProjectAgent;
+  messages: AgentConversationMessage[];
+  runs: AgentRun[];
 }> {
   const headers = await authHeaders();
   const params = new URLSearchParams({ workspaceId: opts.workspaceId });
@@ -330,106 +333,20 @@ export async function fetchAgentActivityClient(opts: {
     `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/activity?${params}`,
     { headers },
   );
-  return parseJson(res);
-}
-
-export async function postAgentActivityMessageClient(opts: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  message: string;
-}): Promise<{
-  handled: boolean;
-  action?: string;
-  runs: import("@/lib/agents/types").AgentRun[];
-  events: import("@/lib/agents/types").AgentRunEvent[];
-  error?: string;
-}> {
-  const headers = await authHeaders();
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/activity`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({
-        workspaceId: opts.workspaceId,
-        message: opts.message,
-      }),
-    },
-  );
-  return parseJson(res);
-}
-
-export async function approveAgentRunClient(opts: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  runId: string;
-  draft?: string;
-}): Promise<{
-  run: import("@/lib/agents/types").AgentRun;
-  sent: boolean;
-}> {
-  const headers = await authHeaders();
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/runs/${encodeURIComponent(opts.runId)}/approve`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({
-        workspaceId: opts.workspaceId,
-        draft: opts.draft,
-      }),
-    },
-  );
-  return parseJson(res);
-}
-
-export async function rejectAgentRunClient(opts: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  runId: string;
-  reason?: string;
-}): Promise<{ run: import("@/lib/agents/types").AgentRun }> {
-  const headers = await authHeaders();
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/runs/${encodeURIComponent(opts.runId)}/reject`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({
-        workspaceId: opts.workspaceId,
-        reason: opts.reason,
-      }),
-    },
-  );
-  return parseJson(res);
-}
-
-export async function reviseAgentRunClient(opts: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  runId: string;
-  draft: string;
-  note?: string;
-}): Promise<{
-  run: import("@/lib/agents/types").AgentRun;
-  draft: string;
-}> {
-  const headers = await authHeaders();
-  const res = await fetch(
-    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/runs/${encodeURIComponent(opts.runId)}/revise`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
-      body: JSON.stringify({
-        workspaceId: opts.workspaceId,
-        draft: opts.draft,
-        note: opts.note,
-      }),
-    },
-  );
-  return parseJson(res);
+  const data = await parseJson<{
+    runs?: AgentRun[];
+    messages?: AgentConversationMessage[];
+    agent?: ProjectAgent;
+  }>(res);
+  const bundle = await loadAgentBundleClient({
+    workspaceId: opts.workspaceId,
+    projectId: opts.projectId,
+    agentId: opts.agentId,
+    force: true,
+  });
+  return {
+    agent: data.agent ?? bundle.agent,
+    messages: data.messages ?? bundle.messages ?? [],
+    runs: data.runs ?? bundle.runs ?? [],
+  };
 }
