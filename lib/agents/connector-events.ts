@@ -8,9 +8,11 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { listExpertDirectory } from "@/lib/agents/directory";
 import { routeEventToExpert } from "@/lib/agents/routing";
 import type { SyncMessageHeader } from "@/lib/connectors/sdk/types";
+import { ensureMailBodyCached } from "@/lib/connectors/sdk/operations";
 import {
   formatMailSituation,
   gmailEventIdempotencyKey,
+  type MailSituationHeader,
 } from "@/lib/agents/connector-event-format";
 
 export {
@@ -119,6 +121,34 @@ export async function dispatchNewMailToExperts(
     ];
   }
 
+  // Prefer full body so the Expert can decide from real content, not a subject.
+  let bodyText: string | null = null;
+  try {
+    const admin = createSupabaseAdminClient();
+    const cached = await ensureMailBodyCached({
+      client: admin,
+      workspaceId: opts.workspaceId,
+      profileId: opts.profileId,
+      connectorId: opts.connectorId,
+      connectionId: opts.connectionId,
+      providerMessageId: opts.message.providerMessageId,
+    });
+    if (cached.ok) bodyText = cached.bodyText;
+  } catch {
+    /* snippet fallback below */
+  }
+
+  const message: MailSituationHeader = {
+    providerMessageId: opts.message.providerMessageId,
+    fromAddr: opts.message.fromAddr ?? null,
+    toAddrs: opts.message.toAddrs,
+    subject: opts.message.subject ?? null,
+    snippet: opts.message.snippet ?? null,
+    bodyText: bodyText || opts.message.snippet || null,
+    receivedAt: opts.message.receivedAt ?? null,
+    threadId: opts.message.threadId ?? null,
+  };
+
   const results: DispatchMailEventResult[] = [];
   const idempotencyKey = gmailEventIdempotencyKey(
     opts.connectionId,
@@ -141,9 +171,7 @@ export async function dispatchNewMailToExperts(
       continue;
     }
 
-    // Pre-select name for a natural Cander opening once routing succeeds.
-    // routeEventToExpert selects again (same directory) with idempotency.
-    const baseSituation = formatMailSituation({ message: opts.message });
+    const baseSituation = formatMailSituation({ message });
 
     const routed = await routeEventToExpert({
       workspaceId: opts.workspaceId,
@@ -163,7 +191,7 @@ export async function dispatchNewMailToExperts(
       formatSituationForExpert: (expertName) =>
         formatMailSituation({
           expertName,
-          message: opts.message,
+          message,
         }),
     });
 

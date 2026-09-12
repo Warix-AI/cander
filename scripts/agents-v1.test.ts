@@ -328,32 +328,53 @@ describe("expert directory privacy and search", () => {
 });
 
 describe("connector mail → expert situation", () => {
-  it("formats Cander opening with Expert name and email context", async () => {
+  it("formats Cander opening with Expert name and full email context", async () => {
     const {
       formatMailSituation,
       gmailEventIdempotencyKey,
     } = await import("../lib/agents/connector-event-format.ts");
 
     const situation = formatMailSituation({
-      expertName: "Rescheduling",
+      expertName: "Rescheduling Expert",
       message: {
         providerMessageId: "msg_1",
         fromAddr: "Sarah Jones <sarah@example.com>",
+        toAddrs: ["bookings@example.com"],
         subject: "Move appointment",
-        snippet:
+        snippet: "preview only",
+        bodyText:
           "Hi, I can't make my appointment tomorrow. Can we move it to Friday?",
+        receivedAt: "2026-09-11T18:00:00.000Z",
+        threadId: "thread_1",
       },
     });
-    assert.match(situation, /Hey Rescheduling/);
+    assert.match(situation, /Hey Rescheduling Expert/);
     assert.match(situation, /Sarah Jones/);
+    assert.match(situation, /Subject: Move appointment/);
     assert.match(situation, /move it to Friday/);
     assert.match(situation, /How should we handle this/);
     assert.doesNotMatch(situation, /instructions/i);
+    assert.doesNotMatch(situation, /preview only/);
 
     assert.equal(
       gmailEventIdempotencyKey("conn_1", "msg_1"),
       "event:gmail:conn_1:msg_1",
     );
+  });
+
+  it("falls back to snippet when body is missing", async () => {
+    const { formatMailSituation } = await import(
+      "../lib/agents/connector-event-format.ts"
+    );
+    const situation = formatMailSituation({
+      message: {
+        providerMessageId: "msg_2",
+        fromAddr: "matt@warix.co",
+        subject: "Reschedule",
+        snippet: "Could we do Friday instead?",
+      },
+    });
+    assert.match(situation, /Could we do Friday instead/);
   });
 
   it("ranks Rescheduling Expert for appointment-move mail", async () => {
@@ -395,5 +416,19 @@ describe("expert runtime thread scoping", () => {
     assert.notEqual(a, legacy);
     assert.match(a, /expert-a$/);
     assert.match(b, /expert-b$/);
+  });
+});
+
+describe("expert visible message sanitization", () => {
+  it("strips meta-language about instructions and runtime", async () => {
+    const { sanitizeExpertVisibleMessage } = await import(
+      "../lib/agents/expert-voice.ts"
+    );
+    const cleaned = sanitizeExpertVisibleMessage(
+      "Apply my Instructions to this email. Let's ask Matthew for two preferred times. Do not rescan the whole inbox.",
+    );
+    assert.match(cleaned, /ask Matthew/i);
+    assert.doesNotMatch(cleaned, /instructions/i);
+    assert.doesNotMatch(cleaned, /rescan/i);
   });
 });

@@ -156,8 +156,8 @@ export function ChatColumn() {
     Boolean(agentPin.agentId);
   const expertSpeakerLabels = agentOverview
     ? {
-        user: agentPin.expertTitle || "Expert",
-        assistant: "Cander",
+        user: (agentPin.expertTitle || "Expert").toUpperCase(),
+        assistant: "CANDER",
       }
     : null;
   const browserMode = view === "browser";
