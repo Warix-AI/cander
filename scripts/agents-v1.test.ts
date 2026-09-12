@@ -352,6 +352,7 @@ describe("connector mail → expert situation", () => {
     assert.match(situation, /Sarah Jones/);
     assert.match(situation, /Subject: Move appointment/);
     assert.match(situation, /move it to Friday/);
+    assert.match(situation, /Ground your advice/);
     assert.match(situation, /How should we handle this/);
     assert.doesNotMatch(situation, /instructions/i);
     assert.doesNotMatch(situation, /preview only/);
@@ -360,6 +361,44 @@ describe("connector mail → expert situation", () => {
       gmailEventIdempotencyKey("conn_1", "msg_1"),
       "event:gmail:conn_1:msg_1",
     );
+  });
+
+  it("includes prior thread messages when provided", async () => {
+    const { formatMailSituation } = await import(
+      "../lib/agents/connector-event-format.ts"
+    );
+    const situation = formatMailSituation({
+      expertName: "Rescheduling Expert",
+      message: {
+        providerMessageId: "msg_2",
+        fromAddr: "matt@warix.co",
+        subject: "Reschedule Appointment",
+        bodyText: "I need to reschedule my appointment for thrsday next week",
+        receivedAt: "2026-09-12T04:30:00.000Z",
+        threadId: "thr_abc",
+      },
+      threadMessages: [
+        {
+          providerMessageId: "msg_1",
+          fromAddr: "office@example.com",
+          bodyText: "Your appointment is set for Monday at 2pm.",
+          receivedAt: "2026-09-10T15:00:00.000Z",
+          threadId: "thr_abc",
+        },
+        {
+          providerMessageId: "msg_2",
+          fromAddr: "matt@warix.co",
+          bodyText: "I need to reschedule my appointment for thrsday next week",
+          receivedAt: "2026-09-12T04:30:00.000Z",
+          threadId: "thr_abc",
+        },
+      ],
+    });
+    assert.match(situation, /Full email thread/);
+    assert.match(situation, /Monday at 2pm/);
+    assert.match(situation, /thrsday next week/);
+    assert.match(situation, /← latest/);
+    assert.doesNotMatch(situation, /This is part of an existing email thread/);
   });
 
   it("falls back to snippet when body is missing", async () => {

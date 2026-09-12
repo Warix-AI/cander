@@ -12,21 +12,13 @@
 
 import { NextResponse } from "next/server";
 import { runSandboxGc } from "@/lib/build/sandbox/gc";
+import { authorizeCronRequest } from "@/lib/cron-auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-function authorizeCron(request: Request): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return process.env.NODE_ENV !== "production";
-  const auth = request.headers.get("authorization") || "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  const headerSecret = request.headers.get("x-cron-secret")?.trim() || "";
-  return bearer === secret || headerSecret === secret;
-}
-
 async function handle(request: Request) {
-  if (!authorizeCron(request)) {
+  if (!authorizeCronRequest(request)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
   const result = await runSandboxGc();

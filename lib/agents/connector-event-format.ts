@@ -42,16 +42,40 @@ function formatWhen(iso: string | null | undefined): string | null {
   }
 }
 
-function messageBody(message: MailSituationHeader): string {
+function messageBody(message: MailSituationHeader, maxChars = 2500): string {
   const full = message.bodyText?.trim();
   if (full) {
     const capped =
-      full.length > 3500 ? `${full.slice(0, 3497).trimEnd()}…` : full;
+      full.length > maxChars
+        ? `${full.slice(0, maxChars - 1).trimEnd()}…`
+        : full;
     return capped;
   }
   const snippet = message.snippet?.trim();
   if (snippet) return snippet;
   return "(No message body available.)";
+}
+
+function formatThreadBlock(
+  thread: MailSituationHeader[],
+  latestId: string,
+): string {
+  const lines: string[] = [
+    "Full email thread (oldest → newest):",
+  ];
+  for (const msg of thread) {
+    const isLatest = msg.providerMessageId === latestId;
+    const when = formatWhen(msg.receivedAt ?? null);
+    lines.push("---");
+    lines.push(
+      `From: ${formatSender(msg.fromAddr)}${isLatest ? "  ← latest" : ""}`,
+    );
+    if (when) lines.push(`Received: ${when}`);
+    lines.push("Message:");
+    lines.push(messageBody(msg, thread.length > 4 ? 1800 : 2500));
+  }
+  lines.push("---");
+  return lines.join("\n");
 }
 
 /**
@@ -61,6 +85,8 @@ function messageBody(message: MailSituationHeader): string {
 export function formatMailSituation(opts: {
   expertName?: string;
   message: MailSituationHeader;
+  /** Prior + current messages in the thread, oldest → newest when provided. */
+  threadMessages?: MailSituationHeader[];
 }): string {
   const from = formatSender(opts.message.fromAddr);
   const subject = opts.message.subject?.trim();
@@ -68,10 +94,22 @@ export function formatMailSituation(opts: {
   const to =
     opts.message.toAddrs?.map((a) => a.trim()).filter(Boolean).join(", ") ||
     null;
-  const body = messageBody(opts.message);
-  const threadNote = opts.message.threadId?.trim()
-    ? "This is part of an existing email thread."
-    : null;
+
+  const thread = (opts.threadMessages ?? []).filter(
+    (m) => m.providerMessageId?.trim(),
+  );
+  const hasThread = thread.length > 1;
+  const body = hasThread
+    ? formatThreadBlock(thread, opts.message.providerMessageId)
+    : [
+        "Message:",
+        (() => {
+          const text = messageBody(opts.message);
+          return text.includes("\n")
+            ? text
+            : `'${text.replace(/^['"]|['"]$/g, "")}'`;
+        })(),
+      ].join("\n");
 
   const greeting = opts.expertName
     ? `Hey ${opts.expertName}, ${from} just emailed us.`
@@ -83,11 +121,13 @@ export function formatMailSituation(opts: {
     subject ? `Subject: ${subject}` : null,
     to ? `To: ${to}` : null,
     when ? `Received: ${when}` : null,
-    threadNote,
-    subject || to || when || threadNote ? "" : null,
-    "Message:",
-    body.includes("\n") ? body : `'${body.replace(/^['"]|['"]$/g, "")}'`,
+    !hasThread && opts.message.threadId?.trim()
+      ? "This is part of an existing email thread."
+      : null,
+    subject || to || when || opts.message.threadId ? "" : null,
+    body,
     "",
+    "Ground your advice in what they actually wrote (including any day, time, or constraint they named).",
     "How should we handle this?",
   ].filter((line) => line !== null) as string[];
 

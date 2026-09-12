@@ -505,6 +505,13 @@ export async function runAgentServerLoop(
 
       if (!executed.ok && executed.denial) {
         if (executed.denial.reason === "confirmation_required") {
+          const previewArgs = executed.denial.preview?.arguments;
+          const pauseArgs =
+            previewArgs &&
+            typeof previewArgs === "object" &&
+            !Array.isArray(previewArgs)
+              ? (previewArgs as Record<string, unknown>)
+              : args;
           return {
             content: text || executed.denial.message,
             toolResults,
@@ -512,7 +519,7 @@ export async function runAgentServerLoop(
               type: "confirmation_required",
               toolId,
               toolCallId: callId,
-              arguments: args,
+              arguments: pauseArgs,
               connectionId: conn.connectionId,
               preview: executed.denial.preview,
               message: executed.denial.message,

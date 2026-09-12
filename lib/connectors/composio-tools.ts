@@ -109,7 +109,10 @@ export function mapGmailToolArguments(
     };
     const recipient =
       args.to ?? args.recipient_email ?? args.recipientEmail ?? args.recipient;
-    if (recipient) out.recipient_email = String(recipient).trim();
+    if (!recipient || !String(recipient).trim()) {
+      throw new Error("Missing required argument: to (reply recipient)");
+    }
+    out.recipient_email = String(recipient).trim();
     if (args.cc) out.cc = args.cc;
     if (args.bcc) out.bcc = args.bcc;
     if (args.isHtml === true || args.is_html === true) out.is_html = true;

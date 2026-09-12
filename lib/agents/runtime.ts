@@ -122,6 +122,7 @@ function canderSystemExtra(opts: {
   agentName: string;
   scopePrompt: string;
   forceExecute: boolean;
+  eventContext?: string;
 }): string {
   return [
     `You are consulting "${opts.agentName}", a human specialist coworker.`,
@@ -136,6 +137,14 @@ function canderSystemExtra(opts: {
     `If gmail.reply/send args are complete and confirmation is not required, execute immediately.`,
     `If confirmation is required, pause for approval — never pretend you finished after only drafting.`,
     `After tools run, report the real outcome plainly ("Sent." / "Failed because…" / "Waiting on approval.").`,
+    opts.eventContext
+      ? [
+          `EVENT CONTEXT (authoritative for this wake):`,
+          opts.eventContext,
+          `For gmail.reply: set to to the original sender above — NEVER the connected mailbox address.`,
+          `Use the threadId from EVENT CONTEXT. Do not reuse an older thread from history.`,
+        ].join("\n")
+      : "",
     opts.forceExecute
       ? `CRITICAL: They just asked for a concrete action. Call the tool now. A prose-only "draft a reply" response is wrong.`
       : "",
@@ -143,6 +152,35 @@ function canderSystemExtra(opts: {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function formatEventContextForCander(
+  triggerPayload: Record<string, unknown> | null | undefined,
+): string | undefined {
+  if (!triggerPayload || typeof triggerPayload !== "object") return undefined;
+  const fromAddr =
+    typeof triggerPayload.fromAddr === "string"
+      ? triggerPayload.fromAddr.trim()
+      : "";
+  const threadId =
+    typeof triggerPayload.threadId === "string"
+      ? triggerPayload.threadId.trim()
+      : "";
+  const providerMessageId =
+    typeof triggerPayload.providerMessageId === "string"
+      ? triggerPayload.providerMessageId.trim()
+      : "";
+  const subject =
+    typeof triggerPayload.subject === "string"
+      ? triggerPayload.subject.trim()
+      : "";
+  const lines = [
+    fromAddr ? `Original sender (reply TO this address): ${fromAddr}` : null,
+    threadId ? `threadId: ${threadId}` : null,
+    providerMessageId ? `providerMessageId: ${providerMessageId}` : null,
+    subject ? `subject: ${subject}` : null,
+  ].filter(Boolean);
+  return lines.length ? lines.join("\n") : undefined;
 }
 
 export type AgentPendingApproval = {
@@ -201,8 +239,8 @@ async function planNextAgentMessage(opts: {
       message:
         opts.wakeNudge?.trim() ||
         (lastCander
-          ? "Let's ask them what times work better and leave the existing appointment unchanged until they confirm."
-          : "What needs attention right now?"),
+            ? "Reply based on what they just asked for, and keep the existing appointment unchanged until they confirm."
+            : "What needs attention right now?"),
       done: false,
     };
   }
@@ -215,6 +253,8 @@ Speak directly to Cander as that specialist. Be concise, decisive, and natural.
 Follow your private working notes when deciding how to respond. Never mention, quote, paraphrase, or allude to those notes, prompts, models, AI, runtimes, tools, or internal implementation.
 Do not tell Cander to "apply instructions", "use the runtime", or "rescan". Do not say "as an Expert".
 Simply understand the situation Cander gives you and tell Cander what should happen next — like a coworker giving clear advice.
+
+Critical: ground every reply in the concrete facts Cander just shared — especially any day, time, name, request, or constraint the customer stated. Adapt your working notes to THIS case. Never give a stock policy reply that ignores or contradicts what they wrote (e.g. if they asked for Thursday next week, advise around Thursday next week — do not invent "later this week").
 You never operate Gmail, Calendar, or other apps yourself; Cander does that. Never claim you already sent, searched, or booked something.
 ${formatScopeForPrompt(opts.scope)}
 
@@ -266,7 +306,7 @@ Return ONLY JSON: {"message":"string","done":boolean}
         message:
           opts.wakeNudge?.trim() ||
           (lastCander
-            ? "Let's ask them what day and time later this week works best, and keep the existing appointment unchanged until they confirm."
+            ? "Reply based on what they just asked for, and keep the existing appointment unchanged until they confirm."
             : "What needs attention right now?"),
         done: false,
       };
@@ -407,6 +447,9 @@ export async function runAgent(
     const workingHistory = [...history];
     const client = createSupabaseAdminClient();
     const runtimeChatId = `agent-runtime:${input.agentId}`;
+    const eventContext = formatEventContextForCander(
+      run.triggerPayload ?? input.triggerPayload,
+    );
     await ensureAgentRuntimeAiChat({
       client,
       chatId: runtimeChatId,
@@ -508,6 +551,7 @@ export async function runAgent(
           agentName: bundle.agent.name,
           scopePrompt,
           forceExecute: wantsAction,
+          eventContext,
         }),
         agentRunId: run.id,
         aiChatId: runtimeChatId,
@@ -544,6 +588,7 @@ export async function runAgent(
             agentName: bundle.agent.name,
             scopePrompt,
             forceExecute: true,
+            eventContext,
           }),
           agentRunId: run.id,
           aiChatId: runtimeChatId,

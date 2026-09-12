@@ -29,6 +29,7 @@ import {
   mapGmailToolArguments,
   type GmailConnectorToolName,
 } from "./composio-tools.ts";
+import { normalizeGmailReplyArguments } from "./gmail-reply-target.ts";
 
 export type ExecuteConnectorToolInput = {
   client: SupabaseClient;
@@ -121,12 +122,30 @@ export async function executeConnectorTool(
   }
 
   const connection = resolved.connection;
+
+  let toolArguments = { ...input.arguments };
+  if (input.tool === "gmail.reply") {
+    try {
+      toolArguments = await normalizeGmailReplyArguments({
+        connectionId: connection.connectionId,
+        workspaceId: input.workspaceId,
+        profileId: input.profileId,
+        agentRunId: input.agentRunId,
+        args: toolArguments,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Could not resolve Gmail reply target.";
+      return { ok: false, status: 400, error: message };
+    }
+  }
+
   const authz = authorizeToolExecution(input.tool, {
     workspaceId: input.workspaceId,
     profileId: input.profileId,
     connection,
     confirmed: input.confirmed,
-    arguments: input.arguments,
+    arguments: toolArguments,
   });
   if (!authz.ok) {
     const status =
@@ -135,11 +154,24 @@ export async function executeConnectorTool(
         : authz.reason === "not_connected"
           ? 404
           : 403;
+    const denial =
+      authz.reason === "confirmation_required"
+        ? {
+            ...authz,
+            preview: {
+              ...(authz.preview ?? {}),
+              to: toolArguments.to,
+              threadId: toolArguments.threadId ?? toolArguments.thread_id,
+              body: toolArguments.body,
+              arguments: toolArguments,
+            },
+          }
+        : authz;
     return {
       ok: false,
       status,
       error: authz.message,
-      denial: authz,
+      denial,
       result: buildDeniedResult({
         toolId: input.tool,
         toolCallId,
@@ -182,7 +214,7 @@ export async function executeConnectorTool(
 
   let providerArgs: Record<string, unknown>;
   try {
-    providerArgs = adapter.mapArguments(input.tool, input.arguments);
+    providerArgs = adapter.mapArguments(input.tool, toolArguments);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid tool arguments.";
     return { ok: false, status: 400, error: message };
@@ -191,7 +223,7 @@ export async function executeConnectorTool(
   const idempotencyKey = buildIdempotencyKey({
     toolId: input.tool,
     connectionId: connection.connectionId,
-    arguments: input.arguments,
+    arguments: toolArguments,
     turnId: input.turnId,
     toolCallId,
   });
@@ -243,7 +275,7 @@ export async function executeConnectorTool(
         toolCallId,
         idempotencyKey,
         status: result.status,
-        arguments: input.arguments,
+        arguments: toolArguments,
         result,
       });
     }

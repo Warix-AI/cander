@@ -140,11 +140,12 @@ export function evaluateConfirmationRequirement(
   if (tool.id === "gmail.reply") {
     const threadId = String(args.threadId ?? "").trim();
     const body = String(args.body ?? "").trim();
+    const to = String(args.to ?? "").trim();
     if (!threadId || !body) {
       return {
         required: true,
         message: "Confirm thread and reply body before sending.",
-        preview: { toolId: tool.id, threadId, body },
+        preview: { toolId: tool.id, threadId, body, to },
       };
     }
   }
