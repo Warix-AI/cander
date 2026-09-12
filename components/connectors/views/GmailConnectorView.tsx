@@ -7,10 +7,15 @@ import {
   useRef,
   useState,
 } from "react";
-import { Paperclip, RefreshCw, Send } from "lucide-react";
+import { Paperclip, Send } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
+import {
+  WorkspaceEmptyState,
+  WorkspaceField,
+  WorkspacePanelFrame,
+} from "@/components/connectors/views/WorkspaceViewChrome";
 import { MailBody } from "@/components/connectors/views/MailBody";
 import { MailHtmlFrame } from "@/components/connectors/views/MailHtmlFrame";
 import { MailSenderAvatar } from "@/components/connectors/views/MailSenderAvatar";
@@ -711,25 +716,18 @@ export function GmailConnectorView({
   };
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden bg-white dark:bg-space-canvas">
-      {error ? (
-        <p className="shrink-0 border-b border-black/5 px-3 py-2 text-[12px] text-destructive dark:border-white/10">
-          {error}
-        </p>
-      ) : null}
-      {status ? (
-        <p className="shrink-0 border-b border-black/5 px-3 py-1.5 text-[11px] text-muted-foreground dark:border-white/10">
-          {status}
-        </p>
-      ) : null}
-
+    <WorkspacePanelFrame status={status} error={error}>
       {page === "compose" || page === "forward" ? (
         <div className="mobile-header-content flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
           <p className="text-[12px] font-medium text-muted-foreground">
             {page === "forward" ? "Forward" : "New message"}
           </p>
-          <Field label="To" value={composeTo} onChange={setComposeTo} />
-          <Field
+          <WorkspaceField
+            label="To"
+            value={composeTo}
+            onChange={setComposeTo}
+          />
+          <WorkspaceField
             label="Subject"
             value={composeSubject}
             onChange={setComposeSubject}
@@ -896,29 +894,22 @@ export function GmailConnectorView({
             <ConnectorLoadingState connectorId="gmail" label="Loading mail" />
           ) : null}
           {!loading && !visibleThreads.length ? (
-            <div className="px-4 py-10 text-center">
-              <p className="text-[13px] font-medium text-foreground">
-                {query.trim() ? "No matching messages" : "No messages yet"}
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {query.trim()
+            <WorkspaceEmptyState
+              connectorId="gmail"
+              title={
+                query.trim() ? "No matching messages" : "No messages yet"
+              }
+              body={
+                query.trim()
                   ? "Try a different name, subject, or address."
-                  : "Refresh to sync recent mail from Gmail."}
-              </p>
-              {!query.trim() ? (
-                <button
-                  type="button"
-                  disabled={syncing}
-                  onClick={() => void refresh()}
-                  className="mt-3 inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-muted"
-                >
-                  <RefreshCw
-                    className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
-                  />
-                  Sync now
-                </button>
-              ) : null}
-            </div>
+                  : "Refresh to sync recent mail from Gmail."
+              }
+              actionLabel={query.trim() ? null : "Sync now"}
+              syncing={syncing}
+              onAction={() => {
+                void refresh();
+              }}
+            />
           ) : null}
           {visibleThreads.map((item) => (
             <button
@@ -976,29 +967,6 @@ export function GmailConnectorView({
           ))}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="text-[11px] font-medium text-muted-foreground">
-        {label}
-      </span>
-      <input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="mt-1 h-9 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-space-canvas"
-      />
-    </label>
+    </WorkspacePanelFrame>
   );
 }

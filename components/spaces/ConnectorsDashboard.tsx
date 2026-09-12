@@ -44,6 +44,7 @@ import {
   fetchConnectorConnections,
   initiateConnectorConnection,
   claimConnectorOAuthSession,
+  renameConnectorConnection,
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
@@ -263,7 +264,7 @@ export function ConnectorsDashboard() {
     if (isOauthConnectorId(id)) {
       setInfo("");
       setDetailConnectorId(id);
-      await proceedComposioOAuth(id);
+      // Detail modal collects the Candor account name before OAuth.
       return;
     }
     installConnector(id);
@@ -272,7 +273,10 @@ export function ConnectorsDashboard() {
     void refreshConnections();
   };
 
-  const proceedComposioOAuth = async (id: string) => {
+  const proceedComposioOAuth = async (
+    id: string,
+    opts?: { displayName?: string; forceNew?: boolean },
+  ) => {
     const { openConnectorAuthorizationUrl } = await import(
       "@/lib/open-connector-oauth"
     );
@@ -281,6 +285,8 @@ export function ConnectorsDashboard() {
       const { authorizationUrl, connection } = await initiateConnectorConnection({
         workspaceId,
         connectorId: id,
+        displayName: opts?.displayName,
+        forceNew: opts?.forceNew,
       });
       patchConnectorConnectionForWorkspace(workspaceId, connection);
       if (authorizationUrl) {
@@ -397,27 +403,44 @@ export function ConnectorsDashboard() {
     openConnectorDetail(id);
   };
 
-  const disconnectConnector = async (id: string) => {
-    const item = apps.find((entry) => entry.id === id);
+  const disconnectConnector = async (
+    connectorId: string,
+    connectionId?: string,
+  ) => {
+    const item = apps.find((entry) => entry.id === connectorId);
     if (!item) return;
     setInfo("");
-    setDisconnectingId(id);
+    setDisconnectingId(connectorId);
     try {
-      if (item.liveConnections.length > 0) {
+      if (connectionId) {
+        await disconnectConnectorConnection({
+          workspaceId,
+          connectionId,
+        });
+      } else if (item.liveConnections.length > 0) {
         for (const connection of item.liveConnections) {
           await disconnectConnectorConnection({
             workspaceId,
             connectionId: connection.id,
           });
         }
-        const connections = await fetchConnectorConnections(workspaceId);
-        replaceConnectorConnectionsForWorkspace(workspaceId, connections);
-        detachWorkConnector(workspaceId, id);
-        setInfo(`${item.name} disconnected and provider access revoked.`);
       }
-      uninstallConnector(id);
-      if (detailConnectorId === id) {
-        setDetailConnectorId(null);
+      const connections = await fetchConnectorConnections(workspaceId);
+      replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+      const remaining = connections.filter(
+        (row) =>
+          row.connectorId === connectorId &&
+          (row.status === "active" || row.status === "pending"),
+      );
+      if (!remaining.length) {
+        detachWorkConnector(workspaceId, connectorId);
+        uninstallConnector(connectorId);
+        if (detailConnectorId === connectorId) {
+          setDetailConnectorId(null);
+        }
+        setInfo(`${item.name} disconnected and provider access revoked.`);
+      } else {
+        setInfo(`Account disconnected from ${item.name}.`);
       }
     } catch (err) {
       setInfo(
@@ -779,11 +802,34 @@ export function ConnectorsDashboard() {
         }
         tier={pinTier("connector", detailItem.id)}
         workAttach={Boolean(workAttachFor)}
-        onConnect={async () => {
-          await connectConnector(detailItem.id);
+        onConnect={async (opts) => {
+          if (isOauthConnectorId(detailItem.id)) {
+            await proceedComposioOAuth(detailItem.id, opts);
+            return;
+          }
+          installConnector(detailItem.id);
+          bindToWorkIfArmed(detailItem.id);
+          void refreshConnections();
         }}
-        onDisconnect={async () => {
-          await disconnectConnector(detailItem.id);
+        onDisconnect={async (connectionId) => {
+          await disconnectConnector(
+            detailItem.id,
+            connectionId || undefined,
+          );
+        }}
+        onRename={async (connectionId, displayName) => {
+          try {
+            const updated = await renameConnectorConnection({
+              workspaceId,
+              connectionId,
+              displayName,
+            });
+            patchConnectorConnectionForWorkspace(workspaceId, updated);
+          } catch (err) {
+            setInfo(
+              err instanceof Error ? err.message : "Could not rename account.",
+            );
+          }
         }}
         onOpen={() => {
           openConnector(detailItem.id);

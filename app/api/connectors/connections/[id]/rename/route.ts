@@ -1,23 +1,24 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import { initiateConnection } from "@/lib/connectors/lifecycle";
+import { renameConnection } from "@/lib/connectors/lifecycle";
 import { resolveConnectorRequest } from "@/lib/connectors/server-context";
 import { checkConnectorRateLimitAsync } from "@/lib/connectors/rate-limit";
-import { trustedRequestOrigin } from "@/lib/security/server-origin";
 
 export const runtime = "nodejs";
 
-export async function POST(request: Request) {
+type Params = { params: Promise<{ id: string }> };
+
+export async function PATCH(request: Request, { params }: Params) {
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
   }
 
-  let body: {
-    workspaceId?: string;
-    connectorId?: string;
-    displayName?: string;
-    forceNew?: boolean;
-  };
+  const { id: connectionId } = await params;
+  if (!connectionId?.trim()) {
+    return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
+  }
+
+  let body: { workspaceId?: string; displayName?: string };
   try {
     body = await request.json();
   } catch {
@@ -32,13 +33,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: ctx.error }, { status: ctx.status });
   }
 
-  const connectorId = body.connectorId?.trim();
-  if (!connectorId) {
-    return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
-  }
-
   const rate = await checkConnectorRateLimitAsync({
-    key: `initiate:${ctx.user.id}`,
+    key: `rename:${ctx.user.id}`,
     category: "connector_initiate",
     workspaceId: ctx.workspaceId,
     profileId: ctx.user.id,
@@ -48,27 +44,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    const callbackOrigin = trustedRequestOrigin(request);
-    const result = await initiateConnection({
+    const result = await renameConnection({
       client: ctx.client,
       workspaceId: ctx.workspaceId,
       ownerId: ctx.user.id,
-      connectorId,
-      displayName: body.displayName,
-      forceNew: Boolean(body.forceNew),
-      callbackOrigin,
+      connectionId: connectionId.trim(),
+      displayName: body.displayName ?? "",
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    return NextResponse.json({
-      ok: true,
-      connection: result.connection,
-      reused: result.reused,
-      authorizationUrl: result.authorizationUrl ?? null,
-    });
+    return NextResponse.json({ ok: true, connection: result.connection });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Could not initiate connection.";
+    const message =
+      err instanceof Error ? err.message : "Could not rename connection.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

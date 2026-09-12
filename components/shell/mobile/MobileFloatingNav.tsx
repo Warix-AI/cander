@@ -3,7 +3,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { setMobileFloatingNavReserve } from "@/lib/mobile-floating-nav-chrome";
 
-/** Composer-sized floating nav over panel content (does not reserve layout space). */
+/** Composer-sized floating nav over panel content (mobile-only; connectors use ConnectorFloatingNav). */
 export function MobileFloatingNav({ children, activeId, label = "Sections" }: {
   children: ReactNode;
   activeId: string;

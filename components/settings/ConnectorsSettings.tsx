@@ -73,7 +73,7 @@ export function ConnectorsSettings() {
 
       <SettingsSection
         title="Apps"
-        description="Each connector supports one live personal connection per workspace."
+        description="Connect up to 3 accounts per connector in this workspace. Each account has its own Candor name."
         className="mt-8"
       >
         <div className="space-y-3">
@@ -92,14 +92,15 @@ export function ConnectorsSettings() {
                 ? `${localAccounts.length} connection${localAccounts.length === 1 ? "" : "s"}`
                 : "Not connected"
               : liveConnections.length
-                ? liveConnections[0]?.status === "pending"
-                  ? "Connection pending"
-                  : "Connected"
+                ? `${liveConnections.length} account${liveConnections.length === 1 ? "" : "s"}`
                 : "Not connected";
 
             const hasConnection = isLocal
               ? localAccounts.length > 0
               : liveConnections.length > 0;
+            const canAddMore = isLocal
+              ? localAccounts.length < 3
+              : liveConnections.length < 3;
 
             return (
               <SettingsGroup key={item.id}>
@@ -113,7 +114,7 @@ export function ConnectorsSettings() {
                       {summary}
                     </p>
                   </div>
-                  {!hasConnection ? (
+                  {canAddMore ? (
                     <button
                       type="button"
                       disabled={busy === item.id}
@@ -124,9 +125,7 @@ export function ConnectorsSettings() {
                             addWorkspaceConnection(
                               workspaceId,
                               item.id,
-                              kind === "personal"
-                                ? "Personal account"
-                                : "Work account",
+                              `Acct${localAccounts.length + 1}`,
                               workspace,
                             );
                           } finally {
@@ -148,7 +147,7 @@ export function ConnectorsSettings() {
                       className="inline-flex h-8 items-center gap-1.5 rounded-full border border-foreground/15 px-3 text-[12.5px] font-medium tracking-[-0.01em] hover:bg-muted disabled:opacity-50"
                     >
                       <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
-                      Connect
+                      {hasConnection ? "Add" : "Connect"}
                     </button>
                   ) : null}
                 </div>
@@ -187,7 +186,7 @@ export function ConnectorsSettings() {
                   : liveConnections.map((connection) => (
                       <SettingsRow
                         key={connection.id}
-                        label={item.name}
+                        label={connection.displayName || item.name}
                         description={
                           connection.status === "pending"
                             ? "Pending provider setup"
@@ -196,7 +195,7 @@ export function ConnectorsSettings() {
                       >
                         <button
                           type="button"
-                          aria-label={`Disconnect ${item.name}`}
+                          aria-label={`Disconnect ${connection.displayName || item.name}`}
                           disabled={busy === connection.id}
                           onClick={async () => {
                             setBusy(connection.id);

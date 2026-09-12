@@ -71,9 +71,27 @@ export function createSupabaseConnectorApi(
       if (!isOauthConnectorId(connectorId)) {
         throw new Error("Connector not available.");
       }
+      const existing = connectionsForConnectorLive(ctx.workspaceId, connectorId).filter(
+        (row) => row.status === "pending" || row.status === "active",
+      );
+      const used = new Set(
+        existing.map((row) => row.displayName.trim().toLowerCase()),
+      );
+      let displayName = "Account";
+      if (used.has(displayName.toLowerCase())) {
+        for (let i = 2; i <= 3; i++) {
+          const candidate = `Acct${i}`;
+          if (!used.has(candidate.toLowerCase())) {
+            displayName = candidate;
+            break;
+          }
+        }
+      }
       const { connection, authorizationUrl } = await initiateConnectorConnection({
         workspaceId: ctx.workspaceId,
         connectorId,
+        displayName,
+        forceNew: existing.length > 0,
       });
       const all = await fetchConnectorConnections(ctx.workspaceId);
       replaceConnectorConnectionsForWorkspace(ctx.workspaceId, all);

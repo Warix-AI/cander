@@ -322,6 +322,7 @@ export function ConnectorsPanel() {
           const { authorizationUrl } = await initiateConnectorConnection({
             workspaceId,
             connectorId: selected.id,
+            displayName: "Account",
           });
           const connections = await fetchConnectorConnections(workspaceId);
           replaceConnectorConnectionsForWorkspace(workspaceId, connections);

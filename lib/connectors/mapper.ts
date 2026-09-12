@@ -13,6 +13,7 @@ export type ConnectorConnectionRow = {
   connector_id: string;
   connection_mode: "personal" | "workspace_shared";
   status: ConnectorConnectionStatus;
+  display_name: string;
   provider_connection_id: string | null;
   provider_name: string | null;
   failure_detail: string | null;
@@ -62,6 +63,7 @@ export const CONNECTOR_CONNECTION_PUBLIC_COLUMNS = [
   "connector_id",
   "connection_mode",
   "status",
+  "display_name",
   "provider_name",
   "failure_detail",
   "connected_by",
@@ -102,6 +104,7 @@ export function connectionRowToPublic(row: ConnectorConnectionRow): ConnectorCon
     connectorId: row.connector_id,
     status: row.status,
     connectionMode: row.connection_mode,
+    displayName: (row.display_name ?? "Account").trim() || "Account",
     failureDetail: row.failure_detail,
     toolPermissions: resolveToolPermissions(
       row.connector_id,

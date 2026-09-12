@@ -1,12 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Settings2, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { ConnectorAccountBar } from "@/components/connectors/ConnectorAccountBar";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
 import { ConnectorSkillsToggles } from "@/components/connectors/ConnectorSkillsToggles";
 import { Modal } from "@/components/ui/Modal";
 import { Dropdown } from "@/components/ui/Controls";
+import {
+  CONNECTOR_DISPLAY_NAME_MAX,
+  canAddAnotherConnectorAccount,
+  validateUniqueConnectorDisplayName,
+} from "@/lib/connectors/account-names";
 import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
@@ -110,6 +116,7 @@ export function ConnectorDetailModal({
   workAttach,
   onConnect,
   onDisconnect,
+  onRename,
   onOpen,
   onConnectionsRefresh,
   onSkillPermissionsUpdated,
@@ -130,8 +137,12 @@ export function ConnectorDetailModal({
   busy: boolean;
   tier: PinTier | null;
   workAttach?: boolean;
-  onConnect: () => Promise<void>;
-  onDisconnect: () => Promise<void>;
+  onConnect: (opts: {
+    displayName: string;
+    forceNew?: boolean;
+  }) => Promise<void>;
+  onDisconnect: (connectionId: string) => Promise<void>;
+  onRename: (connectionId: string, displayName: string) => Promise<void>;
   onOpen?: () => void;
   onConnectionsRefresh: () => void;
   onSkillPermissionsUpdated: (connection: ConnectorConnection) => void;
@@ -140,12 +151,40 @@ export function ConnectorDetailModal({
   onPromptSelect: (text: string) => void;
 }) {
   const mobile = useMobileShell();
-  const activeConnection = item.liveConnections?.find(
-    (row) => row.status === "active",
+  const liveAccounts = useMemo(
+    () =>
+      (item.liveConnections ?? []).filter(
+        (row) => row.status === "active" || row.status === "pending",
+      ),
+    [item.liveConnections],
   );
-  const pendingConnection = activeConnection
-    ? undefined
-    : item.liveConnections?.find((row) => row.status === "pending");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [namePrompt, setNamePrompt] = useState<null | {
+    mode: "connect" | "add" | "rename";
+    value: string;
+    error: string | null;
+  }>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setSelectedId(null);
+      setNamePrompt(null);
+      return;
+    }
+    setSelectedId((prev) => {
+      if (prev && liveAccounts.some((row) => row.id === prev)) return prev;
+      return liveAccounts[0]?.id ?? null;
+    });
+  }, [open, item.id, liveAccounts]);
+
+  const selectedConnection =
+    liveAccounts.find((row) => row.id === selectedId) ?? liveAccounts[0];
+  const activeConnection =
+    selectedConnection?.status === "active" ? selectedConnection : undefined;
+  const pendingConnection =
+    selectedConnection?.status === "pending"
+      ? selectedConnection
+      : liveAccounts.find((row) => row.status === "pending");
   const isConnected = Boolean(activeConnection);
   const skills = toolsForConnector(item.id);
   const prompts = promptsForConnector(item);
@@ -155,9 +194,14 @@ export function ConnectorDetailModal({
     !canManageServerConnection &&
     !oauthPending &&
     Boolean(item.installed) &&
-    !isConnected;
+    !liveAccounts.length;
   const canDisconnectOrUninstall =
-    isConnected || Boolean(pendingConnection) || localInstallOnly;
+    Boolean(selectedConnection) || localInstallOnly;
+  const canAddAccount =
+    canManageServerConnection &&
+    !oauthPending &&
+    !blocked &&
+    canAddAnotherConnectorAccount(liveAccounts.length);
 
   const statusLabel = blocked
     ? "Blocked"
@@ -199,13 +243,13 @@ export function ConnectorDetailModal({
   }, [open, item.id]);
 
   // Connected / local-installed apps manage lifecycle from the menu — no Connect footer.
-  // Pending OAuth still shows Continue connecting.
+  // Pending OAuth still shows Continue connecting. Zero accounts show Connect.
   const showConnectFooter =
     !blocked &&
     !oauthPending &&
     (Boolean(workAttach) ||
-      Boolean(pendingConnection) ||
-      (!isConnected && !localInstallOnly));
+      Boolean(pendingConnection && !liveAccounts.some((r) => r.status === "active")) ||
+      (!liveAccounts.length && !localInstallOnly));
 
   const previewConnection: ConnectorConnection = {
     id: "preview",
@@ -213,6 +257,7 @@ export function ConnectorDetailModal({
     connectorId: item.id,
     status: "pending",
     connectionMode: "personal",
+    displayName: "Account",
     failureDetail: null,
     toolPermissions: Object.fromEntries(
       skills.map((tool) => [tool.id, tool.defaultEnabled]),
@@ -224,10 +269,50 @@ export function ConnectorDetailModal({
     pendingExpiresAt: null,
   };
 
+  const openNamePrompt = (mode: "connect" | "add" | "rename") => {
+    setNamePrompt({
+      mode,
+      value:
+        mode === "rename" && selectedConnection
+          ? selectedConnection.displayName
+          : "",
+      error: null,
+    });
+  };
+
+  const submitNamePrompt = async () => {
+    if (!namePrompt) return;
+    const check = validateUniqueConnectorDisplayName({
+      raw: namePrompt.value,
+      existing: liveAccounts.map((row) => ({
+        id: row.id,
+        displayName: row.displayName,
+      })),
+      excludeId:
+        namePrompt.mode === "rename" ? selectedConnection?.id : undefined,
+    });
+    if (!check.ok) {
+      setNamePrompt({ ...namePrompt, error: check.error });
+      return;
+    }
+    const mode = namePrompt.mode;
+    setNamePrompt(null);
+    if (mode === "rename" && selectedConnection) {
+      await onRename(selectedConnection.id, check.value);
+      return;
+    }
+    await onConnect({
+      displayName: check.value,
+      forceNew: mode === "add",
+    });
+  };
+
   const handlePromptClick = (prompt: ConnectorPrompt) => {
     onClose();
     onPromptSelect(`Cander, ${prompt.text}`);
   };
+
+  const showAccountBar = canManageServerConnection && !oauthPending && !blocked;
 
   return (
     <Modal
@@ -282,12 +367,12 @@ export function ConnectorDetailModal({
             >
               <p className="text-[15px] font-semibold tracking-[-0.02em]">
                 {canManageServerConnection
-                  ? "Disconnect connector?"
+                  ? "Disconnect account?"
                   : "Uninstall connector?"}
               </p>
               <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
                 {canManageServerConnection
-                  ? `Are you sure you want to disconnect ${item.name}?`
+                  ? `Disconnect “${selectedConnection?.displayName ?? item.name}”? Other accounts for ${item.name} stay connected.`
                   : `Are you sure you want to uninstall ${item.name}?`}
               </p>
               <div className="mt-4 flex justify-end gap-2">
@@ -307,7 +392,11 @@ export function ConnectorDetailModal({
                   disabled={busy}
                   onClick={() => {
                     void (async () => {
-                      await onDisconnect();
+                      if (selectedConnection) {
+                        await onDisconnect(selectedConnection.id);
+                      } else {
+                        await onDisconnect("");
+                      }
                       setConfirmDisconnect(false);
                     })();
                   }}
@@ -323,6 +412,85 @@ export function ConnectorDetailModal({
                     : canManageServerConnection
                       ? "Disconnect"
                       : "Uninstall"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {namePrompt ? (
+          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 p-4 dark:bg-black/25">
+            <div
+              className={cn(
+                "light-surface w-full max-w-sm bg-white/85 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:bg-zinc-900/85 dark:shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
+                SHELL_G3_RADIUS,
+              )}
+            >
+              <p className="text-[15px] font-semibold tracking-[-0.02em]">
+                {namePrompt.mode === "rename"
+                  ? "Rename account"
+                  : namePrompt.mode === "add"
+                    ? "Name this account"
+                    : "Name your account"}
+              </p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                Choose a short Candor label (1–{CONNECTOR_DISPLAY_NAME_MAX}{" "}
+                characters). This does not change the provider account.
+              </p>
+              <input
+                autoFocus
+                value={namePrompt.value}
+                maxLength={CONNECTOR_DISPLAY_NAME_MAX}
+                onChange={(event) =>
+                  setNamePrompt({
+                    ...namePrompt,
+                    value: event.target.value,
+                    error: null,
+                  })
+                }
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void submitNamePrompt();
+                  }
+                }}
+                placeholder="e.g. Team"
+                className="mt-3 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-space-canvas"
+              />
+              {namePrompt.error ? (
+                <p className="mt-2 text-[12px] text-destructive">
+                  {namePrompt.error}
+                </p>
+              ) : (
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  {namePrompt.value.trim().length}/{CONNECTOR_DISPLAY_NAME_MAX}
+                </p>
+              )}
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setNamePrompt(null)}
+                  className={cn(
+                    "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
+                    SHELL_G3_RADIUS,
+                  )}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void submitNamePrompt()}
+                  className={cn(
+                    "inline-flex h-9 items-center bg-foreground px-4 text-[13px] font-medium text-background disabled:opacity-50",
+                    SHELL_G3_RADIUS,
+                  )}
+                >
+                  {busy
+                    ? "Working…"
+                    : namePrompt.mode === "rename"
+                      ? "Save"
+                      : "Continue"}
                 </button>
               </div>
             </div>
@@ -347,7 +515,25 @@ export function ConnectorDetailModal({
             dedicated ? "px-0" : "px-5 pt-5",
           )}
         >
-          <div className="absolute top-0 right-0 flex items-center gap-0.5">
+          {showAccountBar ? (
+            <ConnectorAccountBar
+              className="mb-4"
+              accounts={liveAccounts}
+              activeId={selectedConnection?.id ?? null}
+              onSelect={setSelectedId}
+              addDisabled={!canAddAccount || busy}
+              onAdd={() => {
+                if (!canAddAccount) return;
+                openNamePrompt(liveAccounts.length ? "add" : "connect");
+              }}
+            />
+          ) : null}
+          <div
+            className={cn(
+              "absolute right-0 flex items-center gap-0.5",
+              showAccountBar ? "top-[4.75rem]" : "top-0",
+            )}
+          >
             {showActionsMenu ? (
               <Dropdown
                 align="end"
@@ -420,6 +606,23 @@ export function ConnectorDetailModal({
                         Open
                       </button>
                     ) : null}
+                    {selectedConnection && canManageServerConnection ? (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        disabled={busy}
+                        onClick={() => {
+                          close();
+                          openNamePrompt("rename");
+                        }}
+                        className={cn(
+                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
+                          SHELL_G3_RADIUS,
+                        )}
+                      >
+                        Rename account
+                      </button>
+                    ) : null}
                     {!canDisconnectOrUninstall ? (
                       <button
                         type="button"
@@ -427,7 +630,11 @@ export function ConnectorDetailModal({
                         disabled={busy}
                         onClick={() => {
                           close();
-                          void onConnect();
+                          if (canManageServerConnection) {
+                            openNamePrompt("connect");
+                          } else {
+                            void onConnect({ displayName: "Account" });
+                          }
                         }}
                         className={cn(
                           "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
@@ -590,7 +797,20 @@ export function ConnectorDetailModal({
             <button
               type="button"
               disabled={blocked || busy}
-              onClick={() => void onConnect()}
+              onClick={() => {
+                if (pendingConnection && canManageServerConnection) {
+                  void onConnect({
+                    displayName: pendingConnection.displayName,
+                    forceNew: false,
+                  });
+                  return;
+                }
+                if (canManageServerConnection) {
+                  openNamePrompt("connect");
+                  return;
+                }
+                void onConnect({ displayName: "Account" });
+              }}
               className={cn(
                 "inline-flex h-10 items-center bg-foreground px-5 text-[13px] font-medium tracking-[-0.01em] text-background hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
                 SHELL_G3_RADIUS,

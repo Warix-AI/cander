@@ -15,6 +15,7 @@ import { OverviewPage } from "@/components/panels/handshake/pages/OverviewPage";
 import { SecurityPage } from "@/components/panels/handshake/pages/SecurityPage";
 import { SettingsPage } from "@/components/panels/handshake/pages/SettingsPage";
 import { TransactionsPage } from "@/components/panels/handshake/pages/TransactionsPage";
+import { CONNECTOR_FLOATING_NAV_PAD } from "@/components/connectors/chrome/ConnectorFloatingNav";
 import { SHELL_PANEL_BODY } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -36,17 +37,24 @@ export function HandshakePanel() {
           />
         }
       />
-      <HandshakeNav active={page} onChange={setPage} />
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {page === "overview" ? <OverviewPage /> : null}
-        {page === "agents" ? <AgentsPage /> : null}
-        {page === "connections" ? <ConnectionsPage /> : null}
-        {page === "capabilities" ? <CapabilitiesPage /> : null}
-        {page === "context" ? <ContextPage /> : null}
-        {page === "conversations" ? <ConversationsPage /> : null}
-        {page === "transactions" ? <TransactionsPage /> : null}
-        {page === "security" ? <SecurityPage /> : null}
-        {page === "settings" ? <SettingsPage /> : null}
+      <div
+        className={cn(
+          "relative flex min-h-0 flex-1 flex-col",
+          CONNECTOR_FLOATING_NAV_PAD,
+        )}
+      >
+        <HandshakeNav active={page} onChange={setPage} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {page === "overview" ? <OverviewPage /> : null}
+          {page === "agents" ? <AgentsPage /> : null}
+          {page === "connections" ? <ConnectionsPage /> : null}
+          {page === "capabilities" ? <CapabilitiesPage /> : null}
+          {page === "context" ? <ContextPage /> : null}
+          {page === "conversations" ? <ConversationsPage /> : null}
+          {page === "transactions" ? <TransactionsPage /> : null}
+          {page === "security" ? <SecurityPage /> : null}
+          {page === "settings" ? <SettingsPage /> : null}
+        </div>
       </div>
     </div>
   );

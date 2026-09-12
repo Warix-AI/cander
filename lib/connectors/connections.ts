@@ -33,6 +33,8 @@ export type ResolveAccountResult =
     };
 
 function connectionLabel(row: ConnectorConnectionRow): string {
+  const named = row.display_name?.trim();
+  if (named) return named;
   const base =
     row.connector_id === "gmail"
       ? "Gmail"

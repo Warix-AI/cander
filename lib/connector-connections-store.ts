@@ -76,7 +76,7 @@ export function activeAccountsForConnector(
     .filter((row) => isUiConnectedStatus(row.status))
     .map((row) => ({
       id: row.id,
-      label: row.connectorId,
+      label: row.displayName || row.connectorId,
       status:
         row.status === "active"
           ? "connected"

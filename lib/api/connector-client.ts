@@ -45,6 +45,8 @@ export async function fetchConnectorConnections(
 export async function initiateConnectorConnection(input: {
   workspaceId: string;
   connectorId: string;
+  displayName?: string;
+  forceNew?: boolean;
 }): Promise<{ connection: ConnectorConnection; authorizationUrl?: string | null }> {
   const headers = await authHeaders();
   const response = await fetch("/api/connectors/connections/initiate", {
@@ -66,6 +68,30 @@ export async function initiateConnectorConnection(input: {
     connection: data.connection as ConnectorConnection,
     authorizationUrl: (data.authorizationUrl as string | null | undefined) ?? null,
   };
+}
+
+export async function renameConnectorConnection(input: {
+  workspaceId: string;
+  connectionId: string;
+  displayName: string;
+}): Promise<ConnectorConnection> {
+  const headers = await authHeaders();
+  const response = await fetch(
+    `/api/connectors/connections/${encodeURIComponent(input.connectionId)}/rename`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        workspaceId: input.workspaceId,
+        displayName: input.displayName,
+      }),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? "Could not rename account.");
+  }
+  return data.connection as ConnectorConnection;
 }
 
 /** Claim a session_uri parked after external-browser OAuth (Safari). */

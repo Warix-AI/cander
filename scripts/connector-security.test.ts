@@ -40,23 +40,26 @@ test("two users in one workspace may each connect the same connector", () => {
   );
 });
 
-test("one user cannot create two live connections for same connector in workspace", () => {
+test("one user can hold up to three live connections for the same connector", () => {
   const owner = "11111111-1111-1111-1111-111111111111";
+  const base = {
+    workspaceId: "ws-team",
+    ownerId: owner,
+    connectorId: "gmail",
+  };
   const existing = [
-    {
-      workspaceId: "ws-team",
-      ownerId: owner,
-      connectorId: "gmail",
-      status: "pending",
-    },
+    { ...base, status: "active" },
+    { ...base, status: "active" },
   ];
   assert.equal(
-    canAddLivePersonalConnection(existing, {
-      workspaceId: "ws-team",
-      ownerId: owner,
-      connectorId: "gmail",
-      status: "active",
-    }),
+    canAddLivePersonalConnection(existing, { ...base, status: "pending" }),
+    true,
+  );
+  assert.equal(
+    canAddLivePersonalConnection(
+      [...existing, { ...base, status: "pending" }],
+      { ...base, status: "active" },
+    ),
     false,
   );
 });
@@ -69,6 +72,7 @@ test("duplicate initiate reuses non-expired pending", () => {
     connector_id: "gmail",
     connection_mode: "personal" as const,
     status: "pending" as const,
+    display_name: "Account",
     provider_connection_id: null,
     provider_name: null,
     failure_detail: null,
@@ -154,6 +158,7 @@ test("public connection mapper strips secret fields", () => {
     connector_id: "gmail",
     connection_mode: "personal" as const,
     status: "pending" as const,
+    display_name: "Account",
     provider_connection_id: "secret-ref",
     provider_name: "composio",
     failure_detail: null,
@@ -235,6 +240,7 @@ test("pending expiry detection", () => {
     connector_id: "gmail",
     connection_mode: "personal" as const,
     status: "pending" as const,
+    display_name: "Account",
     provider_connection_id: null,
     provider_name: null,
     failure_detail: null,

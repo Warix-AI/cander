@@ -153,7 +153,7 @@ export async function createConnectLink(input: {
     body: JSON.stringify({
       user_id: input.composioUserId,
       auth_config_id: authConfigIdForConnector(input.connectorId),
-      allow_multiple: false,
+      allow_multiple: true,
       ...(callbackUrl ? { callback_url: callbackUrl } : {}),
     }),
   });

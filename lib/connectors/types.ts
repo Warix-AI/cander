@@ -14,6 +14,8 @@ export type ConnectorConnection = {
   connectorId: string;
   status: ConnectorConnectionStatus;
   connectionMode: ConnectorConnectionMode;
+  /** Candor-only label (1–10 chars). Not a provider identity. */
+  displayName: string;
   failureDetail: string | null;
   /** Resolved tool id → enabled (catalog defaults merged with stored overrides). */
   toolPermissions: Record<string, boolean>;

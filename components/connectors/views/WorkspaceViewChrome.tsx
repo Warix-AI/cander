@@ -86,9 +86,9 @@ export function WorkspaceEmptyState({
 }: {
   title: string;
   body: string;
-  actionLabel: string;
+  actionLabel?: string | null;
   syncing?: boolean;
-  onAction: () => void;
+  onAction?: () => void;
   connectorId?: string;
 }) {
   if (syncing) {
@@ -103,21 +103,23 @@ export function WorkspaceEmptyState({
     <div className="px-4 py-10 text-center">
       <p className="text-[13px] font-medium text-foreground">{title}</p>
       <p className="mt-1 text-[12px] text-muted-foreground">{body}</p>
-      <button
-        type="button"
-        disabled={syncing}
-        onClick={onAction}
-        className={cn(
-          "mt-3 inline-flex h-8 items-center gap-1.5 border border-border px-3 text-[12px] font-medium hover:bg-muted disabled:opacity-50",
-          SHELL_G3_RADIUS,
-        )}
-      >
-        <RefreshCw
-          className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
-          strokeWidth={1.6}
-        />
-        {actionLabel}
-      </button>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          disabled={syncing}
+          onClick={onAction}
+          className={cn(
+            "mt-3 inline-flex h-8 items-center gap-1.5 border border-border px-3 text-[12px] font-medium hover:bg-muted disabled:opacity-50",
+            SHELL_G3_RADIUS,
+          )}
+        >
+          <RefreshCw
+            className={cn("h-3.5 w-3.5", syncing && "animate-spin")}
+            strokeWidth={1.6}
+          />
+          {actionLabel}
+        </button>
+      ) : null}
     </div>
   );
 }

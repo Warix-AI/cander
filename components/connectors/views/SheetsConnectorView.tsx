@@ -5,7 +5,11 @@ import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMobileSearchBar } from "@/components/connectors/ConnectorMobileSearchBar";
 import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
-import { MobileFloatingNav } from "@/components/shell/mobile/MobileFloatingNav";
+import {
+  ConnectorFloatingNav,
+  ConnectorFloatingNavItem,
+  CONNECTOR_FLOATING_NAV_PAD,
+} from "@/components/connectors/chrome/ConnectorFloatingNav";
 import {
   WorkspaceEmptyState,
   WorkspaceField,
@@ -604,58 +608,32 @@ export function SheetsConnectorView({
       ) : null}
 
       {page === "detail" && selected ? (
-        <div className="relative flex min-h-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
-          {/* Desktop: top tab strip. Mobile: floating bottom nav (Stripe-style). */}
-          <div className="hidden shrink-0 overflow-x-auto border-b border-black/5 px-2 py-2 dark:border-white/10 lg:block">
-            <div className="flex min-w-max gap-1">
-              {(tabs.length ? tabs : ["Sheet1"]).map((tab) => (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => {
-                    if (tab === activeTab) return;
-                    void loadSheetTab(selected, tab);
-                  }}
-                  className={cn(
-                    "h-7 shrink-0 rounded-full px-2.5 text-[11.5px] font-medium tracking-[-0.01em] transition-colors",
-                    (activeTab ?? tabs[0] ?? "Sheet1") === tab
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <MobileFloatingNav
+        <div
+          className={cn(
+            "relative flex min-h-0 flex-1 flex-col",
+            CONNECTOR_FLOATING_NAV_PAD,
+          )}
+        >
+          <ConnectorFloatingNav
             activeId={activeTab ?? tabs[0] ?? "Sheet1"}
             label="Spreadsheet tabs"
           >
             {(tabs.length ? tabs : ["Sheet1"]).map((tab) => {
               const active = (activeTab ?? tabs[0] ?? "Sheet1") === tab;
               return (
-                <button
+                <ConnectorFloatingNavItem
                   key={tab}
-                  type="button"
-                  aria-current={active ? "page" : undefined}
+                  id={tab}
+                  label={tab}
+                  active={active}
                   onClick={() => {
                     if (active) return;
                     void loadSheetTab(selected, tab);
                   }}
-                  className={cn(
-                    "h-10 shrink-0 rounded-full px-4 text-[14px] font-medium transition-colors",
-                    active
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60",
-                  )}
-                >
-                  {tab}
-                </button>
+                />
               );
             })}
-          </MobileFloatingNav>
+          </ConnectorFloatingNav>
 
           {previewLoading ? (
             <div className="mobile-header-content flex min-h-0 flex-1 flex-col">

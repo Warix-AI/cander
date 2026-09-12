@@ -1,7 +1,7 @@
 "use client";
 
-import { MobileFloatingNav } from "@/components/shell/mobile/MobileFloatingNav";
 import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
+import { ConnectorSectionNavLayout } from "@/components/connectors/chrome/ConnectorSectionNav";
 
 import {
   useCallback,
@@ -895,38 +895,12 @@ export function StripeConnectorView({
   return (
     <WorkspacePanelFrame status={status} error={error}>
       {page === "browse" ? (
-        <div className="relative flex min-h-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
-          <div className="hidden shrink-0 overflow-x-auto lg:block border-b border-black/5 px-2 py-2 dark:border-white/10">
-            <div className="flex min-w-max gap-1">
-              {TABS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => selectTab(item.id)}
-                  className={cn(
-                    "h-7 shrink-0 px-2.5 text-[11.5px] font-medium tracking-[-0.01em]",
-                    SHELL_G3_RADIUS,
-                    tab === item.id
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <MobileFloatingNav activeId={tab} label="Stripe sections">
-            {TABS.map((item) => (
-              <button key={item.id} type="button" aria-current={tab === item.id ? "page" : undefined}
-                onClick={() => selectTab(item.id)}
-                className={cn("h-10 shrink-0 rounded-full px-4 text-[14px] font-medium transition-colors", tab === item.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/60")}>
-                {item.label}
-              </button>
-            ))}
-          </MobileFloatingNav>
-
+        <ConnectorSectionNavLayout
+          items={TABS}
+          activeId={tab}
+          onChange={(id) => selectTab(id as TabId)}
+          label="Stripe sections"
+        >
           {tab === "overview" ? (
             <div className="mobile-header-content min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
               <h2 className="text-[15px] font-medium tracking-tight">
@@ -1085,7 +1059,7 @@ export function StripeConnectorView({
               </div>
             </div>
           )}
-        </div>
+        </ConnectorSectionNavLayout>
       ) : null}
 
       {page === "detail" && selected ? (

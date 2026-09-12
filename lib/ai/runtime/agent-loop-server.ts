@@ -204,9 +204,6 @@ export async function runAgentServerLoop(
     profileId: input.profileId,
   });
   const activeConnections = connections.ok ? connections.connections : [];
-  const connectionByConnector = new Map(
-    activeConnections.map((c) => [c.connectorId, c]),
-  );
   const scope = resolveConnectorScope({
     selectedConnectionIds: input.selectedConnectionIds,
     selectedConnectionId: input.selectedConnectionId,
@@ -224,12 +221,22 @@ export async function runAgentServerLoop(
       return [c.connectorId, full!] as const;
     }).filter((entry) => Boolean(entry[1])),
   );
-  // When the user scoped the turn, never authorize via unscoped connections.
-  const connectionForTool = (connectorId: string) =>
-    scope.scopeRequested
-      ? scopedByConnector.get(connectorId)
-      : (scopedByConnector.get(connectorId) ??
-        connectionByConnector.get(connectorId));
+  /**
+   * Resolve an exact connection for a tool. Never pick by connector type alone
+   * when multiple accounts exist unless the turn is scoped to one.
+   */
+  const connectionForTool = (connectorId: string) => {
+    if (scope.scopeRequested) {
+      return scopedByConnector.get(connectorId) ?? null;
+    }
+    const scoped = scopedByConnector.get(connectorId);
+    if (scoped) return scoped;
+    const matches = activeConnections.filter(
+      (row) => row.connectorId === connectorId,
+    );
+    if (matches.length === 1) return matches[0]!;
+    return null;
+  };
 
   const userMessage = lastUserMessage(input.messages);
   let discovery = scope.failClosed
@@ -468,7 +475,44 @@ export async function runAgentServerLoop(
         continue;
       }
 
+      const matches = activeConnections.filter(
+        (row) => row.connectorId === tool.connectorId,
+      );
       const conn = connectionForTool(tool.connectorId);
+
+      if (!conn && matches.length > 1) {
+        conversation.push({
+          type: "function_call_output",
+          call_id: callId,
+          output: JSON.stringify({
+            status: "denied",
+            error: {
+              code: "account_ambiguous",
+              message: `Multiple ${tool.connectorId} accounts are connected. Choose which account to use.`,
+              candidates: matches.map((row) => ({
+                connectionId: row.connectionId,
+                label: row.label,
+              })),
+            },
+          }),
+        });
+        return {
+          content: text || `Which ${tool.connectorId} account should I use?`,
+          toolResults,
+          pause: {
+            type: "account_ambiguous",
+            connectorId: tool.connectorId,
+            candidates: matches.map((row) => ({
+              connectionId: row.connectionId,
+              label: row.label,
+            })),
+            message: `Multiple ${tool.connectorId} accounts are connected. Choose which account to use.`,
+          },
+          turnId,
+          model,
+          discoveryReason: discovery.reason,
+        };
+      }
 
       if (!conn) {
         conversation.push({

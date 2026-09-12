@@ -19,6 +19,11 @@ import { reconcileConnectionDisconnected, reconcileConnectionFailed } from "./re
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveInitiateExisting } from "./lifecycle-logic.ts";
 import {
+  connectorAccountLimitMessage,
+  canAddAnotherConnectorAccount,
+  validateUniqueConnectorDisplayName,
+} from "./account-names.ts";
+import {
   catalogRowToPublic,
   connectionRowToPublic,
   isPendingExpired,
@@ -91,6 +96,10 @@ export async function initiateConnection(input: {
   workspaceId: string;
   ownerId: string;
   connectorId: string;
+  /** Candor display name for a new account (required when inserting). */
+  displayName?: string | null;
+  /** When true, never reuse pending — always try to add another account. */
+  forceNew?: boolean;
   callbackOrigin?: string | null;
 }): Promise<
   | { ok: true; connection: ConnectorConnection; reused: boolean; authorizationUrl?: string }
@@ -121,7 +130,8 @@ export async function initiateConnection(input: {
   if (!isOauthConnectorId(input.connectorId)) {
     return { ok: false, status: 404, error: "Connector not found." };
   }
-  const { data: existing, error: existingError } = await input.client
+
+  const { data: existingRows, error: existingError } = await input.client
     .from("connector_connections")
     .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .eq("workspace_id", input.workspaceId)
@@ -130,15 +140,20 @@ export async function initiateConnection(input: {
     .eq("connection_mode", "personal")
     .in("status", ["pending", "active"])
     .is("deleted_at", null)
-    .maybeSingle();
+    .order("created_at", { ascending: true });
   if (existingError) throw existingError;
 
-  if (existing) {
-    const row = asConnectionRow(existing);
-    const decision = resolveInitiateExisting(row);
+  const live = asConnectionRows(existingRows);
+  const pending = live.find(
+    (row) => row.status === "pending" && !isPendingExpired(row),
+  );
+
+  // Continue an in-flight OAuth unless the caller explicitly wants another account.
+  if (pending && !input.forceNew) {
+    const decision = resolveInitiateExisting(pending);
     if (decision.action === "reuse") {
       const auth = await beginProviderAuthorization({
-        connectionId: row.id,
+        connectionId: pending.id,
         workspaceId: input.workspaceId,
         ownerId: input.ownerId,
         connectorId: input.connectorId,
@@ -149,14 +164,29 @@ export async function initiateConnection(input: {
       }
       return {
         ok: true,
-        connection: connectionRowToPublic(row),
+        connection: connectionRowToPublic(pending),
         reused: true,
         authorizationUrl: auth.authorizationUrl,
       };
     }
-    if (decision.action === "conflict") {
-      return { ok: false, ...conflictError() };
-    }
+  }
+
+  if (!canAddAnotherConnectorAccount(live.length)) {
+    return {
+      ok: false,
+      ...conflictError(connectorAccountLimitMessage()),
+    };
+  }
+
+  const nameCheck = validateUniqueConnectorDisplayName({
+    raw: input.displayName,
+    existing: live.map((row) => ({
+      id: row.id,
+      displayName: row.display_name ?? "Account",
+    })),
+  });
+  if (!nameCheck.ok) {
+    return { ok: false, status: 400, error: nameCheck.error };
   }
 
   const id = newConnectionId();
@@ -168,6 +198,7 @@ export async function initiateConnection(input: {
     connector_id: input.connectorId,
     connection_mode: "personal" as const,
     status: "pending" as const,
+    display_name: nameCheck.value,
     connected_by: input.ownerId,
     pending_expires_at: pendingExpiresAtIso(),
     created_at: now,
@@ -181,37 +212,22 @@ export async function initiateConnection(input: {
     .single();
 
   if (insertError) {
+    const msg = insertError.message || "";
+    if (
+      insertError.code === "P0001" ||
+      msg.includes("connector_connection_limit")
+    ) {
+      return {
+        ok: false,
+        ...conflictError(connectorAccountLimitMessage()),
+      };
+    }
     if (insertError.code === "23505") {
-      const { data: raced } = await input.client
-        .from("connector_connections")
-        .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
-        .eq("workspace_id", input.workspaceId)
-        .eq("owner_id", input.ownerId)
-        .eq("connector_id", input.connectorId)
-        .eq("connection_mode", "personal")
-        .in("status", ["pending", "active"])
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (raced) {
-        const racedRow = asConnectionRow(raced);
-        const auth = await beginProviderAuthorization({
-          connectionId: racedRow.id,
-          workspaceId: input.workspaceId,
-          ownerId: input.ownerId,
-          connectorId: input.connectorId,
-          callbackOrigin: input.callbackOrigin,
-        });
-        if (!auth.ok) {
-          return { ok: false, status: 502, error: auth.error };
-        }
-        return {
-          ok: true,
-          connection: connectionRowToPublic(racedRow),
-          reused: true,
-          authorizationUrl: auth.authorizationUrl,
-        };
-      }
-      return { ok: false, ...conflictError() };
+      return {
+        ok: false,
+        status: 400,
+        error: "That account name is already used for this connector.",
+      };
     }
     throw insertError;
   }
@@ -222,7 +238,12 @@ export async function initiateConnection(input: {
     connectionId: id,
     connectorId: input.connectorId,
     eventType: "connection_initiated",
-    detail: { reason_code: "initiated", connector_id: input.connectorId, connection_id: id, workspace_id: input.workspaceId },
+    detail: {
+      reason_code: "initiated",
+      connector_id: input.connectorId,
+      connection_id: id,
+      workspace_id: input.workspaceId,
+    },
   });
 
   const auth = await beginProviderAuthorization({
@@ -241,6 +262,83 @@ export async function initiateConnection(input: {
     connection: connectionRowToPublic(asConnectionRow(inserted)),
     reused: false,
     authorizationUrl: auth.authorizationUrl,
+  };
+}
+
+export async function renameConnection(input: {
+  client: SupabaseClient;
+  workspaceId: string;
+  ownerId: string;
+  connectionId: string;
+  displayName: string;
+}): Promise<
+  | { ok: true; connection: ConnectorConnection }
+  | { ok: false; status: number; error: string }
+> {
+  const { data: rowData, error: loadError } = await input.client
+    .from("connector_connections")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
+    .eq("id", input.connectionId)
+    .eq("workspace_id", input.workspaceId)
+    .eq("owner_id", input.ownerId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (loadError) throw loadError;
+  if (!rowData) {
+    return { ok: false, ...connectionNotFoundError() };
+  }
+  const row = asConnectionRow(rowData);
+  if (row.status !== "pending" && row.status !== "active") {
+    return { ok: false, ...connectionNotFoundError() };
+  }
+
+  const { data: siblings, error: siblingsError } = await input.client
+    .from("connector_connections")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
+    .eq("workspace_id", input.workspaceId)
+    .eq("owner_id", input.ownerId)
+    .eq("connector_id", row.connector_id)
+    .eq("connection_mode", "personal")
+    .in("status", ["pending", "active"])
+    .is("deleted_at", null);
+  if (siblingsError) throw siblingsError;
+
+  const nameCheck = validateUniqueConnectorDisplayName({
+    raw: input.displayName,
+    existing: asConnectionRows(siblings).map((item) => ({
+      id: item.id,
+      displayName: item.display_name ?? "Account",
+    })),
+    excludeId: row.id,
+  });
+  if (!nameCheck.ok) {
+    return { ok: false, status: 400, error: nameCheck.error };
+  }
+
+  const now = new Date().toISOString();
+  const { data: updated, error: updateError } = await input.client
+    .from("connector_connections")
+    .update({ display_name: nameCheck.value, updated_at: now })
+    .eq("id", row.id)
+    .eq("owner_id", input.ownerId)
+    .eq("workspace_id", input.workspaceId)
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
+    .single();
+
+  if (updateError) {
+    if (updateError.code === "23505") {
+      return {
+        ok: false,
+        status: 400,
+        error: "That account name is already used for this connector.",
+      };
+    }
+    throw updateError;
+  }
+
+  return {
+    ok: true,
+    connection: connectionRowToPublic(asConnectionRow(updated)),
   };
 }
 

@@ -2,12 +2,16 @@
  * Pure connector lifecycle decisions — testable without Supabase.
  */
 
+import {
+  MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR,
+  canAddAnotherConnectorAccount,
+} from "./account-names.ts";
 import type { ConnectorConnectionRow } from "./mapper.ts";
 import { isPendingExpired } from "./mapper.ts";
 
 export type InitiateExistingDecision =
   | { action: "reuse"; reused: true }
-  | { action: "conflict" }
+  | { action: "conflict"; reason: "limit" | "duplicate_name" }
   | { action: "insert" };
 
 /** v1 live personal connection scope key. */
@@ -23,6 +27,11 @@ export function isLivePersonalStatus(status: string): boolean {
   return status === "pending" || status === "active";
 }
 
+/**
+ * Decide what to do when initiating against a single known live row.
+ * Prefer reusing non-expired pending; active alone is not a hard conflict
+ * when under the multi-account limit (caller must enforce count + name).
+ */
 export function resolveInitiateExisting(
   row: ConnectorConnectionRow | null,
   now = Date.now(),
@@ -32,7 +41,8 @@ export function resolveInitiateExisting(
     return { action: "reuse", reused: true };
   }
   if (row.status === "active") {
-    return { action: "conflict" };
+    // Active rows no longer block adding another account — caller checks limit.
+    return { action: "insert" };
   }
   return { action: "insert" };
 }
@@ -42,8 +52,7 @@ export function isDisconnectIdempotent(status: string): boolean {
 }
 
 /**
- * Simulates DB partial unique index: at most one live personal row per key.
- * Returns false when a second live row for the same key would violate v1 rules.
+ * At most MAX live personal rows per (workspace, owner, connector).
  */
 export function canAddLivePersonalConnection(
   existing: Array<{
@@ -62,15 +71,15 @@ export function canAddLivePersonalConnection(
 ): boolean {
   const key = livePersonalConnectionKey(candidate);
   if (!isLivePersonalStatus(candidate.status)) return true;
-  const conflict = existing.some((row) => {
+  const liveCount = existing.filter((row) => {
     if (row.deletedAt) return false;
     if (!isLivePersonalStatus(row.status)) return false;
     return livePersonalConnectionKey(row) === key;
-  });
-  return !conflict;
+  }).length;
+  return canAddAnotherConnectorAccount(liveCount);
 }
 
-/** Two users in one workspace may each hold a live connection for the same connector. */
+/** Two users in one workspace may each hold live connections for the same connector. */
 export function twoUsersSameConnectorAllowed(
   ownerA: string,
   ownerB: string,
@@ -100,3 +109,5 @@ export function twoUsersSameConnectorAllowed(
 export function legacyAccountShowsAsLive(status: string): boolean {
   return status === "active";
 }
+
+export { MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR };
