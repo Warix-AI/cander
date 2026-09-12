@@ -1,4 +1,9 @@
-/** Project Agent — Instructions + Schedule + Conversation. */
+/** Project Agent — Instructions + Schedule/Trigger + Scope + Activity.
+ *
+ * Agent decides what needs to happen (delegator).
+ * Cander owns intelligence + connector/tool execution.
+ * Conversation (`agent_messages`) is internal continuity only — not the Overview UI.
+ */
 
 export type AgentStatus = "draft" | "active" | "paused";
 
@@ -40,6 +45,38 @@ export type ProjectAgent = {
   updatedAt: string;
 };
 
+/**
+ * Which existing Cander connections this Agent may ask about.
+ * Empty = all of the user's connectors. Not agent-owned tools.
+ */
+export type AgentScopeConnection = {
+  connectionId: string;
+  connectorId: string;
+  /** Display label when known (e.g. booking@company.com). */
+  label?: string;
+};
+
+/** User-facing Activity outcome (Overview / global Activity feed). */
+export type AgentActivityOutcome =
+  | "completed"
+  | "failed"
+  | "waiting"
+  | "cancelled"
+  | "running";
+
+export type AgentActivityItem = {
+  id: string;
+  agentId: string;
+  agentName: string;
+  projectId: string;
+  workspaceId: string;
+  status: AgentActivityOutcome;
+  summary: string;
+  triggerType: string;
+  startedAt: string;
+  completedAt: string | null;
+};
+
 /** Runtime conversation turn — Agent speaks as the user to Cander. */
 export type AgentMessageRole = "agent" | "cander" | "system";
 
@@ -58,7 +95,8 @@ export type AgentRunStatus =
   | "running"
   | "completed"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "waiting";
 
 export type AgentRun = {
   id: string;
@@ -79,6 +117,8 @@ export type ProjectAgentBundle = {
   agent: ProjectAgent;
   messages?: AgentConversationMessage[];
   runs?: AgentRun[];
+  /** Connection allowlist for Cander when acting for this Agent. */
+  scope?: AgentScopeConnection[];
 };
 
 export type AgentConfigPatch = {
@@ -91,6 +131,8 @@ export type AgentConfigPatch = {
   icon?: string | null;
   color?: string | null;
   pinned?: boolean;
+  /** Replace Agent Scope connection ids (empty = all user connectors). */
+  scopeConnectionIds?: string[];
   /** @deprecated Mapped to instructions for builder-chat compatibility */
   createSkill?: {
     name: string;
@@ -160,6 +202,37 @@ export function agentStatusFromRow(
   return enabled ? "active" : "paused";
 }
 
+/** Map DB / run status onto user-facing Activity outcomes. */
+export function activityOutcomeFromRunStatus(
+  status: string | null | undefined,
+): AgentActivityOutcome {
+  if (status === "completed") return "completed";
+  if (status === "failed") return "failed";
+  if (status === "waiting" || status === "approval_needed") return "waiting";
+  if (status === "cancelled") return "cancelled";
+  if (status === "running") return "running";
+  return "failed";
+}
+
+export function runToActivityItem(opts: {
+  run: AgentRun;
+  agentName: string;
+}): AgentActivityItem {
+  const { run, agentName } = opts;
+  return {
+    id: run.id,
+    agentId: run.agentId,
+    agentName,
+    projectId: run.projectId,
+    workspaceId: run.workspaceId,
+    status: activityOutcomeFromRunStatus(run.status),
+    summary: (run.summary || run.error || "No summary.").slice(0, 400),
+    triggerType: run.triggerType,
+    startedAt: run.startedAt,
+    completedAt: run.completedAt,
+  };
+}
+
 export function errorMessageFromUnknown(err: unknown): string {
   if (err instanceof Error && err.message.trim()) return err.message;
   if (typeof err === "string" && err.trim()) return err;
@@ -175,6 +248,31 @@ export function errorMessageFromUnknown(err: unknown): string {
     }
   }
   return "Agent run failed.";
+}
+
+/** Deterministic short outcome when we skip an LLM summary call. */
+export function fallbackRunOutcomeSummary(opts: {
+  status: AgentActivityOutcome;
+  lastAgent?: string;
+  lastCander?: string;
+  error?: string;
+}): string {
+  if (opts.status === "failed") {
+    return (opts.error || "Run failed.").slice(0, 280);
+  }
+  if (opts.status === "waiting") {
+    const hint = opts.lastCander?.trim() || opts.lastAgent?.trim() || "";
+    return hint
+      ? `Waiting for user action. ${hint.slice(0, 200)}`
+      : "Waiting for user action.";
+  }
+  if (opts.status === "cancelled") return "Run cancelled.";
+  const cander = opts.lastCander?.trim();
+  if (cander) {
+    const oneLine = cander.replace(/\s+/g, " ").slice(0, 220);
+    return oneLine;
+  }
+  return "Wake completed.";
 }
 
 /** @deprecated Dormant workflow canvas types — not used by V1 product UI. */

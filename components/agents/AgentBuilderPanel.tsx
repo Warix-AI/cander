@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, LoaderCircle, Play } from "lucide-react";
 import {
   applyAgentConfigPatchClient,
+  listUserConnectorConnectionsClient,
   loadAgentBundleClient,
   runAgentClient,
+  setAgentScopeClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
 import {
@@ -29,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { Field, TextArea } from "./builder/fields";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
-type ConfigTab = "instructions" | "schedule";
+type ConfigTab = "instructions" | "schedule" | "scope";
 
 export function AgentBuilderPanel({
   workspaceId,
@@ -242,7 +244,7 @@ export function AgentBuilderPanel({
           </div>
           <p className="mt-0.5 truncate text-[12.5px] text-muted-foreground">
             {bundle.agent.description ||
-              "Instructions + Schedule · Chat on the left configures this agent"}
+              "Instructions + Schedule + Scope · Chat configures this agent"}
           </p>
         </div>
         <button
@@ -271,6 +273,7 @@ export function AgentBuilderPanel({
           [
             ["instructions", "Instructions"],
             ["schedule", "Schedule"],
+            ["scope", "Scope"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -300,13 +303,32 @@ export function AgentBuilderPanel({
               void applyPatch({ instructions })
             }
           />
-        ) : (
+        ) : tab === "schedule" ? (
           <ScheduleEditor
             trigger={bundle.agent.trigger}
             nextRunAt={bundle.agent.nextRunAt}
             busy={saveState === "saving"}
             onSave={(trigger) =>
               void applyPatch({ trigger, status: "active" })
+            }
+          />
+        ) : (
+          <ScopeEditor
+            workspaceId={workspaceId}
+            projectId={projectId}
+            agentId={agentId}
+            selectedIds={(bundle.scope ?? []).map((s) => s.connectionId)}
+            busy={saveState === "saving"}
+            onSave={(connectionIds) =>
+              void runSave(async () => {
+                const scope = await setAgentScopeClient({
+                  workspaceId,
+                  projectId,
+                  agentId,
+                  connectionIds,
+                });
+                setBundle((prev) => (prev ? { ...prev, scope } : prev));
+              })
             }
           />
         )}
@@ -532,6 +554,118 @@ function ScheduleEditor({
         }}
       >
         Save schedule
+      </button>
+    </div>
+  );
+}
+
+function ScopeEditor({
+  workspaceId,
+  selectedIds,
+  busy,
+  onSave,
+}: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  selectedIds: string[];
+  busy: boolean;
+  onSave: (connectionIds: string[]) => void;
+}) {
+  const [connections, setConnections] = useState<
+    Array<{ id: string; connectorId: string; label: string }>
+  >([]);
+  const [picked, setPicked] = useState<string[]>(selectedIds);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPicked(selectedIds);
+  }, [selectedIds]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listUserConnectorConnectionsClient({ workspaceId })
+      .then((rows) => {
+        if (!cancelled) setConnections(rows);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setLoadError(
+            err instanceof Error ? err.message : "Could not load connections.",
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
+
+  const toggle = (id: string) => {
+    setPicked((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  return (
+    <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+      <div>
+        <h2 className="text-[14px] font-semibold tracking-[-0.02em]">Scope</h2>
+        <p className="mt-1 text-[12.5px] text-muted-foreground">
+          Which Cander resources may this Agent ask about? Leave empty to allow
+          all of your connected apps. This is not agent-owned tools — Cander
+          still executes everything.
+        </p>
+      </div>
+
+      {loadError ? (
+        <p className="text-[12.5px] text-destructive">{loadError}</p>
+      ) : null}
+
+      {!connections.length && !loadError ? (
+        <p className="text-[12.5px] text-muted-foreground">
+          No active connections yet. Connect apps under Connectors, then return
+          here.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border rounded-[12px] border border-border">
+          {connections.map((conn) => {
+            const on = picked.includes(conn.id);
+            return (
+              <li key={conn.id}>
+                <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 text-[13px]">
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    disabled={busy}
+                    onChange={() => toggle(conn.id)}
+                    className="h-4 w-4"
+                  />
+                  <span className="min-w-0 flex-1 truncate font-medium">
+                    {conn.label}
+                  </span>
+                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground uppercase">
+                    {conn.connectorId}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <p className="text-[12px] text-muted-foreground">
+        {picked.length === 0
+          ? "Current: all user connectors"
+          : `Current: ${picked.length} connection${picked.length === 1 ? "" : "s"}`}
+      </p>
+
+      <button
+        type="button"
+        disabled={busy}
+        className="rounded-full bg-foreground px-4 py-2 text-[12.5px] font-medium text-background disabled:opacity-50"
+        onClick={() => onSave(picked)}
+      >
+        Save scope
       </button>
     </div>
   );

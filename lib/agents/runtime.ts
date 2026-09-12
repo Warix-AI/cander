@@ -1,6 +1,8 @@
 /**
- * Agent runtime — Agent asks Cander AI; Cander uses normal tools/connectors.
- * Server-only.
+ * Agent runtime — Agent decides; Cander executes connectors/tools.
+ * Multi-step Agent ↔ Cander delegation loop. Server-only.
+ *
+ * Model: Instructions + Schedule/Trigger + Scope + Activity.
  */
 
 import OpenAI from "openai";
@@ -11,17 +13,24 @@ import {
   createAgentRun,
   getAgentRun,
   getProjectAgent,
+  listAgentConnectorScopes,
   listAgentMessages,
   loadAgentBundle,
   updateProjectAgent,
 } from "@/lib/agents/server";
 import { computeNextRunAt } from "@/lib/agents/schedule";
 import type {
+  AgentActivityOutcome,
   AgentConversationMessage,
   AgentRun,
+  AgentRunStatus,
+  AgentScopeConnection,
   ProjectAgent,
 } from "@/lib/agents/types";
-import { errorMessageFromUnknown } from "@/lib/agents/types";
+import {
+  errorMessageFromUnknown,
+  fallbackRunOutcomeSummary,
+} from "@/lib/agents/types";
 import { runAgentServerLoop } from "@/lib/ai/runtime/agent-loop-server";
 import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
 
@@ -86,11 +95,21 @@ function historyForPrompt(messages: AgentConversationMessage[]): string {
     .join("\n\n");
 }
 
+function formatScopeForPrompt(scope: AgentScopeConnection[]): string {
+  if (!scope.length) {
+    return "Scope: all of the user's connected apps (no restriction).";
+  }
+  return `Scope (only these Cander resources may be used): ${scope
+    .map((s) => s.label || `${s.connectorId} (${s.connectionId})`)
+    .join("; ")}.`;
+}
+
 async function planNextAgentMessage(opts: {
   agent: ProjectAgent;
   history: AgentConversationMessage[];
   wakeNudge?: string;
   round: number;
+  scope: AgentScopeConnection[];
 }): Promise<AgentPlan> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -105,57 +124,56 @@ async function planNextAgentMessage(opts: {
   const openai = new OpenAI({ apiKey });
   const model = resolveOpenAIModel();
   const system = `You are the automated agent named "${opts.agent.name}".
-You act as an extension of the user. You do NOT call tools yourself.
-You talk to Cander AI in first person (as the user) and ask Cander to do the work
-using the user's existing connectors (Gmail, Calendar, etc.).
+You are a DELEGATOR only. You never call Gmail, Calendar, CRM, Stripe, or any other app yourself.
+You talk to Cander AI in first person (as the user) and ask Cander to do each step.
+Cander owns intelligence and connector/tool execution.
+
+${formatScopeForPrompt(opts.scope)}
 
 Your standing instructions (Markdown):
 ---
 ${opts.agent.instructions || "(none)"}
 ---
 
-Decide the next message to send to Cander, or finish this wake-up.
-Return ONLY JSON: {"message":"string","done":boolean}
+Rules:
+- Decide the next single message to send to Cander, or finish this wake-up.
+- Never claim you already checked email, booked something, or sent a message — only Cander can do that.
+- After Cander replies, evaluate against your instructions and either ask the next concrete step or finish.
+- Prefer short, specific asks (one step at a time).
+- If blocked, waiting on the user, or nothing useful remains, set done=true.
+- Return ONLY JSON: {"message":"string","done":boolean}
 - If more work is needed, done=false and message is what you ask Cander.
-- If the job for this wake is complete, blocked, or needs something unavailable, done=true.
-- Keep messages short and concrete.
-- Never claim you already sent email or ran tools — only Cander can do that.`;
+- If this wake is complete, blocked, or needs something unavailable, done=true (message may be empty).`;
 
   const user = [
-    `Wake round: ${opts.round + 1} of ${MAX_AGENT_ROUNDS}`,
-    opts.wakeNudge?.trim()
-      ? `Wake nudge from scheduler/UI: ${opts.wakeNudge.trim()}`
-      : "",
-    `Conversation so far:\n${historyForPrompt(opts.history)}`,
     opts.round === 0
-      ? "This is the start of a wake-up. Ask Cander for the first useful step."
-      : "Continue or finish based on Cander's last reply.",
+      ? "Wake-up: start or continue work per your instructions."
+      : `Delegation round ${opts.round + 1}. Continue or finish.`,
+    opts.wakeNudge?.trim()
+      ? `Wake nudge from the system:\n${opts.wakeNudge.trim()}`
+      : null,
+    "Conversation so far:",
+    historyForPrompt(opts.history),
   ]
     .filter(Boolean)
     .join("\n\n");
 
   try {
-    const response = await openai.responses.create({
+    const res = await openai.chat.completions.create({
       model,
-      input: [
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
     });
-    const text =
-      typeof response.output_text === "string" ? response.output_text.trim() : "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as {
-        message?: unknown;
-        done?: unknown;
-      };
-      return {
-        message: String(parsed.message ?? "").trim(),
-        done: Boolean(parsed.done),
-      };
-    }
-    return { message: text, done: !text };
+    const text = res.choices[0]?.message?.content?.trim() || "{}";
+    const parsed = JSON.parse(text) as { message?: unknown; done?: unknown };
+    return {
+      message: String(parsed.message ?? "").trim(),
+      done: Boolean(parsed.done),
+    };
   } catch {
     if (opts.round === 0) {
       return {
@@ -169,6 +187,60 @@ Return ONLY JSON: {"message":"string","done":boolean}
   }
 }
 
+async function summarizeAgentRunOutcome(opts: {
+  agent: ProjectAgent;
+  history: AgentConversationMessage[];
+  status: AgentActivityOutcome;
+  error?: string;
+}): Promise<string> {
+  const lastAgent = [...opts.history]
+    .reverse()
+    .find((m) => m.role === "agent")?.content;
+  const lastCander = [...opts.history]
+    .reverse()
+    .find((m) => m.role === "cander")?.content;
+
+  const fallback = fallbackRunOutcomeSummary({
+    status: opts.status,
+    lastAgent,
+    lastCander,
+    error: opts.error,
+  });
+
+  if (opts.status === "failed" || opts.status === "cancelled") {
+    return fallback;
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) return fallback;
+
+  try {
+    const openai = new OpenAI({ apiKey });
+    const model = resolveOpenAIModel();
+    const res = await openai.chat.completions.create({
+      model,
+      temperature: 0.2,
+      max_tokens: 120,
+      messages: [
+        {
+          role: "system",
+          content: `Summarize this agent run for an Activity feed in 1–2 short sentences.
+Focus on the outcome (what was done, blocked, or waiting) — not the full dialogue.
+Status: ${opts.status}. Agent: ${opts.agent.name}.`,
+        },
+        {
+          role: "user",
+          content: historyForPrompt(opts.history.slice(-12)),
+        },
+      ],
+    });
+    const text = res.choices[0]?.message?.content?.trim();
+    return text ? text.slice(0, 400) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function runAgent(
   input: RunAgentInput,
 ): Promise<RunAgentResult> {
@@ -176,6 +248,7 @@ export async function runAgent(
     input.agentId,
     input.workspaceId,
     input.projectId,
+    { profileId: input.profileId },
   );
   if (!bundle) throw new Error("Agent not found.");
 
@@ -226,6 +299,7 @@ export async function runAgent(
   const nowIso = new Date().toISOString();
   let toolCount = 0;
   let lastCander = "";
+  let pausedWaiting = false;
 
   try {
     await appendAgentMessage({
@@ -242,8 +316,6 @@ export async function runAgent(
       workspaceId: input.workspaceId,
       limit: 80,
     });
-    // Exclude this wake's system marker from planning context noise optionally —
-    // keep full history including prior wakes.
     const workingHistory = [...history];
     const client = createSupabaseAdminClient();
     const runtimeChatId = `agent-runtime:${input.agentId}`;
@@ -255,12 +327,23 @@ export async function runAgent(
       title: `${bundle.agent.name} · runtime`,
     });
 
+    const scope =
+      bundle.scope ??
+      (await listAgentConnectorScopes({
+        agentId: input.agentId,
+        workspaceId: input.workspaceId,
+        profileId: input.profileId,
+      }));
+    const selectedConnectionIds = scope.map((s) => s.connectionId);
+    const scopePrompt = formatScopeForPrompt(scope);
+
     for (let round = 0; round < MAX_AGENT_ROUNDS; round++) {
       const plan = await planNextAgentMessage({
         agent: bundle.agent,
         history: workingHistory,
         wakeNudge: round === 0 ? input.message : undefined,
         round,
+        scope,
       });
 
       if (plan.done && !plan.message.trim()) break;
@@ -297,10 +380,15 @@ export async function runAgent(
         workspaceId: input.workspaceId,
         profileId: input.profileId,
         messages: loopMessages,
-        // No allowedToolIds — Cander uses the user's normal connectors/tools.
+        // Scope via selected connections — not agent-owned tools.
+        ...(selectedConnectionIds.length
+          ? { selectedConnectionIds }
+          : {}),
         systemExtra: [
           `An automated agent named "${bundle.agent.name}" is speaking as the user.`,
+          `The Agent is a delegator only. You (Cander) execute connectors/tools.`,
           `Follow normal Cander safety and approval rules. Do not grant the agent extra permissions.`,
+          scopePrompt,
           `Agent standing instructions (for your awareness):`,
           bundle.agent.instructions.slice(0, 4000),
         ].join("\n"),
@@ -327,17 +415,27 @@ export async function runAgent(
       workingHistory.push(canderMsg);
 
       if (loop.pause) {
-        // Approval / skill gate — stop this wake; user resolves in normal Cander flows.
+        pausedWaiting = true;
         break;
       }
       if (plan.done) break;
     }
 
+    const outcomeStatus: AgentActivityOutcome = pausedWaiting
+      ? "waiting"
+      : "completed";
+    const runStatus: AgentRunStatus = pausedWaiting ? "waiting" : "completed";
+    const summary = await summarizeAgentRunOutcome({
+      agent: bundle.agent,
+      history: workingHistory,
+      status: outcomeStatus,
+    });
+
     const completed = await completeAgentRun({
       runId: run.id,
       workspaceId: input.workspaceId,
-      status: "completed",
-      summary: lastCander.slice(0, 2000) || "Wake completed.",
+      status: runStatus,
+      summary,
     });
 
     if (
@@ -382,12 +480,17 @@ export async function runAgent(
     } catch {
       /* ignore */
     }
+    const summary = fallbackRunOutcomeSummary({
+      status: "failed",
+      error: message,
+      lastCander,
+    });
     const failed = await completeAgentRun({
       runId: run.id,
       workspaceId: input.workspaceId,
       status: "failed",
       error: message,
-      summary: message,
+      summary,
     });
     return { run: failed, content: message, toolCount };
   }
@@ -452,7 +555,7 @@ export async function claimDueScheduledAgents(limit = 10): Promise<
       agentId: String(row.id),
       workspaceId: String(row.workspace_id),
       projectId: String(row.project_id),
-      createdBy: String(row.created_by),
+      createdBy: String(row.created_by ?? ""),
       dueAt,
     });
   }

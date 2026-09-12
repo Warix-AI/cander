@@ -2,18 +2,21 @@
  * Server helpers for project agents (admin client + membership).
  * Server-only — do not import from client components.
  *
- * Model: Agent = Instructions + Schedule + Conversation.
+ * Model: Agent = Instructions + Schedule/Trigger + Scope + Activity.
+ * Agent delegates; Cander executes connectors/tools.
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { computeNextRunAt } from "@/lib/agents/schedule";
 import type {
+  AgentActivityItem,
   AgentConfigPatch,
   AgentConfigProposal,
   AgentConversationMessage,
   AgentMessageRole,
   AgentRun,
   AgentRunStatus,
+  AgentScopeConnection,
   AgentStatus,
   AgentTrigger,
   ProjectAgent,
@@ -23,12 +26,14 @@ import {
   agentStatusFromRow,
   BUDDY_STARTER_INSTRUCTIONS,
   parseAgentTrigger,
+  runToActivityItem,
 } from "@/lib/agents/types";
 import {
   assertProjectAccess,
   assertProjectInWorkspace as projectExistsInWorkspace,
   assertWorkspaceMember as workspaceMemberCheck,
 } from "@/lib/security/project-access";
+import { listActiveConnections } from "@/lib/connectors/connections";
 
 export function newProjectAgentId() {
   return `pag_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -40,6 +45,10 @@ export function newAgentRunId() {
 
 export function newAgentMessageId() {
   return `amsg_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
+}
+
+export function newAgentScopeId() {
+  return `ascope_${crypto.randomUUID().replace(/-/g, "").slice(0, 16)}`;
 }
 
 export async function assertWorkspaceMember(
@@ -108,8 +117,8 @@ function mapRun(row: Record<string, unknown>): AgentRun {
       : {};
   const status = String(row.status ?? "running");
   const normalized: AgentRunStatus =
-    status === "approval_needed"
-      ? "cancelled"
+    status === "approval_needed" || status === "waiting"
+      ? "waiting"
       : status === "completed" ||
           status === "failed" ||
           status === "cancelled" ||
@@ -409,14 +418,137 @@ export async function loadAgentBundle(
   agentId: string,
   workspaceId: string,
   projectId: string,
+  opts?: { profileId?: string | null },
 ): Promise<ProjectAgentBundle | null> {
   const agent = await getProjectAgent(agentId, workspaceId, projectId);
   if (!agent) return null;
-  const [messages, runs] = await Promise.all([
+  const [messages, runs, scope] = await Promise.all([
     listAgentMessages({ agentId, workspaceId, limit: 200 }),
     listAgentRuns({ agentId, workspaceId, limit: 20 }),
+    listAgentConnectorScopes({
+      agentId,
+      workspaceId,
+      profileId: opts?.profileId ?? null,
+    }),
   ]);
-  return { agent, messages, runs };
+  return { agent, messages, runs, scope };
+}
+
+export async function listAgentConnectorScopes(opts: {
+  agentId: string;
+  workspaceId: string;
+  profileId?: string | null;
+}): Promise<AgentScopeConnection[]> {
+  const admin = createSupabaseAdminClient();
+  const { data, error } = await admin
+    .from("agent_connector_scopes")
+    .select("connection_id, connector_id, enabled")
+    .eq("agent_id", opts.agentId)
+    .eq("workspace_id", opts.workspaceId)
+    .eq("enabled", true);
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []).map((row) => ({
+    connectionId: String(row.connection_id),
+    connectorId: String(row.connector_id),
+  }));
+
+  if (!rows.length) return [];
+
+  let labelById = new Map<string, string>();
+  if (opts.profileId) {
+    try {
+      const listed = await listActiveConnections({
+        client: admin,
+        workspaceId: opts.workspaceId,
+        profileId: opts.profileId,
+      });
+      if (listed.ok) {
+        labelById = new Map(
+          listed.connections.map((c) => [
+            c.connectionId,
+            c.label || c.connectorId,
+          ]),
+        );
+      }
+    } catch {
+      /* labels optional */
+    }
+  }
+
+  return rows.map((row) => ({
+    ...row,
+    ...(labelById.has(row.connectionId)
+      ? { label: labelById.get(row.connectionId) }
+      : {}),
+  }));
+}
+
+/**
+ * Replace the Agent's connection allowlist.
+ * Empty array = clear scope (all user connectors allowed).
+ */
+export async function setAgentConnectorScopes(opts: {
+  agentId: string;
+  workspaceId: string;
+  projectId: string;
+  profileId: string;
+  connectionIds: string[];
+}): Promise<AgentScopeConnection[]> {
+  const admin = createSupabaseAdminClient();
+  const ids = [
+    ...new Set(
+      opts.connectionIds.map((id) => id.trim()).filter(Boolean),
+    ),
+  ];
+
+  const listed = await listActiveConnections({
+    client: admin,
+    workspaceId: opts.workspaceId,
+    profileId: opts.profileId,
+  });
+  if (!listed.ok) {
+    throw new Error(listed.error || "Could not list connections.");
+  }
+  const byId = new Map(
+    listed.connections.map((c) => [c.connectionId, c] as const),
+  );
+
+  const nextRows = ids.map((connectionId) => {
+    const conn = byId.get(connectionId);
+    if (!conn) {
+      throw new Error(`Unknown or inactive connection: ${connectionId}`);
+    }
+    return {
+      id: newAgentScopeId(),
+      workspace_id: opts.workspaceId,
+      project_id: opts.projectId,
+      agent_id: opts.agentId,
+      connection_id: conn.connectionId,
+      connector_id: conn.connectorId,
+      enabled: true,
+    };
+  });
+
+  const { error: delError } = await admin
+    .from("agent_connector_scopes")
+    .delete()
+    .eq("agent_id", opts.agentId)
+    .eq("workspace_id", opts.workspaceId);
+  if (delError) throw new Error(delError.message);
+
+  if (nextRows.length) {
+    const { error: insError } = await admin
+      .from("agent_connector_scopes")
+      .insert(nextRows);
+    if (insError) throw new Error(insError.message);
+  }
+
+  return listAgentConnectorScopes({
+    agentId: opts.agentId,
+    workspaceId: opts.workspaceId,
+    profileId: opts.profileId,
+  });
 }
 
 export async function createAgentRun(opts: {
@@ -535,6 +667,7 @@ export async function applyAgentConfigPatch(opts: {
   workspaceId: string;
   projectId: string;
   patch: AgentConfigPatch;
+  profileId?: string | null;
 }): Promise<ProjectAgentBundle> {
   const { agentId, workspaceId, projectId, patch } = opts;
 
@@ -570,7 +703,23 @@ export async function applyAgentConfigPatch(opts: {
     });
   }
 
-  const bundle = await loadAgentBundle(agentId, workspaceId, projectId);
+  if (patch.scopeConnectionIds !== undefined) {
+    const profileId = opts.profileId?.trim() || null;
+    if (!profileId) {
+      throw new Error("profileId is required to update Agent Scope.");
+    }
+    await setAgentConnectorScopes({
+      agentId,
+      workspaceId,
+      projectId,
+      profileId,
+      connectionIds: patch.scopeConnectionIds,
+    });
+  }
+
+  const bundle = await loadAgentBundle(agentId, workspaceId, projectId, {
+    profileId: opts.profileId ?? null,
+  });
   if (!bundle) throw new Error("Agent not found after patch.");
   return bundle;
 }
@@ -701,7 +850,12 @@ export async function listAgentActivity(opts: {
   agentId: string;
   workspaceId: string;
   limit?: number;
-}): Promise<{ runs: AgentRun[]; messages: AgentConversationMessage[] }> {
+  agentName?: string;
+}): Promise<{
+  runs: AgentRun[];
+  messages: AgentConversationMessage[];
+  activity: AgentActivityItem[];
+}> {
   const [runs, messages] = await Promise.all([
     listAgentRuns({
       agentId: opts.agentId,
@@ -714,5 +868,48 @@ export async function listAgentActivity(opts: {
       limit: 200,
     }),
   ]);
-  return { runs, messages };
+  const agentName = opts.agentName?.trim() || "Agent";
+  const activity = runs.map((run) =>
+    runToActivityItem({ run, agentName }),
+  );
+  return { runs, messages, activity };
+}
+
+/** Cross-agent Activity feed for the workspace Agents section. */
+export async function listWorkspaceAgentActivity(opts: {
+  workspaceId: string;
+  limit?: number;
+}): Promise<AgentActivityItem[]> {
+  const admin = createSupabaseAdminClient();
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 40));
+  const { data, error } = await admin
+    .from("agent_runs")
+    .select(
+      "id, workspace_id, project_id, agent_id, trigger_type, status, started_at, completed_at, summary, error, idempotency_key, trigger_payload",
+    )
+    .eq("workspace_id", opts.workspaceId)
+    .order("started_at", { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+
+  const runs = (data ?? []).map((r) => mapRun(r as Record<string, unknown>));
+  const agentIds = [...new Set(runs.map((r) => r.agentId))];
+  const nameById = new Map<string, string>();
+  if (agentIds.length) {
+    const { data: agents } = await admin
+      .from("project_agents")
+      .select("id, name")
+      .eq("workspace_id", opts.workspaceId)
+      .in("id", agentIds);
+    for (const row of agents ?? []) {
+      nameById.set(String(row.id), String(row.name ?? "Agent"));
+    }
+  }
+
+  return runs.map((run) =>
+    runToActivityItem({
+      run,
+      agentName: nameById.get(run.agentId) || "Agent",
+    }),
+  );
 }

@@ -1,6 +1,6 @@
 /**
  * Compact agent definition for AI tools and the builder UI.
- * Instructions + Schedule (no agent-scoped connectors).
+ * Instructions + Schedule + Scope (connection allowlist for Cander).
  */
 
 import type { ProjectAgentBundle } from "@/lib/agents/types";
@@ -17,6 +17,12 @@ export type AgentDefinition = {
   instructions: string;
   trigger: ProjectAgentBundle["agent"]["trigger"];
   nextRunAt: string | null;
+  /** Existing Cander connections this Agent may ask about (empty = all). */
+  scope: Array<{
+    connectionId: string;
+    connectorId: string;
+    label?: string;
+  }>;
   recentRuns: Array<{
     id: string;
     status: string;
@@ -40,6 +46,11 @@ export function bundleToAgentDefinition(
     instructions: bundle.agent.instructions,
     trigger: bundle.agent.trigger,
     nextRunAt: bundle.agent.nextRunAt,
+    scope: (bundle.scope ?? []).map((s) => ({
+      connectionId: s.connectionId,
+      connectorId: s.connectorId,
+      ...(s.label ? { label: s.label } : {}),
+    })),
     recentRuns: (bundle.runs ?? []).slice(0, 5).map((r) => ({
       id: r.id,
       status: r.status,
@@ -59,11 +70,18 @@ export function formatAgentDefinitionSummary(def: AgentDefinition): string {
   const preview = def.instructions.trim();
   const clipped =
     preview.length > 400 ? `${preview.slice(0, 400)}…` : preview || "(empty)";
+  const scopeLine =
+    def.scope.length === 0
+      ? "Scope: all user connectors"
+      : `Scope: ${def.scope
+          .map((s) => s.label || `${s.connectorId}:${s.connectionId}`)
+          .join(", ")}`;
   return [
     `Agent: ${def.name} (${def.status})`,
     def.description ? `Description: ${def.description}` : null,
     `Trigger: ${trigger}`,
     def.nextRunAt ? `Next run: ${def.nextRunAt}` : null,
+    scopeLine,
     `Runtime messages: ${def.messageCount}`,
     `Instructions:\n${clipped}`,
   ]
@@ -78,7 +96,7 @@ export function validateAgentDefinition(def: AgentDefinition): {
   const issues: string[] = [];
   if (!def.name.trim()) issues.push("Name is required.");
   if (!def.instructions.trim()) {
-    issues.push("Instructions markdown is required.");
+    issues.push("Instructions are required.");
   }
   return { ok: issues.length === 0, issues };
 }

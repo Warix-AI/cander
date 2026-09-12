@@ -22,6 +22,7 @@ import { ConnectorOAuthDeepLinkListener } from "@/components/connectors/Connecto
 import { SpaceSettingsModal } from "@/components/overlays/SpaceSettingsModal";
 import { WorkspaceModal } from "@/components/overlays/WorkspaceModal";
 import { InviteWall } from "@/components/overlays/InviteWall";
+import { AgentsActivityModal } from "@/components/overlays/AgentsActivityModal";
 import { OnboardingFlow } from "@/components/onboarding/OnboardingFlow";
 import {
   getAuthServerSnapshot,
@@ -296,6 +297,7 @@ function AuthenticatedShell() {
           <SpaceSettingsModal />
           <WorkspaceModal />
           <InviteWall />
+          <AgentsActivityModal />
           <PublishSheet />
           <DomainsSheet />
           <BrowserPipOverlay />

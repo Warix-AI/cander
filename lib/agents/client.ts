@@ -15,10 +15,12 @@ import {
   invalidateCachedProjectAgents,
 } from "@/lib/agents/cache";
 import type {
+  AgentActivityItem,
   AgentConfigPatch,
   AgentConfigProposal,
   AgentConversationMessage,
   AgentRun,
+  AgentScopeConnection,
   ProjectAgent,
   ProjectAgentBundle,
 } from "@/lib/agents/types";
@@ -326,6 +328,7 @@ export async function fetchAgentConversationClient(opts: {
   agent: ProjectAgent;
   messages: AgentConversationMessage[];
   runs: AgentRun[];
+  activity: AgentActivityItem[];
 }> {
   const headers = await authHeaders();
   const params = new URLSearchParams({ workspaceId: opts.workspaceId });
@@ -337,6 +340,7 @@ export async function fetchAgentConversationClient(opts: {
     runs?: AgentRun[];
     messages?: AgentConversationMessage[];
     agent?: ProjectAgent;
+    activity?: AgentActivityItem[];
   }>(res);
   const bundle = await loadAgentBundleClient({
     workspaceId: opts.workspaceId,
@@ -348,5 +352,90 @@ export async function fetchAgentConversationClient(opts: {
     agent: data.agent ?? bundle.agent,
     messages: data.messages ?? bundle.messages ?? [],
     runs: data.runs ?? bundle.runs ?? [],
+    activity: data.activity ?? [],
   };
+}
+
+export async function setAgentScopeClient(opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  connectionIds: string[];
+}): Promise<AgentScopeConnection[]> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/scope`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        workspaceId: opts.workspaceId,
+        connectionIds: opts.connectionIds,
+      }),
+    },
+  );
+  const data = await parseJson<{
+    scope?: AgentScopeConnection[];
+  }>(res);
+  invalidateCachedProjectAgents(opts.workspaceId, opts.projectId);
+  const bundle = await loadAgentBundleClient({
+    workspaceId: opts.workspaceId,
+    projectId: opts.projectId,
+    agentId: opts.agentId,
+    force: true,
+  });
+  setCachedAgentBundle(opts.workspaceId, opts.projectId, opts.agentId, {
+    ...bundle,
+    scope: data.scope ?? bundle.scope ?? [],
+  });
+  return data.scope ?? [];
+}
+
+export async function fetchWorkspaceAgentActivityClient(opts: {
+  workspaceId: string;
+  limit?: number;
+}): Promise<AgentActivityItem[]> {
+  const headers = await authHeaders();
+  const params = new URLSearchParams({
+    workspaceId: opts.workspaceId,
+  });
+  if (opts.limit) params.set("limit", String(opts.limit));
+  const res = await fetch(`/api/agents/activity?${params}`, { headers });
+  const data = await parseJson<{
+    activity?: AgentActivityItem[];
+  }>(res);
+  return data.activity ?? [];
+}
+
+export async function listUserConnectorConnectionsClient(opts: {
+  workspaceId: string;
+}): Promise<
+  Array<{ id: string; connectorId: string; label: string; status: string }>
+> {
+  const headers = await authHeaders();
+  const params = new URLSearchParams({ workspaceId: opts.workspaceId });
+  const res = await fetch(`/api/connectors/connections?${params}`, {
+    headers,
+  });
+  const data = await parseJson<{
+    connections?: Array<Record<string, unknown>>;
+  }>(res);
+  return (data.connections ?? [])
+    .filter((row) => String(row.status ?? "") === "active")
+    .map((row) => {
+      const connectorId = String(row.connectorId ?? row.connector_id ?? "");
+      const id = String(row.id ?? "");
+      const label =
+        connectorId === "gmail"
+          ? "Gmail"
+          : connectorId === "slack"
+            ? "Slack"
+            : connectorId || id.slice(0, 8);
+      return {
+        id,
+        connectorId,
+        label: `${label} · ${id.slice(0, 8)}`,
+        status: String(row.status ?? "active"),
+      };
+    });
 }

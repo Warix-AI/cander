@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import {
   ArrowLeft,
+  Activity,
   Building2,
   ChartNoAxesColumn,
   CreditCard,
@@ -92,6 +93,7 @@ export function Sidebar() {
     openThread,
     openProject,
     openConnector,
+    openOverlay,
     connectorId,
     entitlements,
     actor,
@@ -561,6 +563,19 @@ export function Sidebar() {
                           headerClassName={pinSectionHeaderClass(sectionActive)}
                           iconClassName="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                         >
+                          {group.id === "agents" ? (
+                            <button
+                              type="button"
+                              onClick={() => openOverlay("agents-activity")}
+                              className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                            >
+                              <Activity
+                                className="h-3.5 w-3.5 shrink-0"
+                                strokeWidth={1.6}
+                              />
+                              <span className="truncate">Activity</span>
+                            </button>
+                          ) : null}
                           {group.items.map((item) => renderPinnedRow(item))}
                         </PinSectionFolder>
                       );

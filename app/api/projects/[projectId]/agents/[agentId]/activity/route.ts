@@ -52,6 +52,7 @@ export async function GET(
       agentId,
       workspaceId,
       limit: 40,
+      agentName: agent.name,
     });
     return NextResponse.json({ agent, ...activity });
   } catch (err) {

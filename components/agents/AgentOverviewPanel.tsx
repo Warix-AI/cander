@@ -10,7 +10,11 @@ import {
 } from "@/lib/agents/client";
 import { peekCachedProjectAgents } from "@/lib/agents/cache";
 import { notifyAgentRuntimeRefresh } from "@/components/agents/AgentRuntimeTranscript";
-import type { AgentRun, ProjectAgent } from "@/lib/agents/types";
+import type {
+  AgentActivityItem,
+  AgentRun,
+  ProjectAgent,
+} from "@/lib/agents/types";
 import {
   SCHEDULE_PRESET_LABELS,
   type SchedulePreset,
@@ -42,12 +46,19 @@ function scheduleLabel(agent: ProjectAgent | null) {
   return agent.trigger.cron || "Schedule";
 }
 
-/** Right panel: agent overview stats only (conversation lives in left chat). */
+function statusTone(status: string) {
+  if (status === "completed") return "text-foreground";
+  if (status === "waiting" || status === "running") return "text-amber-700 dark:text-amber-400";
+  if (status === "failed") return "text-destructive";
+  return "text-muted-foreground";
+}
+
+/** Right panel: Activity outcomes only (dialogue lives in left chat). */
 export function AgentOverviewPanel({
   workspaceId,
   projectId,
   projectTitle,
-  onEditInProject,
+  onEditInProject: _onEditInProject,
 }: {
   workspaceId: string;
   projectId: string;
@@ -59,7 +70,7 @@ export function AgentOverviewPanel({
     () => peekCachedProjectAgents(workspaceId, projectId) ?? [],
   );
   const [agent, setAgent] = useState<ProjectAgent | null>(null);
-  const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [activity, setActivity] = useState<AgentActivityItem[]>([]);
   const [runsLast7d, setRunsLast7d] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +89,7 @@ export function AgentOverviewPanel({
     const id = listed.agents[0]?.id;
     if (!id) {
       setAgent(null);
-      setRuns([]);
+      setActivity([]);
       return;
     }
     const conv = await fetchAgentConversationClient({
@@ -87,7 +98,31 @@ export function AgentOverviewPanel({
       agentId: id,
     });
     setAgent(conv.agent);
-    setRuns(conv.runs);
+    setActivity(
+      conv.activity.length
+        ? conv.activity
+        : (conv.runs as AgentRun[]).map((run) => ({
+            id: run.id,
+            agentId: run.agentId,
+            agentName: conv.agent.name,
+            projectId: run.projectId,
+            workspaceId: run.workspaceId,
+            status:
+              run.status === "waiting"
+                ? "waiting"
+                : run.status === "completed"
+                  ? "completed"
+                  : run.status === "failed"
+                    ? "failed"
+                    : run.status === "cancelled"
+                      ? "cancelled"
+                      : "running",
+            summary: run.summary || run.error || "No summary.",
+            triggerType: run.triggerType,
+            startedAt: run.startedAt,
+            completedAt: run.completedAt,
+          })),
+    );
   };
 
   useEffect(() => {
@@ -109,10 +144,10 @@ export function AgentOverviewPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reload on project change
   }, [workspaceId, projectId]);
 
-  const latestRun = runs[0] ?? null;
-  const failedRecently = useMemo(
-    () => runs.filter((r) => r.status === "failed").slice(0, 3),
-    [runs],
+  const latest = activity[0] ?? null;
+  const issues = useMemo(
+    () => activity.filter((a) => a.status === "failed").slice(0, 3),
+    [activity],
   );
 
   const handleRun = async () => {
@@ -148,13 +183,13 @@ export function AgentOverviewPanel({
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-mono text-[10.5px] tracking-[0.08em] text-muted-foreground uppercase">
-            Agent · Overview
+            Agent · Activity
           </p>
           <h1 className="truncate text-[1.1rem] font-semibold tracking-[-0.02em]">
             {agent?.name ?? projectTitle ?? "Agent"}
           </h1>
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
-            Runtime dialogue is in the left chat
+            Outcomes only · dialogue is in the left chat
             {agent?.status ? ` · ${agent.status}` : ""}
           </p>
         </div>
@@ -212,32 +247,25 @@ export function AgentOverviewPanel({
               <Stat label="Schedule" value={scheduleLabel(agent)} />
               <Stat label="Last wake" value={formatWhen(agent?.lastTriggeredAt)} />
               <Stat label="Next run" value={formatWhen(agent?.nextRunAt)} />
-              <Stat label="Runs (7d)" value={String(runsLast7d || runs.length)} />
+              <Stat label="Runs (7d)" value={String(runsLast7d || activity.length)} />
               <Stat
                 label="Latest"
-                value={
-                  latestRun
-                    ? `${latestRun.status}${latestRun.error ? " · error" : ""}`
-                    : "—"
-                }
+                value={latest?.status ?? "—"}
               />
             </section>
 
-            {latestRun?.error || failedRecently.length ? (
+            {issues.length ? (
               <section className="rounded-[12px] border border-border px-3.5 py-3">
                 <p className="font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
                   Recent issues
                 </p>
                 <ul className="mt-2 space-y-2 text-[12.5px] text-destructive">
-                  {(latestRun?.error
-                    ? [latestRun]
-                    : failedRecently
-                  ).map((run) => (
-                    <li key={run.id}>
+                  {issues.map((item) => (
+                    <li key={item.id}>
                       <span className="text-muted-foreground">
-                        {formatWhen(run.completedAt ?? run.startedAt)} ·{" "}
+                        {formatWhen(item.completedAt ?? item.startedAt)} ·{" "}
                       </span>
-                      {run.error || "Failed"}
+                      {item.summary || "Failed"}
                     </li>
                   ))}
                 </ul>
@@ -246,27 +274,29 @@ export function AgentOverviewPanel({
 
             <section>
               <p className="mb-2 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
-                Recent runs
+                Activity
               </p>
-              {!runs.length ? (
+              {!activity.length ? (
                 <p className="text-[12.5px] text-muted-foreground">
-                  No runs yet. Press Run now or wait for the schedule.
+                  No activity yet. Press Run now or wait for the schedule.
                 </p>
               ) : (
                 <ul className="divide-y divide-border rounded-[12px] border border-border">
-                  {runs.slice(0, 8).map((run) => (
+                  {activity.slice(0, 12).map((item) => (
                     <li
-                      key={run.id}
+                      key={item.id}
                       className="flex items-start justify-between gap-3 px-3.5 py-2.5 text-[12.5px]"
                     >
                       <div className="min-w-0">
-                        <p className="font-medium capitalize">{run.status}</p>
+                        <p className={cn("font-medium capitalize", statusTone(item.status))}>
+                          {item.status}
+                        </p>
                         <p className="truncate text-muted-foreground">
-                          {run.summary || run.error || run.triggerType}
+                          {item.summary || item.triggerType}
                         </p>
                       </div>
                       <span className="shrink-0 text-[11px] text-muted-foreground">
-                        {formatWhen(run.startedAt)}
+                        {formatWhen(item.startedAt)}
                       </span>
                     </li>
                   ))}

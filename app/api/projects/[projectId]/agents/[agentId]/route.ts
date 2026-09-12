@@ -62,6 +62,7 @@ export async function GET(
     agentId,
     gate.workspaceId!,
     projectId,
+    { profileId: gate.auth!.user.id },
   );
   if (!bundle) {
     return NextResponse.json({ error: "Agent not found." }, { status: 404 });

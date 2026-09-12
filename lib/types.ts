@@ -44,6 +44,7 @@ export type OverlayId =
   | "configure"
   | "space-settings"
   | "invite-wall"
+  | "agents-activity"
   | null;
 export type SpaceLayout = "cards" | "list";
 export type PanelMode = "collapsed" | "split" | "wide" | "immersive";

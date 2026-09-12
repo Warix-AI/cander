@@ -70,6 +70,7 @@ export async function PATCH(
       workspaceId,
       projectId,
       patch,
+      profileId: auth.user.id,
     });
     return NextResponse.json(bundle);
   } catch (error) {
