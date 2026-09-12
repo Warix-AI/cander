@@ -47,8 +47,15 @@ import {
 } from "@/components/shell/PanelToggle";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
+import { connectorAccountTabLabel } from "@/lib/connectors/account-names";
+import { isUiConnectedStatus } from "@/lib/connectors/authz";
 import {
-  connectorLabelForId,
+  connectionsForConnectorLive,
+  getConnectorConnectionsServerSnapshot,
+  getConnectorConnectionsSnapshot,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
+import {
   setConnectorBrowseFocus,
 } from "@/lib/connector-focus";
 import {
@@ -100,7 +107,20 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     toggleExpandedLayout,
   } = useApp();
   const catalog = CONNECTOR_CATALOG.find((item) => item.id === connectorId);
-  const title = catalog?.name ?? connectorId;
+  const connectorTitle = catalog?.name ?? connectorId;
+  useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsSnapshot,
+    getConnectorConnectionsServerSnapshot,
+  );
+  const activeAccount =
+    connectionsForConnectorLive(workspaceId, connectorId).find((row) =>
+      isUiConnectedStatus(row.status),
+    ) ?? null;
+  const title = connectorAccountTabLabel(
+    activeAccount?.displayName,
+    connectorTitle,
+  );
   const storageKey = connectorBrowserStorageKey(
     actor.id,
     workspaceId,
@@ -374,11 +394,11 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     if (workspaceToolbar?.canGoBack || gmailToolbar?.canGoInbox) return;
     setConnectorBrowseFocus({
       connectorId,
-      connectorLabel: connectorLabelForId(connectorId) || title,
+      connectorLabel: connectorTitle,
     });
   }, [
     connectorId,
-    title,
+    connectorTitle,
     workspaceToolbar?.canGoBack,
     gmailToolbar?.canGoInbox,
   ]);

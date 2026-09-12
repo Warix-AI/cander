@@ -45,10 +45,14 @@ test("default Account label shows as Rename in nav", async () => {
   const {
     connectorAccountNavLabel,
     connectorAccountNeedsRename,
+    connectorAccountTabLabel,
   } = await import("../lib/connectors/account-names.ts");
   assert.equal(connectorAccountNeedsRename("Account"), true);
   assert.equal(connectorAccountNeedsRename("  "), true);
   assert.equal(connectorAccountNeedsRename("Team"), false);
   assert.equal(connectorAccountNavLabel("Account"), "Rename");
   assert.equal(connectorAccountNavLabel("Team"), "Team");
+  assert.equal(connectorAccountTabLabel("Personal", "Gmail"), "Personal");
+  assert.equal(connectorAccountTabLabel("Account", "Gmail"), "Gmail");
+  assert.equal(connectorAccountTabLabel("", "Gmail"), "Gmail");
 });

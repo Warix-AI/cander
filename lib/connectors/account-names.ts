@@ -96,3 +96,16 @@ export function connectorAccountNavLabel(
   if (connectorAccountNeedsRename(displayName)) return "Rename";
   return String(displayName).trim();
 }
+
+/**
+ * Connector browser tab title for a connected account.
+ * Named accounts use the display name; unnamed fall back to the connector label.
+ * Sidebar pins keep the connector product name — do not use this for nav pins.
+ */
+export function connectorAccountTabLabel(
+  displayName: string | null | undefined,
+  fallback: string,
+): string {
+  if (connectorAccountNeedsRename(displayName)) return fallback;
+  return String(displayName).trim();
+}

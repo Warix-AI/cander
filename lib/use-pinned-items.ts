@@ -31,7 +31,10 @@ export type PinnedItem = {
   coverGradient?: string;
 };
 
-/** Short sidebar labels — full product names stay in catalog / detail. */
+/**
+ * Short sidebar pin labels — always the connector product, never the account
+ * display name (e.g. “Personal”). Account names belong on browser tabs only.
+ */
 const PIN_CONNECTOR_TITLE: Record<string, string> = {
   gmail: "Gmail",
   gcal: "Calendar",
