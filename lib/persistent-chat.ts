@@ -13,8 +13,14 @@ export function connectorChatId(workspaceId: string, connectorId: string) {
 }
 
 /** Observe-only Agent ↔ Cander runtime dialogue for an automation project. */
-export function agentRuntimeChatId(workspaceId: string, projectId: string) {
-  return `t-agent-runtime-${workspaceId}-${projectId}`;
+export function agentRuntimeChatId(
+  workspaceId: string,
+  projectId: string,
+  agentId?: string | null,
+) {
+  const base = `t-agent-runtime-${workspaceId}-${projectId}`;
+  const expert = agentId?.trim();
+  return expert ? `${base}-${expert}` : base;
 }
 
 export function isAgentRuntimeChatId(threadId: string | null | undefined) {
@@ -355,8 +361,9 @@ export function findPersistentAgentRuntimeThread(
   threads: Thread[],
   workspaceId: string,
   projectId: string,
+  agentId?: string | null,
 ) {
-  const id = agentRuntimeChatId(workspaceId, projectId);
+  const id = agentRuntimeChatId(workspaceId, projectId, agentId);
   return threads.find((item) => item.id === id) ?? null;
 }
 
@@ -364,10 +371,11 @@ export function emptyPersistentAgentRuntimeThread(
   workspaceId: string,
   projectId: string,
   spaceId: SpaceId,
-  title = "Agent",
+  title = "Expert",
+  agentId?: string | null,
 ): Thread {
   return {
-    id: agentRuntimeChatId(workspaceId, projectId),
+    id: agentRuntimeChatId(workspaceId, projectId, agentId),
     title,
     workspaceId,
     projectId,
@@ -385,12 +393,14 @@ export function upsertPersistentAgentRuntimeThread(
   workspaceId: string,
   projectId: string,
   spaceId: SpaceId,
-  title = "Agent",
+  title = "Expert",
+  agentId?: string | null,
 ): { threads: Thread[]; id: string } {
   const found = findPersistentAgentRuntimeThread(
     threads,
     workspaceId,
     projectId,
+    agentId,
   );
   if (found) {
     const nextTitle = title.trim() || found.title;
@@ -411,6 +421,7 @@ export function upsertPersistentAgentRuntimeThread(
     projectId,
     spaceId,
     title,
+    agentId,
   );
   return { threads: [created, ...threads], id: created.id };
 }

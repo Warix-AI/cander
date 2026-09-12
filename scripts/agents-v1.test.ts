@@ -384,3 +384,16 @@ describe("connector mail → expert situation", () => {
     assert.equal(ranked[0]?.name, "Rescheduling");
   });
 });
+
+describe("expert runtime thread scoping", () => {
+  it("keys runtime chat ids by expert agent id", async () => {
+    const { agentRuntimeChatId } = await import("../lib/persistent-chat.ts");
+    const a = agentRuntimeChatId("ws", "proj", "expert-a");
+    const b = agentRuntimeChatId("ws", "proj", "expert-b");
+    const legacy = agentRuntimeChatId("ws", "proj");
+    assert.notEqual(a, b);
+    assert.notEqual(a, legacy);
+    assert.match(a, /expert-a$/);
+    assert.match(b, /expert-b$/);
+  });
+});

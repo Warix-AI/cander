@@ -1,6 +1,6 @@
 /**
- * Mirror Agent ↔ Cander runtime messages into a persistent local chat thread
- * so agent pins open instantly like connectors.
+ * Mirror Expert ↔ Cander runtime messages into a persistent local chat thread
+ * keyed by Expert (agent) id so each Expert has its own conversation.
  */
 
 import {
@@ -65,6 +65,7 @@ function withPendingThinking(messages: Message[], startedAt = Date.now()): Messa
 export function ensureAgentRuntimeThread(opts: {
   workspaceId: string;
   projectId: string;
+  agentId: string;
   spaceId: SpaceId;
   title?: string;
 }): { thread: Thread; id: string } {
@@ -74,7 +75,8 @@ export function ensureAgentRuntimeThread(opts: {
     opts.workspaceId,
     opts.projectId,
     opts.spaceId,
-    opts.title ?? "Agent",
+    opts.title ?? "Expert",
+    opts.agentId,
   );
   const thread = threads.find((item) => item.id === id)!;
   if (!snapshot.some((item) => item.id === id)) {
@@ -114,6 +116,7 @@ function shouldKeepLocalPending(
 export function applyAgentRuntimeMessages(opts: {
   workspaceId: string;
   projectId: string;
+  agentId: string;
   spaceId: SpaceId;
   title?: string;
   messages: AgentConversationMessage[];
@@ -125,6 +128,7 @@ export function applyAgentRuntimeMessages(opts: {
   const { id } = ensureAgentRuntimeThread({
     workspaceId: opts.workspaceId,
     projectId: opts.projectId,
+    agentId: opts.agentId,
     spaceId: opts.spaceId,
     title: opts.title,
   });
@@ -149,7 +153,7 @@ export function applyAgentRuntimeMessages(opts: {
   const updated: Thread = {
     ...(existing ?? {
       id,
-      title: opts.title ?? "Agent",
+      title: opts.title ?? "Expert",
       workspaceId: opts.workspaceId,
       projectId: opts.projectId,
       spaceId: opts.spaceId,
@@ -159,7 +163,7 @@ export function applyAgentRuntimeMessages(opts: {
       messages: [],
       updatedAt: new Date().toISOString(),
     }),
-    title: opts.title?.trim() || existing?.title || "Agent",
+    title: opts.title?.trim() || existing?.title || "Expert",
     spaceId: opts.spaceId,
     messages: nextMessages,
     snippet: snippetFromMessages(nextMessages),
@@ -172,6 +176,7 @@ export function applyAgentRuntimeMessages(opts: {
 export function markAgentRuntimeThinking(opts: {
   workspaceId: string;
   projectId: string;
+  agentId: string;
   spaceId: SpaceId;
   title?: string;
 }): string {
@@ -185,7 +190,7 @@ export function markAgentRuntimeThinking(opts: {
   upsertChatThread({
     ...(existing ?? {
       id,
-      title: opts.title ?? "Agent",
+      title: opts.title ?? "Expert",
       workspaceId: opts.workspaceId,
       projectId: opts.projectId,
       spaceId: opts.spaceId,
@@ -205,6 +210,7 @@ export function markAgentRuntimeThinking(opts: {
 export function agentRuntimeThreadId(
   workspaceId: string,
   projectId: string,
+  agentId?: string | null,
 ) {
-  return agentRuntimeChatId(workspaceId, projectId);
+  return agentRuntimeChatId(workspaceId, projectId, agentId);
 }

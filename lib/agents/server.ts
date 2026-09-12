@@ -596,22 +596,60 @@ export async function completeAgentRun(opts: {
   status: AgentRunStatus;
   summary?: string;
   error?: string;
+  triggerPayload?: Record<string, unknown>;
 }): Promise<AgentRun> {
   const admin = createSupabaseAdminClient();
-  const terminal = opts.status === "running" ? null : new Date().toISOString();
+  const terminal =
+    opts.status === "running" || opts.status === "waiting"
+      ? null
+      : new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    status: opts.status,
+    completed_at: terminal,
+    summary: opts.summary ?? null,
+    error: opts.error ?? null,
+  };
+  if (opts.triggerPayload !== undefined) {
+    patch.trigger_payload = opts.triggerPayload;
+  }
   const { data, error } = await admin
     .from("agent_runs")
-    .update({
-      status: opts.status,
-      completed_at: terminal,
-      summary: opts.summary ?? null,
-      error: opts.error ?? null,
-    })
+    .update(patch)
     .eq("id", opts.runId)
     .eq("workspace_id", opts.workspaceId)
     .select("*")
     .single();
   if (error || !data) throw new Error(error?.message || "Could not complete run.");
+  return mapRun(data as Record<string, unknown>);
+}
+
+export async function patchAgentRunPayload(opts: {
+  runId: string;
+  workspaceId: string;
+  triggerPayload: Record<string, unknown>;
+  status?: AgentRunStatus;
+  summary?: string | null;
+}): Promise<AgentRun> {
+  const admin = createSupabaseAdminClient();
+  const patch: Record<string, unknown> = {
+    trigger_payload: opts.triggerPayload,
+  };
+  if (opts.status) patch.status = opts.status;
+  if (opts.summary !== undefined) patch.summary = opts.summary;
+  if (opts.status && opts.status !== "running" && opts.status !== "waiting") {
+    patch.completed_at = new Date().toISOString();
+  }
+  if (opts.status === "running") {
+    patch.completed_at = null;
+  }
+  const { data, error } = await admin
+    .from("agent_runs")
+    .update(patch)
+    .eq("id", opts.runId)
+    .eq("workspace_id", opts.workspaceId)
+    .select("*")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not update run.");
   return mapRun(data as Record<string, unknown>);
 }
 

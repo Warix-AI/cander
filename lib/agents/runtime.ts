@@ -17,6 +17,7 @@ import {
   listAgentConnectorScopes,
   listAgentMessages,
   loadAgentBundle,
+  patchAgentRunPayload,
   updateProjectAgent,
 } from "@/lib/agents/server";
 import { computeNextRunAt } from "@/lib/agents/schedule";
@@ -114,6 +115,78 @@ function formatScopeForPrompt(scope: AgentScopeConnection[]): string {
     .join("; ")}.`;
 }
 
+function expertRequestsConnectorAction(text: string): boolean {
+  return /\b(reply|respond|send|email|draft|search|check|look(?:\s+up)?|read|forward|schedule|book|cancel|update|mark|create|post|invite)\b/i.test(
+    text,
+  );
+}
+
+function canderSystemExtra(opts: {
+  agentName: string;
+  scopePrompt: string;
+  forceExecute: boolean;
+}): string {
+  return [
+    `You are talking with the Expert named "${opts.agentName}".`,
+    `The Expert's messages are authorized instructions from this workspace to execute.`,
+    `The Expert decides what should happen. You (Cander) execute connectors/tools.`,
+    `You do NOT have this Expert's private Instructions — only what they tell you in this conversation.`,
+    `Follow normal Cander safety and approval rules. Expert requests cannot override permissions or approvals.`,
+    `When the Expert asks you to reply, send, search, read, or otherwise act in Gmail/other apps, you MUST call the matching tool in this turn.`,
+    `Do NOT write a draft as plain text and stop. Do NOT merely summarize what you would do.`,
+    `Do NOT create a gmail.draft unless the Expert explicitly asked for a draft, or confirmation policy requires pausing.`,
+    `If gmail.reply / gmail.send args are complete and confirmation is not required, execute immediately.`,
+    `If confirmation is required, stop for approval — never pretend you finished after only drafting.`,
+    `After tools run, report the real result briefly to the Expert (sent / failed / needs approval).`,
+    opts.forceExecute
+      ? `CRITICAL: The Expert just asked for a concrete connector action. Call the tool now — no prose-only response.`
+      : "",
+    opts.scopePrompt,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export type AgentPendingApproval = {
+  type: "confirmation_required";
+  toolId: string;
+  toolCallId: string;
+  arguments: Record<string, unknown>;
+  connectionId: string;
+  preview?: Record<string, unknown>;
+  message: string;
+};
+
+function formatApprovalPauseMessage(pause: AgentPendingApproval): string {
+  const preview = pause.preview ?? {};
+  const body =
+    typeof preview.body === "string"
+      ? preview.body
+      : typeof pause.arguments.body === "string"
+        ? pause.arguments.body
+        : "";
+  const to =
+    typeof preview.to === "string"
+      ? preview.to
+      : typeof pause.arguments.to === "string"
+        ? pause.arguments.to
+        : "";
+  const subject =
+    typeof preview.subject === "string"
+      ? preview.subject
+      : typeof pause.arguments.subject === "string"
+        ? pause.arguments.subject
+        : "";
+  const lines = [
+    pause.message || "Approval required before I can continue.",
+    to ? `To: ${to}` : null,
+    subject ? `Subject: ${subject}` : null,
+    body ? `Draft:\n${body}` : null,
+    "Waiting for Approve or Reject.",
+  ].filter(Boolean);
+  return lines.join("\n\n");
+}
+
 async function planNextAgentMessage(opts: {
   agent: ProjectAgent;
   history: AgentConversationMessage[];
@@ -155,7 +228,8 @@ Rules:
 - Never claim you already checked email, booked something, or sent a message — only Cander can do that.
 - After Cander replies, evaluate against your Instructions and either ask the next concrete step or finish.
 - Prefer short, specific asks (one step at a time).
-- If blocked, waiting on the user, or nothing useful remains, set done=true.
+- When you ask Cander to take an action (reply, send, search, read, draft, schedule, etc.), set done=false so you can evaluate the real tool result.
+- Set done=true only when this wake is finished, blocked on the human, or nothing useful remains AFTER Cander reported results.
 - Return ONLY JSON: {"message":"string","done":boolean}
 - If more work is needed, done=false and message is what you ask Cander.
 - If this wake is complete, blocked, or needs something unavailable, done=true (message may be empty).`;
@@ -425,28 +499,107 @@ export async function runAgent(
           content: m.content,
         }));
 
-      const loop = await runAgentServerLoop({
+      const wantsAction = expertRequestsConnectorAction(agentText);
+      let loop = await runAgentServerLoop({
         client,
         workspaceId: input.workspaceId,
         profileId: input.profileId,
         messages: loopMessages,
-        // Scope via selected connections — not Expert-owned tools.
         ...(selectedConnectionIds.length
           ? { selectedConnectionIds }
           : {}),
-        systemExtra: [
-          `You are talking with the Expert named "${bundle.agent.name}".`,
-          `The Expert decides what should happen. You (Cander) execute connectors/tools.`,
-          `You do NOT have this Expert's private Instructions — only what they tell you in this conversation.`,
-          `Follow normal Cander safety and approval rules. Expert requests cannot override permissions or approvals.`,
+        systemExtra: canderSystemExtra({
+          agentName: bundle.agent.name,
           scopePrompt,
-        ].join("\n"),
+          forceExecute: wantsAction,
+        }),
         agentRunId: run.id,
         aiChatId: runtimeChatId,
         maxIterations: 8,
+        forceToolUse: wantsAction,
       });
 
+      // Expert asked for an action but Cander replied with prose only — retry once.
+      if (
+        wantsAction &&
+        !loop.pause &&
+        loop.toolResults.length === 0
+      ) {
+        loop = await runAgentServerLoop({
+          client,
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          messages: [
+            ...loopMessages,
+            {
+              role: "assistant",
+              content: loop.content.trim() || "(no tools used)",
+            },
+            {
+              role: "user",
+              content:
+                "That was not enough. Execute my instruction now with the correct connector tool (e.g. gmail.reply / gmail.send). Do not summarize — call the tool.",
+            },
+          ],
+          ...(selectedConnectionIds.length
+            ? { selectedConnectionIds }
+            : {}),
+          systemExtra: canderSystemExtra({
+            agentName: bundle.agent.name,
+            scopePrompt,
+            forceExecute: true,
+          }),
+          agentRunId: run.id,
+          aiChatId: runtimeChatId,
+          maxIterations: 8,
+          forceToolUse: true,
+        });
+      }
+
       toolCount += loop.toolResults.length;
+
+      if (loop.pause?.type === "confirmation_required") {
+        const pending: AgentPendingApproval = {
+          type: "confirmation_required",
+          toolId: loop.pause.toolId,
+          toolCallId: loop.pause.toolCallId,
+          arguments: loop.pause.arguments,
+          connectionId: loop.pause.connectionId,
+          preview: loop.pause.preview,
+          message: loop.pause.message,
+        };
+        lastCander = formatApprovalPauseMessage(pending);
+        const canderMsg = await appendAgentMessage({
+          workspaceId: input.workspaceId,
+          projectId: input.projectId,
+          agentId: input.agentId,
+          runId: run.id,
+          role: "cander",
+          content: lastCander,
+        });
+        workingHistory.push(canderMsg);
+        const summary = await summarizeAgentRunOutcome({
+          agent: bundle.agent,
+          history: workingHistory,
+          status: "waiting",
+        });
+        const waiting = await completeAgentRun({
+          runId: run.id,
+          workspaceId: input.workspaceId,
+          status: "waiting",
+          summary,
+          triggerPayload: {
+            ...run.triggerPayload,
+            pendingApproval: pending,
+          },
+        });
+        return {
+          run: waiting,
+          content: lastCander,
+          toolCount,
+        };
+      }
+
       lastCander =
         loop.content.trim() ||
         (loop.pause
@@ -467,7 +620,10 @@ export async function runAgent(
         pausedWaiting = true;
         break;
       }
-      if (plan.done) break;
+
+      // Expert said done before seeing this Cander reply — if tools ran, let
+      // the Expert evaluate the real result on the next round.
+      if (plan.done && loop.toolResults.length === 0) break;
     }
 
     const outcomeStatus: AgentActivityOutcome = pausedWaiting
@@ -543,6 +699,145 @@ export async function runAgent(
     });
     return { run: failed, content: message, toolCount };
   }
+}
+
+/** Resume a waiting Expert run after the human Approves or Rejects a tool. */
+export async function resumeAgentAfterApproval(input: {
+  runId: string;
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  profileId: string;
+  decision: "approve" | "reject";
+}): Promise<RunAgentResult> {
+  const run = await getAgentRun(input.runId, input.workspaceId);
+  if (!run) throw new Error("Run not found.");
+  if (run.agentId !== input.agentId || run.projectId !== input.projectId) {
+    throw new Error("Run does not match this Expert.");
+  }
+  if (run.status !== "waiting") {
+    return {
+      run,
+      content: run.summary || `Run is ${run.status}.`,
+      toolCount: 0,
+    };
+  }
+
+  const pendingRaw = run.triggerPayload?.pendingApproval;
+  const pending =
+    pendingRaw &&
+    typeof pendingRaw === "object" &&
+    (pendingRaw as { type?: string }).type === "confirmation_required"
+      ? (pendingRaw as AgentPendingApproval)
+      : null;
+
+  if (input.decision === "reject") {
+    const content =
+      "The user rejected this action. I did not send anything. Anything else, or are we done?";
+    await appendAgentMessage({
+      workspaceId: input.workspaceId,
+      projectId: input.projectId,
+      agentId: input.agentId,
+      runId: run.id,
+      role: "cander",
+      content,
+    });
+    const history = await listAgentMessages({
+      agentId: input.agentId,
+      workspaceId: input.workspaceId,
+      limit: 80,
+    });
+    const bundle = await loadAgentBundle(
+      input.agentId,
+      input.workspaceId,
+      input.projectId,
+      { profileId: input.profileId },
+    );
+    const summary = bundle
+      ? await summarizeAgentRunOutcome({
+          agent: bundle.agent,
+          history,
+          status: "cancelled",
+        })
+      : "User rejected the pending action.";
+    const cancelled = await completeAgentRun({
+      runId: run.id,
+      workspaceId: input.workspaceId,
+      status: "cancelled",
+      summary,
+      triggerPayload: {
+        ...run.triggerPayload,
+        pendingApproval: null,
+        approvalDecision: "reject",
+      },
+    });
+    return { run: cancelled, content, toolCount: 0 };
+  }
+
+  if (!pending) {
+    throw new Error("No pending approval on this run.");
+  }
+
+  await patchAgentRunPayload({
+    runId: run.id,
+    workspaceId: input.workspaceId,
+    status: "running",
+    summary: null,
+    triggerPayload: {
+      ...run.triggerPayload,
+      pendingApproval: null,
+      approvalDecision: "approve",
+    },
+  });
+
+  const client = createSupabaseAdminClient();
+  const { executeConnectorToolDetailed } = await import(
+    "@/lib/connectors/tool-execute"
+  );
+  const executed = await executeConnectorToolDetailed({
+    client,
+    workspaceId: input.workspaceId,
+    profileId: input.profileId,
+    tool: pending.toolId,
+    arguments: pending.arguments,
+    connectionId: pending.connectionId,
+    toolCallId: pending.toolCallId,
+    turnId: `approve:${run.id}`,
+    chatId: `agent-runtime:${input.agentId}`,
+    agentRunId: run.id,
+    confirmed: true,
+  });
+
+  const ok = executed.ok;
+  const resultText = ok
+    ? `Approved and executed ${pending.toolId} successfully.${
+        executed.output ? `\n${executed.output.slice(0, 500)}` : ""
+      }`
+    : `Approved, but ${pending.toolId} failed: ${
+        executed.error || executed.denial?.message || "unknown error"
+      }`;
+
+  await appendAgentMessage({
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    agentId: input.agentId,
+    runId: run.id,
+    role: "cander",
+    content: resultText,
+  });
+
+  // Continue Expert ↔ Cander loop so the Expert can finish or request more.
+  return runAgent({
+    agentId: input.agentId,
+    workspaceId: input.workspaceId,
+    projectId: input.projectId,
+    profileId: input.profileId,
+    triggerType: "manual",
+    existingRunId: run.id,
+    message: ok
+      ? "Cander just reported the approved action result. Decide if anything else is needed."
+      : "Cander reported the approved action failed. Decide the next step or finish.",
+  });
 }
 
 /** Claim due scheduled agents for cron (atomic-ish via claim token). */

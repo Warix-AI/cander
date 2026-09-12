@@ -320,6 +320,33 @@ export async function runAgentClient(opts: {
   return parseJson(res);
 }
 
+export async function approveAgentRunClient(opts: {
+  workspaceId: string;
+  projectId: string;
+  agentId: string;
+  runId: string;
+  decision: "approve" | "reject";
+}): Promise<{
+  run: AgentRun;
+  content: string;
+  toolCount: number;
+}> {
+  const headers = await authHeaders();
+  const res = await fetch(
+    `/api/projects/${encodeURIComponent(opts.projectId)}/agents/${encodeURIComponent(opts.agentId)}/approve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        workspaceId: opts.workspaceId,
+        runId: opts.runId,
+        decision: opts.decision,
+      }),
+    },
+  );
+  return parseJson(res);
+}
+
 export async function fetchAgentConversationClient(opts: {
   workspaceId: string;
   projectId: string;

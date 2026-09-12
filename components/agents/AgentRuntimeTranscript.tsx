@@ -26,30 +26,35 @@ export function notifyAgentRuntimeRefresh(detail: {
 }
 
 /**
- * Background-hydrate the persistent Agent ↔ Cander runtime thread.
- * Local messages paint instantly; this only refreshes from the server.
+ * Background-hydrate the persistent Cander ↔ Expert runtime thread for one Expert.
  */
 export async function prefetchAgentRuntimeConversation(opts: {
   workspaceId: string;
   projectId: string;
   spaceId: SpaceId;
+  agentId?: string | null;
   title?: string;
 }) {
-  const listed = await listProjectAgentsWithStatsClient({
-    workspaceId: opts.workspaceId,
-    projectId: opts.projectId,
-  });
-  const id = listed.agents[0]?.id;
-  const title = listed.agents[0]?.name ?? opts.title ?? "Agent";
-  if (!id) return;
+  let agentId = opts.agentId?.trim() || "";
+  let title = opts.title ?? "Expert";
+  if (!agentId) {
+    const listed = await listProjectAgentsWithStatsClient({
+      workspaceId: opts.workspaceId,
+      projectId: opts.projectId,
+    });
+    agentId = listed.agents[0]?.id ?? "";
+    title = listed.agents[0]?.name ?? title;
+  }
+  if (!agentId) return;
   const conv = await fetchAgentConversationClient({
     workspaceId: opts.workspaceId,
     projectId: opts.projectId,
-    agentId: id,
+    agentId,
   });
   applyAgentRuntimeMessages({
     workspaceId: opts.workspaceId,
     projectId: opts.projectId,
+    agentId,
     spaceId: opts.spaceId,
     title: conv.agent.name || title,
     messages: conv.messages,
@@ -60,15 +65,18 @@ export async function prefetchAgentRuntimeConversation(opts: {
 export function useSyncAgentRuntimeThread(opts: {
   workspaceId: string;
   projectId: string;
+  agentId: string | null;
   spaceId: SpaceId;
   enabled: boolean;
   title?: string;
 }) {
   const hydrate = useCallback(
     async (forcePending = false) => {
+      if (!opts.agentId) return;
       await prefetchAgentRuntimeConversation({
         workspaceId: opts.workspaceId,
         projectId: opts.projectId,
+        agentId: opts.agentId,
         spaceId: opts.spaceId,
         title: opts.title,
       });
@@ -76,29 +84,44 @@ export function useSyncAgentRuntimeThread(opts: {
         markAgentRuntimeThinking({
           workspaceId: opts.workspaceId,
           projectId: opts.projectId,
+          agentId: opts.agentId,
           spaceId: opts.spaceId,
           title: opts.title,
         });
       }
     },
-    [opts.workspaceId, opts.projectId, opts.spaceId, opts.title],
+    [
+      opts.workspaceId,
+      opts.projectId,
+      opts.agentId,
+      opts.spaceId,
+      opts.title,
+    ],
   );
 
   useEffect(() => {
-    if (!opts.enabled) return;
+    if (!opts.enabled || !opts.agentId) return;
 
     let cancelled = false;
     void hydrate(false).catch(() => {});
 
     const onRefresh = (event: Event) => {
       const detail = (event as CustomEvent).detail as
-        | { projectId?: string; pending?: boolean }
+        | { projectId?: string; agentId?: string | null; pending?: boolean }
         | undefined;
       if (detail?.projectId && detail.projectId !== opts.projectId) return;
-      if (detail?.pending) {
+      if (
+        detail?.agentId &&
+        opts.agentId &&
+        detail.agentId !== opts.agentId
+      ) {
+        return;
+      }
+      if (detail?.pending && opts.agentId) {
         markAgentRuntimeThinking({
           workspaceId: opts.workspaceId,
           projectId: opts.projectId,
+          agentId: opts.agentId,
           spaceId: opts.spaceId,
           title: opts.title,
         });
@@ -107,10 +130,11 @@ export function useSyncAgentRuntimeThread(opts: {
     };
     window.addEventListener(AGENT_RUNTIME_REFRESH_EVENT, onRefresh);
 
+    // Faster poll so connector-triggered runs appear live in the open Expert tab.
     const poll = window.setInterval(() => {
       if (cancelled) return;
       void hydrate(false).catch(() => {});
-    }, 4_000);
+    }, 2_000);
 
     return () => {
       cancelled = true;
@@ -119,6 +143,7 @@ export function useSyncAgentRuntimeThread(opts: {
     };
   }, [
     opts.enabled,
+    opts.agentId,
     opts.workspaceId,
     opts.projectId,
     opts.spaceId,

@@ -5,7 +5,14 @@ import { CondensedContextIndicator } from "@/components/chat/CondensedContextInd
 import { UserMessage } from "@/components/chat/UserMessage";
 import type { Message } from "@/lib/types";
 
-export function ChatMessage({ message }: { message: Message }) {
+export function ChatMessage({
+  message,
+  speakerLabels,
+}: {
+  message: Message;
+  /** Optional names for Expert runtime (user = Expert, assistant = Cander). */
+  speakerLabels?: { user?: string; assistant?: string } | null;
+}) {
   // Space-switch markers stay in history for routing, but no longer render
   // the icon arrow diagram in the transcript.
   if (message.spaceSwitch) return null;
@@ -17,7 +24,12 @@ export function ChatMessage({ message }: { message: Message }) {
   }
   if (message.role === "user") {
     return (
-      <div className="flex flex-col items-end">
+      <div className="flex flex-col items-end gap-1">
+        {speakerLabels?.user ? (
+          <span className="px-1 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
+            {speakerLabels.user}
+          </span>
+        ) : null}
         <UserMessage content={message.content} blocks={message.blocks} />
       </div>
     );
@@ -26,7 +38,12 @@ export function ChatMessage({ message }: { message: Message }) {
     return null;
   }
   return (
-    <div className="flex flex-col items-start">
+    <div className="flex flex-col items-start gap-1">
+      {speakerLabels?.assistant ? (
+        <span className="px-1 font-mono text-[10px] tracking-[0.06em] text-muted-foreground uppercase">
+          {speakerLabels.assistant}
+        </span>
+      ) : null}
       <AssistantMessage message={message} />
     </div>
   );

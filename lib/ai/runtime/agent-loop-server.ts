@@ -55,6 +55,9 @@ export type AgentLoopPause =
   | {
       type: "confirmation_required";
       toolId: string;
+      toolCallId: string;
+      arguments: Record<string, unknown>;
+      connectionId: string;
       preview?: Record<string, unknown>;
       message: string;
     }
@@ -101,6 +104,8 @@ export type AgentLoopInput = {
   systemExtra?: string | null;
   /** Optional agent run id for tool event correlation. */
   agentRunId?: string | null;
+  /** Prefer calling a tool this turn (Expert asked for an action). */
+  forceToolUse?: boolean;
 };
 
 function maxIterations(): number {
@@ -404,7 +409,11 @@ export async function runAgentServerLoop(
       model,
       input: conversation as OpenAI.Responses.ResponseInput,
       ...(tools.length ? { tools } : {}),
-      ...(imageIntent ? { tool_choice: { type: "image_generation" as const } } : {}),
+      ...(imageIntent
+        ? { tool_choice: { type: "image_generation" as const } }
+        : input.forceToolUse && tools.length && round === 0
+          ? { tool_choice: "required" as const }
+          : {}),
     });
 
     const calls = extractFunctionCalls(response.output);
@@ -502,6 +511,9 @@ export async function runAgentServerLoop(
             pause: {
               type: "confirmation_required",
               toolId,
+              toolCallId: callId,
+              arguments: args,
+              connectionId: conn.connectionId,
               preview: executed.denial.preview,
               message: executed.denial.message,
             },

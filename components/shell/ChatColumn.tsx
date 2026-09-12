@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import { useSyncAgentRuntimeThread } from "@/components/agents/AgentRuntimeTranscript";
+import { ExpertRuntimeApprovalBar } from "@/components/agents/ExpertRuntimeApprovalBar";
 import { useAgentPinSurface } from "@/components/agents/useAgentPinSurface";
 import { upsertChatThread, getChatStoreSnapshot } from "@/lib/api/chat-store";
 import { mergeHydratedThread } from "@/lib/api/chat-sync";
@@ -149,7 +150,16 @@ export function ChatColumn() {
   const api = useSpaceApi();
   const ctx = useWorkspaceCtx();
   const agentPin = useAgentPinSurface();
-  const agentOverview = agentPin.isOverview && Boolean(agentPin.projectId);
+  const agentOverview =
+    agentPin.isExpertRuntime &&
+    Boolean(agentPin.projectId) &&
+    Boolean(agentPin.agentId);
+  const expertSpeakerLabels = agentOverview
+    ? {
+        user: agentPin.expertTitle || "Expert",
+        assistant: "Cander",
+      }
+    : null;
   const browserMode = view === "browser";
   const mobile = useMobileShell();
   const hasChatTurns = Boolean(
@@ -181,17 +191,28 @@ export function ChatColumn() {
     resumeConnectorChat();
   }, [connectorId, resumeConnectorChat]);
 
-  // Agent overview pin → persistent runtime thread (instant local transcript).
+  // Expert tab → bind that Expert's Cander ↔ Expert runtime thread (no composer).
   useEffect(() => {
-    if (!agentOverview) return;
-    resumeAgentRuntimeChat();
-  }, [agentOverview, projectId, resumeAgentRuntimeChat]);
+    if (!agentOverview || !agentPin.agentId) return;
+    resumeAgentRuntimeChat({
+      agentId: agentPin.agentId,
+      title: agentPin.expertTitle ?? undefined,
+    });
+  }, [
+    agentOverview,
+    agentPin.agentId,
+    agentPin.expertTitle,
+    projectId,
+    resumeAgentRuntimeChat,
+  ]);
 
   useSyncAgentRuntimeThread({
     workspaceId: agentPin.workspaceId,
     projectId: agentPin.projectId ?? "",
+    agentId: agentPin.agentId,
     spaceId: (spaceId ?? "build") as SpaceId,
     enabled: agentOverview,
+    title: agentPin.expertTitle ?? undefined,
   });
   const endRef = useRef<HTMLDivElement>(null);
   const latestUserRef = useRef<HTMLDivElement>(null);
@@ -542,7 +563,10 @@ export function ChatColumn() {
                 : undefined
             }
           >
-            <ChatMessage message={message} />
+            <ChatMessage
+              message={message}
+              speakerLabels={expertSpeakerLabels}
+            />
           </div>
         );
       })}
@@ -573,7 +597,14 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        {agentOverview ? null : (
+        {agentOverview ? (
+          <ExpertRuntimeApprovalBar
+            workspaceId={agentPin.workspaceId}
+            projectId={agentPin.projectId ?? ""}
+            agentId={agentPin.agentId}
+            enabled={agentOverview}
+          />
+        ) : (
           <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
         )}
       </section>
@@ -602,7 +633,14 @@ export function ChatColumn() {
             <div ref={endRef} />
           )}
         </div>
-        {agentOverview ? null : (
+        {agentOverview ? (
+          <ExpertRuntimeApprovalBar
+            workspaceId={agentPin.workspaceId}
+            projectId={agentPin.projectId ?? ""}
+            agentId={agentPin.agentId}
+            enabled={agentOverview}
+          />
+        ) : (
           <div className={cn("sticky bottom-0 z-20 shrink-0", MOBILE_APP_BG)}>
             <ComposerDock onSend={send} autoFocus={autofocusComposer} />
           </div>
@@ -643,7 +681,14 @@ export function ChatColumn() {
         </div>
       )}
 
-      {showLanding || agentOverview ? null : (
+      {showLanding ? null : agentOverview ? (
+        <ExpertRuntimeApprovalBar
+          workspaceId={agentPin.workspaceId}
+          projectId={agentPin.projectId ?? ""}
+          agentId={agentPin.agentId}
+          enabled={agentOverview}
+        />
+      ) : (
         <ComposerDock onSend={send} autoFocus={autofocusComposer} />
       )}
     </section>

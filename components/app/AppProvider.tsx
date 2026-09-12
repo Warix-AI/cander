@@ -239,6 +239,7 @@ import { deleteThreadsFromSupabase, replaceUniversalDefaultOnSupabase } from "@/
 import { fetchPrivateAiReply } from "@/lib/ai/send-thread-reply";
 import { resolveAgentChatContext } from "@/lib/agents/chat-context";
 import { prefetchAgentRuntimeConversation } from "@/components/agents/AgentRuntimeTranscript";
+import { getActiveExpertFromBrowserSession } from "@/lib/agents/active-expert-tab";
 import { primeAutomationBrowserSession } from "@/lib/agents/prime-browser-session";
 import {
   provisionalCohortFromInput,
@@ -512,8 +513,11 @@ type AppContextValue = {
   openConnector: (id: string) => void;
   /** Re-select the persistent one-chat-per-connector thread. */
   resumeConnectorChat: () => void;
-  /** Re-select the observe-only Agent ↔ Cander runtime thread. */
-  resumeAgentRuntimeChat: () => void;
+  /** Re-select the observe-only Cander ↔ Expert runtime thread. */
+  resumeAgentRuntimeChat: (opts?: {
+    agentId?: string | null;
+    title?: string;
+  }) => void;
   openJob: (id: string) => void;
   openSkill: (id: string) => void;
   openFile: (id: string) => void;
@@ -4576,20 +4580,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       : null;
     const useAgentRuntime =
       automationKind && opts?.agentSurface === "overview";
-    const { threads: next, id: nextId } = useAgentRuntime
-      ? upsertPersistentAgentRuntimeThread(
-          snapshot,
-          itemWorkspaceId,
-          projectKey,
-          space,
+    const activeExpert = useAgentRuntime
+      ? getActiveExpertFromBrowserSession({
+          profileId: actor.id,
+          workspaceId: itemWorkspaceId,
+          spaceId: space,
+          projectId: projectKey,
           projectTitle,
-        )
-      : upsertPersistentProjectThread(
-          snapshot,
-          itemWorkspaceId,
-          projectKey,
-          space,
-        );
+        })
+      : { agentId: null as string | null, title: null as string | null };
+    // Prefer the selected Expert's runtime thread. If tabs are not primed yet,
+    // fall back to the project builder chat until ChatColumn rebinds.
+    const { threads: next, id: nextId } =
+      useAgentRuntime && activeExpert.agentId
+        ? upsertPersistentAgentRuntimeThread(
+            snapshot,
+            itemWorkspaceId,
+            projectKey,
+            space,
+            activeExpert.title || projectTitle,
+            activeExpert.agentId,
+          )
+        : upsertPersistentProjectThread(
+            snapshot,
+            itemWorkspaceId,
+            projectKey,
+            space,
+          );
     tid = nextId;
     const projectThread = next.find((item) => item.id === nextId);
     const projectEmpty = !threadHasTurns(projectThread);
@@ -4629,12 +4646,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setThreadId(tid);
     });
     setThreads(() => migrated);
-    if (useAgentRuntime) {
+    if (useAgentRuntime && activeExpert.agentId) {
       void prefetchAgentRuntimeConversation({
         workspaceId: itemWorkspaceId,
         projectId: projectKey,
+        agentId: activeExpert.agentId,
         spaceId: space,
-        title: projectTitle,
+        title: activeExpert.title || projectTitle,
       }).catch(() => {});
     }
     setView("space");
@@ -5850,53 +5868,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDrafting(!hasMessages);
   }, [connectorId, workspaceId, setThreads]);
 
-  /** Re-bind the observe-only Agent ↔ Cander runtime thread. */
-  const resumeAgentRuntimeChat = useCallback(() => {
-    if (!projectId) return;
-    let match:
-      | ReturnType<typeof localSpaceEntityStore.getProject>
-      | ReturnType<typeof findProjectInWorkspace>
-      | undefined;
-    try {
-      match = localSpaceEntityStore.getProject(
-        { workspaceId, actorId: actor.id },
-        projectId,
-      ) ?? undefined;
-    } catch {
-      match = undefined;
-    }
-    if (!match) {
+  /** Re-bind the observe-only Cander ↔ Expert runtime thread for one Expert. */
+  const resumeAgentRuntimeChat = useCallback(
+    (opts?: { agentId?: string | null; title?: string }) => {
+      if (!projectId) return;
+      let match:
+        | ReturnType<typeof localSpaceEntityStore.getProject>
+        | ReturnType<typeof findProjectInWorkspace>
+        | undefined;
       try {
-        match = findProjectInWorkspace(workspaceId, projectId);
+        match =
+          localSpaceEntityStore.getProject(
+            { workspaceId, actorId: actor.id },
+            projectId,
+          ) ?? undefined;
       } catch {
         match = undefined;
       }
-    }
-    if (!match || !("kind" in match) || match.kind !== "automation") return;
-    const title =
-      "title" in match && typeof match.title === "string"
-        ? match.title
-        : "Agent";
-    const space = match.space;
-    const snapshot = getChatStoreSnapshot().threads;
-    const { threads: next, id: nextId } = upsertPersistentAgentRuntimeThread(
-      snapshot,
-      workspaceId,
-      projectId,
-      space,
-      title,
-    );
-    const runtimeThread = next.find((item) => item.id === nextId);
-    const hasMessages = threadHasTurns(runtimeThread);
-    if (threadIdRef.current !== nextId) {
-      flushSync(() => {
-        threadIdRef.current = nextId;
-        setThreadId(nextId);
+      if (!match) {
+        try {
+          match = findProjectInWorkspace(workspaceId, projectId);
+        } catch {
+          match = undefined;
+        }
+      }
+      if (!match || !("kind" in match) || match.kind !== "automation") return;
+      const projectTitle =
+        "title" in match && typeof match.title === "string"
+          ? match.title
+          : "Expert";
+      const space = match.space;
+      const fromSession = getActiveExpertFromBrowserSession({
+        profileId: actor.id,
+        workspaceId,
+        spaceId: space,
+        projectId,
+        projectTitle,
       });
-    }
-    setThreads(() => next);
-    setDrafting(!hasMessages);
-  }, [projectId, workspaceId, actor.id, setThreads]);
+      const agentId = opts?.agentId?.trim() || fromSession.agentId;
+      if (!agentId) return;
+      const title =
+        opts?.title?.trim() || fromSession.title || projectTitle;
+      const snapshot = getChatStoreSnapshot().threads;
+      const { threads: next, id: nextId } = upsertPersistentAgentRuntimeThread(
+        snapshot,
+        workspaceId,
+        projectId,
+        space,
+        title,
+        agentId,
+      );
+      if (threadIdRef.current !== nextId) {
+        flushSync(() => {
+          threadIdRef.current = nextId;
+          setThreadId(nextId);
+        });
+      }
+      setThreads(() => next);
+      // Expert runtime is observe-only — never show the landing / composer draft.
+      setDrafting(false);
+      void prefetchAgentRuntimeConversation({
+        workspaceId,
+        projectId,
+        agentId,
+        spaceId: space,
+        title,
+      }).catch(() => {});
+    },
+    [projectId, workspaceId, actor.id, setThreads],
+  );
 
   const openJob = useCallback((id: string) => {
     const chatActive = Boolean(threadId) || drafting;
