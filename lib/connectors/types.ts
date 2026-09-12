@@ -16,6 +16,11 @@ export type ConnectorConnection = {
   connectionMode: ConnectorConnectionMode;
   /** Candor-only label (1–10 chars). Not a provider identity. */
   displayName: string;
+  /**
+   * True when the authenticated viewer owns this row.
+   * Shared connections from other members are false.
+   */
+  ownedByViewer: boolean;
   failureDetail: string | null;
   /** Resolved tool id → enabled (catalog defaults merged with stored overrides). */
   toolPermissions: Record<string, boolean>;

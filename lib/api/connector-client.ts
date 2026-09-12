@@ -172,6 +172,30 @@ export async function executeConnectorToolRequest(input: {
   return { output: String(data.output ?? "") };
 }
 
+export async function updateConnectorWorkspaceShare(input: {
+  workspaceId: string;
+  connectionId: string;
+  shared: boolean;
+}): Promise<ConnectorConnection> {
+  const headers = await authHeaders();
+  const response = await fetch(
+    `/api/connectors/connections/${encodeURIComponent(input.connectionId)}/share`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...headers },
+      body: JSON.stringify({
+        workspaceId: input.workspaceId,
+        shared: input.shared,
+      }),
+    },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error ?? "Could not update workspace sharing.");
+  }
+  return data.connection as ConnectorConnection;
+}
+
 export async function updateConnectorToolPermissions(input: {
   workspaceId: string;
   connectionId: string;

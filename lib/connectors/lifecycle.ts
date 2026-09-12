@@ -55,15 +55,18 @@ export async function listUserConnections(input: {
   ownerId: string;
 }): Promise<ConnectorConnection[]> {
   await expireStalePendingConnections(input);
+  // RLS returns the caller's own rows plus active workspace_shared rows
+  // from other members in this workspace.
   const { data, error } = await input.client
     .from("connector_connections")
     .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
     .eq("workspace_id", input.workspaceId)
-    .eq("owner_id", input.ownerId)
     .is("deleted_at", null)
     .order("created_at", { ascending: false });
   if (error) throw error;
-  return asConnectionRows(data).map(connectionRowToPublic);
+  return asConnectionRows(data).map((row) =>
+    connectionRowToPublic(row, { viewerId: input.ownerId }),
+  );
 }
 
 export async function getUserConnection(input: {
@@ -87,7 +90,9 @@ export async function getUserConnection(input: {
   }
   return {
     ok: true,
-    connection: connectionRowToPublic(asConnectionRow(data)),
+    connection: connectionRowToPublic(asConnectionRow(data), {
+      viewerId: input.ownerId,
+    }),
   };
 }
 
@@ -137,7 +142,6 @@ export async function initiateConnection(input: {
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.ownerId)
     .eq("connector_id", input.connectorId)
-    .eq("connection_mode", "personal")
     .in("status", ["pending", "active"])
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
@@ -164,7 +168,7 @@ export async function initiateConnection(input: {
       }
       return {
         ok: true,
-        connection: connectionRowToPublic(pending),
+        connection: connectionRowToPublic(pending, { viewerId: input.ownerId }),
         reused: true,
         authorizationUrl: auth.authorizationUrl,
       };
@@ -259,7 +263,9 @@ export async function initiateConnection(input: {
 
   return {
     ok: true,
-    connection: connectionRowToPublic(asConnectionRow(inserted)),
+    connection: connectionRowToPublic(asConnectionRow(inserted), {
+      viewerId: input.ownerId,
+    }),
     reused: false,
     authorizationUrl: auth.authorizationUrl,
   };
@@ -298,7 +304,6 @@ export async function renameConnection(input: {
     .eq("workspace_id", input.workspaceId)
     .eq("owner_id", input.ownerId)
     .eq("connector_id", row.connector_id)
-    .eq("connection_mode", "personal")
     .in("status", ["pending", "active"])
     .is("deleted_at", null);
   if (siblingsError) throw siblingsError;
@@ -338,7 +343,72 @@ export async function renameConnection(input: {
 
   return {
     ok: true,
-    connection: connectionRowToPublic(asConnectionRow(updated)),
+    connection: connectionRowToPublic(asConnectionRow(updated), {
+      viewerId: input.ownerId,
+    }),
+  };
+}
+
+/**
+ * Owner-only: allow or revoke workspace-member use of this account.
+ * Does not change provider auth — only Candor access scope.
+ */
+export async function setConnectionWorkspaceShare(input: {
+  client: SupabaseClient;
+  workspaceId: string;
+  ownerId: string;
+  connectionId: string;
+  shared: boolean;
+}): Promise<
+  | { ok: true; connection: ConnectorConnection }
+  | { ok: false; status: number; error: string }
+> {
+  const { data: rowData, error: loadError } = await input.client
+    .from("connector_connections")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
+    .eq("id", input.connectionId)
+    .eq("workspace_id", input.workspaceId)
+    .eq("owner_id", input.ownerId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (loadError) throw loadError;
+  if (!rowData) {
+    return { ok: false, ...connectionNotFoundError() };
+  }
+  const row = asConnectionRow(rowData);
+  if (row.status !== "active") {
+    return {
+      ok: false,
+      status: 400,
+      error: "Only an active connection can be shared with the workspace.",
+    };
+  }
+
+  const mode = input.shared ? "workspace_shared" : "personal";
+  if (row.connection_mode === mode) {
+    return {
+      ok: true,
+      connection: connectionRowToPublic(row, { viewerId: input.ownerId }),
+    };
+  }
+
+  const now = new Date().toISOString();
+  const { data: updated, error: updateError } = await input.client
+    .from("connector_connections")
+    .update({ connection_mode: mode, updated_at: now })
+    .eq("id", row.id)
+    .eq("owner_id", input.ownerId)
+    .eq("workspace_id", input.workspaceId)
+    .eq("status", "active")
+    .select(CONNECTOR_CONNECTION_PUBLIC_COLUMNS)
+    .single();
+  if (updateError) throw updateError;
+
+  return {
+    ok: true,
+    connection: connectionRowToPublic(asConnectionRow(updated), {
+      viewerId: input.ownerId,
+    }),
   };
 }
 

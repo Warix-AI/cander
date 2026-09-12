@@ -40,3 +40,15 @@ test("account limit is three", () => {
   assert.equal(canAddAnotherConnectorAccount(2), true);
   assert.equal(canAddAnotherConnectorAccount(3), false);
 });
+
+test("default Account label shows as Rename in nav", async () => {
+  const {
+    connectorAccountNavLabel,
+    connectorAccountNeedsRename,
+  } = await import("../lib/connectors/account-names.ts");
+  assert.equal(connectorAccountNeedsRename("Account"), true);
+  assert.equal(connectorAccountNeedsRename("  "), true);
+  assert.equal(connectorAccountNeedsRename("Team"), false);
+  assert.equal(connectorAccountNavLabel("Account"), "Rename");
+  assert.equal(connectorAccountNavLabel("Team"), "Team");
+});

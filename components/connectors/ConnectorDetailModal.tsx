@@ -6,11 +6,13 @@ import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { ConnectorAccountBar } from "@/components/connectors/ConnectorAccountBar";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
 import { ConnectorSkillsToggles } from "@/components/connectors/ConnectorSkillsToggles";
+import { ConnectorWorkspaceShareToggle } from "@/components/connectors/ConnectorWorkspaceShareToggle";
 import { Modal } from "@/components/ui/Modal";
 import { Dropdown } from "@/components/ui/Controls";
 import {
   CONNECTOR_DISPLAY_NAME_MAX,
   canAddAnotherConnectorAccount,
+  connectorAccountNeedsRename,
   validateUniqueConnectorDisplayName,
 } from "@/lib/connectors/account-names";
 import { toolsForConnector } from "@/lib/connectors/tool-catalog";
@@ -117,12 +119,11 @@ export function ConnectorDetailModal({
   onConnect,
   onDisconnect,
   onRename,
-  onOpen,
   onConnectionsRefresh,
   onSkillPermissionsUpdated,
   onSetPin,
-  onClearPin,
   onPromptSelect,
+  renameRequestNonce = 0,
 }: {
   open: boolean;
   onClose: () => void;
@@ -140,21 +141,23 @@ export function ConnectorDetailModal({
   onConnect: (opts: {
     displayName: string;
     forceNew?: boolean;
-  }) => Promise<void>;
+  }) => Promise<ConnectorConnection | void>;
   onDisconnect: (connectionId: string) => Promise<void>;
   onRename: (connectionId: string, displayName: string) => Promise<void>;
-  onOpen?: () => void;
   onConnectionsRefresh: () => void;
   onSkillPermissionsUpdated: (connection: ConnectorConnection) => void;
   onSetPin: () => void;
-  onClearPin: () => void;
   onPromptSelect: (text: string) => void;
+  /** Bumped by parent (e.g. mobile header) to open rename. */
+  renameRequestNonce?: number;
 }) {
   const mobile = useMobileShell();
   const liveAccounts = useMemo(
     () =>
       (item.liveConnections ?? []).filter(
-        (row) => row.status === "active" || row.status === "pending",
+        (row) =>
+          (row.status === "active" || row.status === "pending") &&
+          row.ownedByViewer !== false,
       ),
     [item.liveConnections],
   );
@@ -235,21 +238,33 @@ export function ConnectorDetailModal({
             ? "Connect"
             : "Install";
 
-  const showActionsMenu = !blocked && !(dedicated && mobile);
+  const showAccountBar = canManageServerConnection && !oauthPending && !blocked;
+  const menuHasItems =
+    Boolean(selectedConnection && canManageServerConnection) ||
+    canDisconnectOrUninstall ||
+    (!canDisconnectOrUninstall && !showAccountBar);
+  const showActionsMenu =
+    !blocked && !(dedicated && mobile) && menuHasItems;
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
   useEffect(() => {
     if (!open) setConfirmDisconnect(false);
   }, [open, item.id]);
 
-  // Connected / local-installed apps manage lifecycle from the menu — no Connect footer.
-  // Pending OAuth still shows Continue connecting. Zero accounts show Connect.
+  // Connected OAuth / installed connectors auto-pin into the Connectors section.
+  useEffect(() => {
+    if (!open || blocked || !isConnected || tier) return;
+    onSetPin();
+  }, [open, blocked, isConnected, tier, onSetPin]);
+
+  // Account bar owns first Connect for OAuth connectors. Footer keeps
+  // Continue connecting / Work attach / non-OAuth connect only.
   const showConnectFooter =
     !blocked &&
     !oauthPending &&
     (Boolean(workAttach) ||
       Boolean(pendingConnection && !liveAccounts.some((r) => r.status === "active")) ||
-      (!liveAccounts.length && !localInstallOnly));
+      (!liveAccounts.length && !localInstallOnly && !canManageServerConnection));
 
   const previewConnection: ConnectorConnection = {
     id: "preview",
@@ -258,6 +273,7 @@ export function ConnectorDetailModal({
     status: "pending",
     connectionMode: "personal",
     displayName: "Account",
+    ownedByViewer: true,
     failureDetail: null,
     toolPermissions: Object.fromEntries(
       skills.map((tool) => [tool.id, tool.defaultEnabled]),
@@ -269,16 +285,34 @@ export function ConnectorDetailModal({
     pendingExpiresAt: null,
   };
 
-  const openNamePrompt = (mode: "connect" | "add" | "rename") => {
+  const openNamePrompt = (
+    mode: "connect" | "add" | "rename",
+    connectionId?: string,
+  ) => {
+    const target =
+      (connectionId
+        ? liveAccounts.find((row) => row.id === connectionId)
+        : null) ?? selectedConnection;
+    const raw =
+      mode === "rename" && target
+        ? connectorAccountNeedsRename(target.displayName)
+          ? ""
+          : target.displayName
+        : "";
+    if (connectionId) setSelectedId(connectionId);
     setNamePrompt({
       mode,
-      value:
-        mode === "rename" && selectedConnection
-          ? selectedConnection.displayName
-          : "",
+      value: raw,
       error: null,
     });
   };
+
+  useEffect(() => {
+    if (!renameRequestNonce || !open) return;
+    if (!selectedConnection || !canManageServerConnection) return;
+    openNamePrompt("rename");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- renameRequestNonce
+  }, [renameRequestNonce]);
 
   const submitNamePrompt = async () => {
     if (!namePrompt) return;
@@ -301,10 +335,13 @@ export function ConnectorDetailModal({
       await onRename(selectedConnection.id, check.value);
       return;
     }
-    await onConnect({
+    // + always starts a fresh OAuth account (external/new tab), never
+    // resumes a prior pending connection for a different label.
+    const created = await onConnect({
       displayName: check.value,
-      forceNew: mode === "add",
+      forceNew: mode === "add" || liveAccounts.length > 0,
     });
+    if (created?.id) setSelectedId(created.id);
   };
 
   const handlePromptClick = (prompt: ConnectorPrompt) => {
@@ -312,9 +349,11 @@ export function ConnectorDetailModal({
     onPromptSelect(`Cander, ${prompt.text}`);
   };
 
-  const showAccountBar = canManageServerConnection && !oauthPending && !blocked;
+  const namePromptTitleId = `connector-account-name-${item.id}`;
+  const disconnectTitleId = `connector-disconnect-${item.id}`;
 
   return (
+    <>
     <Modal
       open={open}
       onClose={onClose}
@@ -357,145 +396,6 @@ export function ConnectorDetailModal({
               : "contents",
           )}
         >
-        {confirmDisconnect ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 p-4 dark:bg-black/25">
-            <div
-              className={cn(
-                "light-surface w-full max-w-sm bg-white/85 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:bg-zinc-900/85 dark:shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
-                SHELL_G3_RADIUS,
-              )}
-            >
-              <p className="text-[15px] font-semibold tracking-[-0.02em]">
-                {canManageServerConnection
-                  ? "Disconnect account?"
-                  : "Uninstall connector?"}
-              </p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                {canManageServerConnection
-                  ? `Disconnect “${selectedConnection?.displayName ?? item.name}”? Other accounts for ${item.name} stay connected.`
-                  : `Are you sure you want to uninstall ${item.name}?`}
-              </p>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setConfirmDisconnect(false)}
-                  className={cn(
-                    "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
-                    SHELL_G3_RADIUS,
-                  )}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    void (async () => {
-                      if (selectedConnection) {
-                        await onDisconnect(selectedConnection.id);
-                      } else {
-                        await onDisconnect("");
-                      }
-                      setConfirmDisconnect(false);
-                    })();
-                  }}
-                  className={cn(
-                    "inline-flex h-9 items-center bg-destructive px-4 text-[13px] font-medium text-destructive-foreground disabled:opacity-50",
-                    SHELL_G3_RADIUS,
-                  )}
-                >
-                  {busy
-                    ? canManageServerConnection
-                      ? "Disconnecting…"
-                      : "Uninstalling…"
-                    : canManageServerConnection
-                      ? "Disconnect"
-                      : "Uninstall"}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
-        {namePrompt ? (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/10 p-4 dark:bg-black/25">
-            <div
-              className={cn(
-                "light-surface w-full max-w-sm bg-white/85 p-4 shadow-[0_16px_40px_rgba(15,23,42,0.14)] backdrop-blur-xl dark:bg-zinc-900/85 dark:shadow-[0_16px_40px_rgba(0,0,0,0.28)]",
-                SHELL_G3_RADIUS,
-              )}
-            >
-              <p className="text-[15px] font-semibold tracking-[-0.02em]">
-                {namePrompt.mode === "rename"
-                  ? "Rename account"
-                  : namePrompt.mode === "add"
-                    ? "Name this account"
-                    : "Name your account"}
-              </p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
-                Choose a short Candor label (1–{CONNECTOR_DISPLAY_NAME_MAX}{" "}
-                characters). This does not change the provider account.
-              </p>
-              <input
-                autoFocus
-                value={namePrompt.value}
-                maxLength={CONNECTOR_DISPLAY_NAME_MAX}
-                onChange={(event) =>
-                  setNamePrompt({
-                    ...namePrompt,
-                    value: event.target.value,
-                    error: null,
-                  })
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void submitNamePrompt();
-                  }
-                }}
-                placeholder="e.g. Team"
-                className="mt-3 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-space-canvas"
-              />
-              {namePrompt.error ? (
-                <p className="mt-2 text-[12px] text-destructive">
-                  {namePrompt.error}
-                </p>
-              ) : (
-                <p className="mt-2 text-[11px] text-muted-foreground">
-                  {namePrompt.value.trim().length}/{CONNECTOR_DISPLAY_NAME_MAX}
-                </p>
-              )}
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setNamePrompt(null)}
-                  className={cn(
-                    "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
-                    SHELL_G3_RADIUS,
-                  )}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void submitNamePrompt()}
-                  className={cn(
-                    "inline-flex h-9 items-center bg-foreground px-4 text-[13px] font-medium text-background disabled:opacity-50",
-                    SHELL_G3_RADIUS,
-                  )}
-                >
-                  {busy
-                    ? "Working…"
-                    : namePrompt.mode === "rename"
-                      ? "Save"
-                      : "Continue"}
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
         <div
           className={cn(
             dedicated
@@ -518,13 +418,18 @@ export function ConnectorDetailModal({
           {showAccountBar ? (
             <ConnectorAccountBar
               className="mb-4"
+              connectorIcon={item.icon}
               accounts={liveAccounts}
               activeId={selectedConnection?.id ?? null}
               onSelect={setSelectedId}
               addDisabled={!canAddAccount || busy}
+              connectDisabled={busy}
+              onConnect={() => {
+                openNamePrompt("connect");
+              }}
               onAdd={() => {
                 if (!canAddAccount) return;
-                openNamePrompt(liveAccounts.length ? "add" : "connect");
+                openNamePrompt("add");
               }}
             />
           ) : null}
@@ -559,53 +464,6 @@ export function ConnectorDetailModal({
               >
                 {(close) => (
                   <>
-                    {tier ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          onClearPin();
-                          close();
-                        }}
-                        className={cn(
-                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1]",
-                          SHELL_G3_RADIUS,
-                        )}
-                      >
-                        Unpin
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          onSetPin();
-                          close();
-                        }}
-                        className={cn(
-                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1]",
-                          SHELL_G3_RADIUS,
-                        )}
-                      >
-                        Pin
-                      </button>
-                    )}
-                    {onOpen ? (
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          close();
-                          onOpen();
-                        }}
-                        className={cn(
-                          "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1]",
-                          SHELL_G3_RADIUS,
-                        )}
-                      >
-                        Open
-                      </button>
-                    ) : null}
                     {selectedConnection && canManageServerConnection ? (
                       <button
                         type="button"
@@ -620,21 +478,17 @@ export function ConnectorDetailModal({
                           SHELL_G3_RADIUS,
                         )}
                       >
-                        Rename account
+                        Rename
                       </button>
                     ) : null}
-                    {!canDisconnectOrUninstall ? (
+                    {!canDisconnectOrUninstall && !showAccountBar ? (
                       <button
                         type="button"
                         role="menuitem"
                         disabled={busy}
                         onClick={() => {
                           close();
-                          if (canManageServerConnection) {
-                            openNamePrompt("connect");
-                          } else {
-                            void onConnect({ displayName: "Account" });
-                          }
+                          void onConnect({ displayName: "Account" });
                         }}
                         className={cn(
                           "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
@@ -781,6 +635,25 @@ export function ConnectorDetailModal({
               />
             )}
             <p className="mb-3 mt-8 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+              Access
+            </p>
+            {activeConnection ? (
+              <ConnectorWorkspaceShareToggle
+                workspaceId={workspaceId}
+                connection={activeConnection}
+                onUpdated={(updated) => {
+                  onSkillPermissionsUpdated(updated);
+                  onConnectionsRefresh();
+                }}
+              />
+            ) : (
+              <ConnectorWorkspaceShareToggle
+                workspaceId={workspaceId}
+                connection={previewConnection}
+                disabled
+              />
+            )}
+            <p className="mb-3 mt-8 text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
               Information
             </p>
             <ConnectorInfoSection item={item} className="pb-2" />
@@ -832,5 +705,153 @@ export function ConnectorDetailModal({
         </div>
       </div>
     </Modal>
+
+    <Modal
+      open={Boolean(namePrompt)}
+      onClose={() => setNamePrompt(null)}
+      labelledBy={namePromptTitleId}
+      className={cn("w-full max-w-sm p-4", SHELL_G3_RADIUS)}
+      backdropClassName="bg-black/30"
+      sheetOnMobile
+    >
+      {namePrompt ? (
+        <>
+          <p
+            id={namePromptTitleId}
+            className="text-[15px] font-semibold tracking-[-0.02em]"
+          >
+            {namePrompt.mode === "rename"
+              ? "Rename account"
+              : namePrompt.mode === "add"
+                ? "Name this account"
+                : "Name your account"}
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+            Choose a short Candor label (1–{CONNECTOR_DISPLAY_NAME_MAX}{" "}
+            characters). This does not change the provider account.
+          </p>
+          <input
+            autoFocus
+            value={namePrompt.value}
+            maxLength={CONNECTOR_DISPLAY_NAME_MAX}
+            onChange={(event) =>
+              setNamePrompt({
+                ...namePrompt,
+                value: event.target.value,
+                error: null,
+              })
+            }
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submitNamePrompt();
+              }
+            }}
+            placeholder="e.g. Team"
+            className="mt-3 h-10 w-full rounded-[10px] border border-border bg-white px-3 text-[13px] outline-none dark:bg-space-canvas"
+          />
+          {namePrompt.error ? (
+            <p className="mt-2 text-[12px] text-destructive">
+              {namePrompt.error}
+            </p>
+          ) : (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              {namePrompt.value.trim().length}/{CONNECTOR_DISPLAY_NAME_MAX}
+            </p>
+          )}
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setNamePrompt(null)}
+              className={cn(
+                "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
+                SHELL_G3_RADIUS,
+              )}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void submitNamePrompt()}
+              className={cn(
+                "inline-flex h-9 items-center bg-foreground px-4 text-[13px] font-medium text-background disabled:opacity-50",
+                SHELL_G3_RADIUS,
+              )}
+            >
+              {busy
+                ? "Working…"
+                : namePrompt.mode === "rename"
+                  ? "Save"
+                  : "Continue"}
+            </button>
+          </div>
+        </>
+      ) : null}
+    </Modal>
+
+    <Modal
+      open={confirmDisconnect}
+      onClose={() => setConfirmDisconnect(false)}
+      labelledBy={disconnectTitleId}
+      className={cn("w-full max-w-sm p-4", SHELL_G3_RADIUS)}
+      backdropClassName="bg-black/30"
+      sheetOnMobile
+    >
+      <p
+        id={disconnectTitleId}
+        className="text-[15px] font-semibold tracking-[-0.02em]"
+      >
+        {canManageServerConnection
+          ? "Disconnect account?"
+          : "Uninstall connector?"}
+      </p>
+      <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+        {canManageServerConnection
+          ? `Disconnect “${selectedConnection?.displayName ?? item.name}”? Other accounts for ${item.name} stay connected.`
+          : `Are you sure you want to uninstall ${item.name}?`}
+      </p>
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => setConfirmDisconnect(false)}
+          className={cn(
+            "inline-flex h-9 items-center px-3 text-[13px] text-muted-foreground hover:text-foreground disabled:opacity-50",
+            SHELL_G3_RADIUS,
+          )}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            void (async () => {
+              if (selectedConnection) {
+                await onDisconnect(selectedConnection.id);
+              } else {
+                await onDisconnect("");
+              }
+              setConfirmDisconnect(false);
+            })();
+          }}
+          className={cn(
+            "inline-flex h-9 items-center bg-destructive px-4 text-[13px] font-medium text-destructive-foreground disabled:opacity-50",
+            SHELL_G3_RADIUS,
+          )}
+        >
+          {busy
+            ? canManageServerConnection
+              ? "Disconnecting…"
+              : "Uninstalling…"
+            : canManageServerConnection
+              ? "Disconnect"
+              : "Uninstall"}
+        </button>
+      </div>
+    </Modal>
+    </>
   );
 }

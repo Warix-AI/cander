@@ -97,7 +97,11 @@ export function asConnectionRows(data: unknown): ConnectorConnectionRow[] {
 }
 
 /** Strip secret fields before any client-facing response. */
-export function connectionRowToPublic(row: ConnectorConnectionRow): ConnectorConnection {
+export function connectionRowToPublic(
+  row: ConnectorConnectionRow,
+  opts?: { viewerId?: string | null },
+): ConnectorConnection {
+  const viewerId = opts?.viewerId ?? null;
   return {
     id: row.id,
     workspaceId: row.workspace_id,
@@ -105,6 +109,7 @@ export function connectionRowToPublic(row: ConnectorConnectionRow): ConnectorCon
     status: row.status,
     connectionMode: row.connection_mode,
     displayName: (row.display_name ?? "Account").trim() || "Account",
+    ownedByViewer: viewerId ? row.owner_id === viewerId : true,
     failureDetail: row.failure_detail,
     toolPermissions: resolveToolPermissions(
       row.connector_id,

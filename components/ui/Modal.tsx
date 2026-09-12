@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { NativeOverlayGate } from "@/components/browser/NativeOverlayGate";
 import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 export function Modal({
@@ -14,6 +15,7 @@ export function Modal({
   lockScroll = true,
   embedded = false,
   edgeToEdge = false,
+  sheetOnMobile = false,
   backdropClassName = "bg-black/72",
 }: {
   open: boolean;
@@ -25,10 +27,14 @@ export function Modal({
   /** Render as part of the current workspace surface instead of an overlay. */
   embedded?: boolean;
   edgeToEdge?: boolean;
+  /** On mobile, anchor as a bottom sheet instead of a centered dialog. */
+  sheetOnMobile?: boolean;
   backdropClassName?: string;
 }) {
   const shell = useShellStyle();
   const floating = shell === "floating";
+  const mobile = useMobileShell();
+  const asSheet = sheetOnMobile && mobile && !edgeToEdge && !embedded;
 
   useEffect(() => {
     if (!open) return;
@@ -73,10 +79,12 @@ export function Modal({
           "fixed inset-0 z-[60] flex",
           edgeToEdge
             ? "items-stretch justify-stretch p-0"
-            : cn(
-                "items-center justify-center",
-                floating ? "p-5 sm:p-8" : "p-4 sm:p-6",
-              ),
+            : asSheet
+              ? "items-end justify-stretch p-0"
+              : cn(
+                  "items-center justify-center",
+                  floating ? "p-5 sm:p-8" : "p-4 sm:p-6",
+                ),
         )}
       >
         <button
@@ -93,13 +101,22 @@ export function Modal({
             "relative z-10 overflow-hidden light-surface bg-popover text-popover-foreground shadow-[0_16px_48px_rgba(0,0,0,0.12)] dark:border dark:border-border dark:bg-zinc-900 dark:shadow-[0_20px_56px_rgba(0,0,0,0.45)]",
             edgeToEdge
               ? "h-full max-h-none w-full rounded-none"
-              : cn(
-                  "max-h-[calc(100vh-2rem)]",
-                  floating ? SHELL_G3_RADIUS : "rounded-[10px]",
-                ),
+              : asSheet
+                ? null
+                : cn(
+                    "max-h-[calc(100vh-2rem)]",
+                    floating ? SHELL_G3_RADIUS : "rounded-[10px]",
+                  ),
             className,
+            asSheet &&
+              "w-full max-w-none max-h-[min(88dvh,720px)] rounded-b-none rounded-t-[22px] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-[0_-12px_40px_rgba(0,0,0,0.18)]",
           )}
         >
+          {asSheet ? (
+            <div className="flex shrink-0 justify-center pt-2.5 pb-1" aria-hidden>
+              <span className="h-1 w-10 rounded-full bg-muted-foreground/35" />
+            </div>
+          ) : null}
           {children}
         </div>
       </div>

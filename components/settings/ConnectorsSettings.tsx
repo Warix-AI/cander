@@ -17,6 +17,7 @@ import {
   subscribeConnectorConnections,
   getConnectorConnectionsSnapshot,
 } from "@/lib/connector-connections-store";
+import { connectorAccountNavLabel } from "@/lib/connectors/account-names";
 import { connectorsAvailableForKind } from "@/lib/workspace-connections";
 import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import { workspaceKindLabel, workspaceKindOf } from "@/lib/workspace-kind";
@@ -186,7 +187,7 @@ export function ConnectorsSettings() {
                   : liveConnections.map((connection) => (
                       <SettingsRow
                         key={connection.id}
-                        label={connection.displayName || item.name}
+                        label={connectorAccountNavLabel(connection.displayName)}
                         description={
                           connection.status === "pending"
                             ? "Pending provider setup"

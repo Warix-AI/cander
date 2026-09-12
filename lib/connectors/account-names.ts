@@ -78,3 +78,21 @@ export function canAddAnotherConnectorAccount(liveCount: number): boolean {
 export function connectorAccountLimitMessage(): string {
   return `You can connect up to ${MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR} accounts for this connector.`;
 }
+
+/** Default backfill label for migrated singles — treat as unnamed in the UI. */
+export const CONNECTOR_DEFAULT_DISPLAY_NAME = "Account";
+
+export function connectorAccountNeedsRename(
+  displayName: string | null | undefined,
+): boolean {
+  const name = String(displayName ?? "").trim();
+  return !name || name.toLowerCase() === CONNECTOR_DEFAULT_DISPLAY_NAME.toLowerCase();
+}
+
+/** Nav tab label — unnamed / default accounts show “Rename”. */
+export function connectorAccountNavLabel(
+  displayName: string | null | undefined,
+): string {
+  if (connectorAccountNeedsRename(displayName)) return "Rename";
+  return String(displayName).trim();
+}

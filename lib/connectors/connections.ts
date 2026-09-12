@@ -45,9 +45,9 @@ function connectionLabel(row: ConnectorConnectionRow): string {
 }
 
 /**
- * List the caller's active connections including provider refs.
- * Uses service role for provider_connection_id (auth clients cannot SELECT it),
- * always scoped to the verified workspace + profile from the request.
+ * List active connections the caller may use for tools/agents:
+ * their own accounts, plus active workspace_shared accounts in the workspace.
+ * Uses service role for provider refs; always scoped to verified workspace + member.
  */
 export async function listActiveConnections(input: {
   client: SupabaseClient;
@@ -62,9 +62,11 @@ export async function listActiveConnections(input: {
     .from("connector_connections")
     .select(CONNECTOR_CONNECTION_SERVER_COLUMNS)
     .eq("workspace_id", input.workspaceId)
-    .eq("owner_id", input.profileId)
     .eq("status", "active")
     .is("deleted_at", null)
+    .or(
+      `owner_id.eq.${input.profileId},connection_mode.eq.workspace_shared`,
+    )
     .order("connected_at", { ascending: false });
 
   if (input.connectorId) {
@@ -75,8 +77,18 @@ export async function listActiveConnections(input: {
   if (error) throw error;
 
   const connections: ResolvedConnection[] = [];
+  const seen = new Set<string>();
   for (const row of asConnectionRows(data)) {
     if (!row.provider_connection_id) continue;
+    // Guard: shared rows must be workspace_shared; never leak other owners' personal.
+    if (
+      row.owner_id !== input.profileId &&
+      row.connection_mode !== "workspace_shared"
+    ) {
+      continue;
+    }
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
     connections.push({
       connectionId: row.id,
       connectorId: row.connector_id,

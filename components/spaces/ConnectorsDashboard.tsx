@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { ExternalLink, Pin, PinOff, Plus, Search, Unplug, X } from "lucide-react";
+import { Pencil, Plus, Search, Unplug, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import { useApp } from "@/components/app/AppProvider";
 import { DashFrame, ScopeToggle } from "@/components/spaces/ItemSet";
@@ -75,7 +75,6 @@ type ConnectorsView = "connectors" | "installed";
 export function ConnectorsDashboard() {
   const {
     connectorId,
-    openConnector,
     workspaceId,
     workspace,
     actor,
@@ -109,10 +108,17 @@ export function ConnectorsDashboard() {
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
+  const [detailRenameNonce, setDetailRenameNonce] = useState(0);
   const [connectionsLoading, setConnectionsLoading] = useState(
     () => getDataBackend() !== "local",
   );
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const ensureConnectorPinned = (id: string) => {
+    if (!pinTier("connector", id)) {
+      setPin("connector", id, "primary");
+    }
+  };
 
   const accessibleWorkspaceIds = useMemo(
     () => Array.from(new Set([workspaceId, ...actor.workspaceIds])),
@@ -286,7 +292,7 @@ export function ConnectorsDashboard() {
         workspaceId,
         connectorId: id,
         displayName: opts?.displayName,
-        forceNew: opts?.forceNew,
+        forceNew: Boolean(opts?.forceNew),
       });
       patchConnectorConnectionForWorkspace(workspaceId, connection);
       if (authorizationUrl) {
@@ -294,7 +300,7 @@ export function ConnectorsDashboard() {
           onExternalFinished: () => {
             void claimConnectorOAuthSession({ workspaceId })
               .then(async (claimed) => {
-                if (claimed.claimed && claimed.connection) {
+                  if (claimed.claimed && claimed.connection) {
                   patchConnectorConnectionForWorkspace(
                     workspaceId,
                     claimed.connection,
@@ -302,6 +308,7 @@ export function ConnectorsDashboard() {
                   setInfo(
                     `${appConnectorById(claimed.connectorId ?? id)?.name ?? "Connector"} connected.`,
                   );
+                  ensureConnectorPinned(claimed.connectorId ?? id);
                   if (claimed.connectorId) {
                     invalidateConnectorViewCache(claimed.connectorId, workspaceId);
                   }
@@ -338,6 +345,7 @@ export function ConnectorsDashboard() {
                 setInfo(
                   `${appConnectorById(claimed.connectorId ?? id)?.name ?? label} connected.`,
                 );
+                ensureConnectorPinned(claimed.connectorId ?? id);
                 if (claimed.connectorId) {
                   invalidateConnectorViewCache(claimed.connectorId, workspaceId);
                 }
@@ -356,6 +364,7 @@ export function ConnectorsDashboard() {
                 window.clearInterval(poll);
                 if (active) {
                   setInfo(`${label} connected.`);
+                  ensureConnectorPinned(id);
                   invalidateConnectorViewCache(id, workspaceId);
                 }
               }
@@ -372,13 +381,15 @@ export function ConnectorsDashboard() {
         window.setTimeout(() => {
           document.removeEventListener("visibilitychange", onVisible);
         }, 180_000);
-        return;
+        return connection;
       }
       setInfo(`Could not start ${id} authorization.`);
+      return connection;
     } catch (err) {
       setInfo(
         err instanceof Error ? err.message : "Could not start connection.",
       );
+      return undefined;
     } finally {
       setConnectingId(null);
     }
@@ -419,6 +430,7 @@ export function ConnectorsDashboard() {
         });
       } else if (item.liveConnections.length > 0) {
         for (const connection of item.liveConnections) {
+          if (connection.ownedByViewer === false) continue;
           await disconnectConnectorConnection({
             workspaceId,
             connectionId: connection.id,
@@ -435,6 +447,7 @@ export function ConnectorsDashboard() {
       if (!remaining.length) {
         detachWorkConnector(workspaceId, connectorId);
         uninstallConnector(connectorId);
+        clearPin("connector", connectorId);
         if (detailConnectorId === connectorId) {
           setDetailConnectorId(null);
         }
@@ -463,7 +476,6 @@ export function ConnectorsDashboard() {
   const setPanelActions = useMobilePanelActionsState()?.setActions;
   const detailId = detailItem?.id ?? null;
   const detailName = detailItem?.name ?? "";
-  const detailTier = detailId ? pinTier("connector", detailId) : null;
   const detailConnected = Boolean(
     detailItem?.liveConnections?.some((row) => row.status === "active"),
   );
@@ -475,28 +487,16 @@ export function ConnectorsDashboard() {
     const actions: NonNullable<
       MobilePanelActionsConfig["connector"]
     >["actions"] = [];
-    if (detailTier) {
+    const canRename =
+      detailConnected && isOauthConnectorId(detailId);
+    if (canRename) {
       actions.push({
-        label: "Unpin",
-        icon: PinOff,
-        onClick: () => clearPin("connector", detailId),
-      });
-    } else {
-      actions.push({
-        label: "Pin",
-        icon: Pin,
-        onClick: () => setPin("connector", detailId, "primary"),
+        label: "Rename",
+        icon: Pencil,
+        onClick: () => setDetailRenameNonce((n) => n + 1),
       });
     }
-    actions.push({
-      label: "Open",
-      icon: ExternalLink,
-      onClick: () => {
-        openConnector(detailId);
-        setDetailConnectorId(null);
-      },
-    });
-    if (!detailBlocked) {
+    if (!detailBlocked && (detailConnected || detailItem?.installed)) {
       actions.push({
         label: detailConnected ? "Disconnect" : "Uninstall",
         icon: Unplug,
@@ -525,12 +525,9 @@ export function ConnectorsDashboard() {
     mobile,
     detailId,
     detailName,
-    detailTier,
     detailConnected,
     detailBlocked,
-    clearPin,
-    setPin,
-    openConnector,
+    detailItem?.installed,
     connectingId,
     disconnectingId,
   ]);
@@ -804,10 +801,10 @@ export function ConnectorsDashboard() {
         workAttach={Boolean(workAttachFor)}
         onConnect={async (opts) => {
           if (isOauthConnectorId(detailItem.id)) {
-            await proceedComposioOAuth(detailItem.id, opts);
-            return;
+            return proceedComposioOAuth(detailItem.id, opts);
           }
           installConnector(detailItem.id);
+          ensureConnectorPinned(detailItem.id);
           bindToWorkIfArmed(detailItem.id);
           void refreshConnections();
         }}
@@ -831,10 +828,6 @@ export function ConnectorsDashboard() {
             );
           }
         }}
-        onOpen={() => {
-          openConnector(detailItem.id);
-          setDetailConnectorId(null);
-        }}
         onConnectionsRefresh={() => {
           void refreshConnections();
         }}
@@ -842,7 +835,7 @@ export function ConnectorsDashboard() {
           patchConnectorConnectionForWorkspace(workspaceId, updated);
         }}
         onSetPin={() => setPin("connector", detailItem.id, "primary")}
-        onClearPin={() => clearPin("connector", detailItem.id)}
+        renameRequestNonce={detailRenameNonce}
         onPromptSelect={(text) => {
           setComposerPendingInput({ text, source: "quick-ask" });
           newChat();
