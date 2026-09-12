@@ -4,10 +4,10 @@ import {
   planComparisonRows,
   workspaceLimit,
 } from "./plan-entitlements";
-import { BILLING_PLANS } from "./plans";
+import { BILLING_PLANS, ALL_BILLING_PLANS } from "./plans";
 import type { BillingPlan, Member } from "./types";
 
-export const ALL_PLANS: BillingPlan[] = BILLING_PLANS;
+export const ALL_PLANS = BILLING_PLANS as Array<"free" | "pro" | "max">;
 
 export const courierSeat: Record<BillingPlan, number> = {
   free: 0,
@@ -117,7 +117,7 @@ export function orgSeatMix(members: Member[]): SeatMix {
 }
 
 export function seatMixLabel(mix: SeatMix) {
-  return ALL_PLANS.filter((plan) => mix[plan] > 0).map(
+  return ALL_BILLING_PLANS.filter((plan) => mix[plan] > 0).map(
     (plan) => `${mix[plan]} ${planLabel(plan)}`,
   );
 }
@@ -135,13 +135,19 @@ export function billingFor(
       free: 0,
       pro: 0,
       max: opts?.plan === "max" ? (opts?.users ?? 1) : 0,
+      ultra: 0,
+      enterprise: 0,
     } satisfies SeatMix);
   if (opts?.plan && !opts?.seatMix) {
     mix.free = 0;
     mix.pro = 0;
     mix.max = 0;
+    mix.ultra = 0;
+    mix.enterprise = 0;
     if (opts.plan === "pro") mix.pro = opts.users ?? 1;
     else if (opts.plan === "max") mix.max = opts.users ?? 1;
+    else if (opts.plan === "ultra") mix.ultra = opts.users ?? 1;
+    else if (opts.plan === "enterprise") mix.enterprise = opts.users ?? 1;
     else if (opts.plan === "free") mix.free = opts.users ?? 1;
   }
   const users = Object.values(mix).reduce((sum, count) => sum + count, 0);
@@ -150,7 +156,16 @@ export function billingFor(
     0,
   );
   const primary =
-    opts?.plan ?? (mix.max ? "max" : mix.pro ? "pro" : "free");
+    opts?.plan ??
+    (mix.enterprise
+      ? "enterprise"
+      : mix.ultra
+        ? "ultra"
+        : mix.max
+          ? "max"
+          : mix.pro
+            ? "pro"
+            : "free");
   return {
     users,
     seat: courierSeat[primary],

@@ -93,7 +93,7 @@ export async function POST(request: Request, ctx: RouteCtx) {
       reservationId: usage.reservationId,
       status: "confirmed",
       aiExecutionId: usage.aiExecutionId,
-      metadata: { kind: decision?.kind ?? null },
+      metadata: { action: decision?.action ?? null },
     });
     return NextResponse.json({ ok: true, decision });
   } catch (err) {

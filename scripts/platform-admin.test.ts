@@ -131,7 +131,7 @@ describe("auth + API hardening (source)", () => {
     assert.match(src, /AdminNavPanel/);
     assert.match(src, /AdminChatColumn/);
     assert.match(src, /AdminWorkspace/);
-    assert.match(src, /left nav/i);
+    assert.match(src, /Sidebar \(admin links\)/);
   });
 
   it("does not ship service-role secrets in client admin helpers", () => {

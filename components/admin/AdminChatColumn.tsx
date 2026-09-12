@@ -24,6 +24,12 @@ type ChatTurnResponse = {
   error?: string;
 };
 
+function msg(
+  partial: Omit<Message, "at"> & { at?: string },
+): Message {
+  return { at: new Date().toISOString(), ...partial };
+}
+
 /** Center chat — Cander admin agent with tools over every workspace panel. */
 export function AdminChatColumn({ className }: { className?: string }) {
   const {
@@ -33,13 +39,12 @@ export function AdminChatColumn({ className }: { className?: string }) {
     setMobileSurface,
   } = useAdmin();
   const [messages, setMessages] = useState<Message[]>([
-    {
+    msg({
       id: "welcome",
       role: "assistant",
       content:
         "I’m Cander for Platform Admin. Ask about accounts, plans, pricing, usage, subscriptions, enterprise, audit, or ops — I’ll check the live data and open the matching panel.",
-      createdAt: new Date().toISOString(),
-    },
+    }),
   ]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -57,12 +62,11 @@ export function AdminChatColumn({ className }: { className?: string }) {
     if (!trimmed || busy) return;
     setDraft("");
     setBusy(true);
-    const userMsg: Message = {
+    const userMsg = msg({
       id: `u-${Date.now()}`,
       role: "user",
       content: trimmed,
-      createdAt: new Date().toISOString(),
-    };
+    });
     const historyForApi = [...messages, userMsg]
       .filter((m) => m.id !== "welcome")
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -75,13 +79,12 @@ export function AdminChatColumn({ className }: { className?: string }) {
     setMessages((prev) => [
       ...prev,
       userMsg,
-      {
+      msg({
         id: `pending-${Date.now()}`,
         role: "assistant",
         content: "Checking…",
         status: "pending",
-        createdAt: new Date().toISOString(),
-      },
+      }),
     ]);
 
     try {
@@ -110,12 +113,11 @@ export function AdminChatColumn({ className }: { className?: string }) {
         const withoutPending = prev.filter((m) => m.status !== "pending");
         return [
           ...withoutPending,
-          {
+          msg({
             id: `a-${Date.now()}`,
             role: "assistant",
             content: reply,
-            createdAt: new Date().toISOString(),
-          },
+          }),
         ];
       });
     } catch (err) {
@@ -123,15 +125,14 @@ export function AdminChatColumn({ className }: { className?: string }) {
         const withoutPending = prev.filter((m) => m.status !== "pending");
         return [
           ...withoutPending,
-          {
+          msg({
             id: `a-${Date.now()}`,
             role: "assistant",
             content:
               err instanceof Error
                 ? err.message
                 : "Admin assistant request failed.",
-            createdAt: new Date().toISOString(),
-          },
+          }),
         ];
       });
     } finally {
