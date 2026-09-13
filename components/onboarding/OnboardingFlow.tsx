@@ -298,7 +298,7 @@ const MOBILE_PANEL_LINE: Record<Step, string> = {
 
 /**
  * Full-screen auth + onboarding when no session is present.
- * Desktop: 50/50 form left, banner wash right.
+ * Desktop: 50/50 form left, full-bleed preview right.
  */
 export function OnboardingFlow() {
   const signedIn = useSyncExternalStore(
@@ -1624,18 +1624,15 @@ function OnboardingShell({
         <OnboardingMobilePanel step={step} />
       ) : null}
 
-      {/* Right: 15px inset on all sides; white logo top-right (both themes) */}
-      <div className="hidden min-h-0 w-1/2 p-[15px] lg:block">
+      {/* Right: full half-screen preview — flush top/right/bottom */}
+      <div className="hidden min-h-0 w-1/2 lg:block">
         <div
-          className={cn(
-            "relative h-full min-h-0 overflow-hidden border border-border",
-            SHELL_G3_RADIUS,
-          )}
+          className="relative h-full min-h-0 overflow-hidden border-l border-border"
           aria-hidden={!showAppearancePreview}
         >
           <CanderMark
             tone="white"
-            className="absolute top-[30px] right-[35px] z-20 h-7 w-7"
+            className="absolute top-6 right-6 z-20 h-7 w-7"
           />
           {showAppearancePreview ? (
             <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
