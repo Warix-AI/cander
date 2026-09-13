@@ -174,6 +174,8 @@ When Stripe keys are **not** configured, Pro/Max checkout returns `{ bypass: tru
 
 Invite emails send when `RESEND_API_KEY` is set; otherwise invite rows are created and shareable links are returned.
 
+**Auth emails (signup OTP / reset)** use Supabase’s mailer, not Resend. Built-in SMTP is capped at **~2 emails/hour** even on Pro — upgrade does not raise it. Fix: Project → **Authentication → SMTP** → enable custom SMTP (e.g. Resend: `smtp.resend.com`, port `465`, user `resend`, password = API key), then raise the limit under **Authentication → Rate Limits**.
+
 When org setup completes with Supabase configured, `setup_org_onboarding` (migration `009`) creates an `organizations` row, links the workspace, upserts the owner in `org_members`, and inserts pending invite rows.
 
 Apply `009_org_onboarding.sql` and `010_billing.sql` before testing org invites and paid onboarding:
