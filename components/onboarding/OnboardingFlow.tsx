@@ -32,6 +32,10 @@ import {
 } from "@/lib/supabase/hydrate-member";
 import { tryEnterExistingAccount } from "@/lib/onboarding-recovery";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
+import {
+  captureAcquisitionContext,
+  reportAuthEvent,
+} from "@/lib/auth/acquisition";
 import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
@@ -372,6 +376,11 @@ function OnboardingShell({
 
   // Resume mid-onboarding after refresh / email link — fill name + email from session.
   useEffect(() => {
+    captureAcquisitionContext();
+    reportAuthEvent({ eventType: "visit", metadata: { surface: "onboarding" } });
+  }, []);
+
+  useEffect(() => {
     if (!initialSignedIn || !isSupabaseConfigured()) return;
     const supabase = createSupabaseBrowserClient();
     void supabase.auth.getUser().then(({ data }) => {
@@ -599,6 +608,12 @@ function OnboardingShell({
       } = await supabase.auth.getUser();
       if (user) {
         syncSupabaseAuthUser(user);
+        reportAuthEvent({
+          eventType: "onboarding_completed",
+          email: user.email,
+          profileId: user.id,
+          metadata: { plan: chosen },
+        });
         try {
           await hydrateMemberFromSupabase(user);
         } catch (hydrateErr) {
@@ -788,6 +803,11 @@ function OnboardingShell({
     setError("");
     setInfo("");
     persistOnboardingPending(true);
+    reportAuthEvent({
+      eventType: "signup_started",
+      email,
+      metadata: { name: name.trim() },
+    });
     try {
       const result = await signUpWithPassword({ email, password, name });
       if (result.session?.user) syncSupabaseAuthUser(result.session.user);
@@ -798,11 +818,24 @@ function OnboardingShell({
         result.user.identities.length === 0;
 
       if (maybeExisting) {
+        reportAuthEvent({
+          eventType: "signup_existing",
+          email,
+          profileId: result.user?.id,
+        });
         try {
           const signInResult = await signInWithPassword({ email, password });
           if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
           const entered = await tryEnterExistingAccount();
-          if (entered) return;
+          if (entered) {
+            reportAuthEvent({
+              eventType: "signed_in",
+              email,
+              profileId: signInResult.user?.id,
+              metadata: { via: "signup_existing" },
+            });
+            return;
+          }
           persistOnboardingPending(true);
           setPassedVerify(true);
           setStep("profile");
@@ -811,7 +844,7 @@ function OnboardingShell({
           const message =
             err instanceof Error ? err.message : "Could not sign in.";
           if (/confirm|not confirmed|verif/i.test(message)) {
-            setInfo("Confirm your email with the code we sent, then continue.");
+            setInfo("We sent a 6-digit code to your email. Enter it below to continue.");
             setStep("verify");
             return;
           }
@@ -822,10 +855,27 @@ function OnboardingShell({
         }
       }
 
-      // Always show verify in the flow. Confirm email may be off — bypass is available.
+      reportAuthEvent({
+        eventType: "signup_created",
+        email,
+        profileId: result.user?.id,
+        metadata: {
+          hasSession: Boolean(result.session),
+          confirmEmailRequired: !result.session,
+        },
+      });
+
+      // Confirm-email off returns a session — skip OTP and continue onboarding.
+      if (result.session) {
+        setPassedVerify(true);
+        setStep("profile");
+        return;
+      }
+
+      // Confirm-email on — stay in-app and enter the 6-digit code from email.
       setPassedVerify(false);
       setStep("verify");
-      setInfo(result.session ? "" : `We sent a code to ${email.trim()}.`);
+      setInfo(`We sent a 6-digit code to ${email.trim()}. Paste it below — no need to leave this screen.`);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not create account.";
@@ -876,6 +926,12 @@ function OnboardingShell({
       try {
         const result = await verifySignupOtp(email, code);
         if (result.user) syncSupabaseAuthUser(result.user);
+        reportAuthEvent({
+          eventType: "email_verified",
+          email,
+          profileId: result.user?.id,
+          metadata: { method: "otp" },
+        });
         setPassedVerify(true);
       setVerifyCode("");
       setStep("profile");
@@ -934,6 +990,11 @@ function OnboardingShell({
       try {
         const result = await signInWithPassword({ email, password });
         if (result.user) syncSupabaseAuthUser(result.user);
+        reportAuthEvent({
+          eventType: "signed_in",
+          email,
+          profileId: result.user?.id,
+        });
         const entered = await tryEnterExistingAccount();
         if (entered) return;
         persistOnboardingPending(true);
@@ -944,7 +1005,7 @@ function OnboardingShell({
           err instanceof Error ? err.message : "Sign in failed.";
         if (/confirm|not confirmed|verif/i.test(message)) {
           persistOnboardingPending(true);
-          setInfo("Confirm your email with the code we sent, then continue.");
+          setInfo("We sent a 6-digit code to your email. Enter it below to continue.");
           setStep("verify");
         } else {
           setError(message);
@@ -978,6 +1039,10 @@ function OnboardingShell({
     setBusy(true);
     try {
       await requestPasswordReset(email);
+      reportAuthEvent({
+        eventType: "password_reset_requested",
+        email,
+      });
       setInfo(`If an account exists for ${email.trim()}, we sent a reset link.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not send reset email.");
@@ -1767,7 +1832,8 @@ function CreateStep({
         Create account
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Basics first. Next we&apos;ll confirm your email, then finish setup.
+        Basics first. Next we&apos;ll email you a 6-digit code — paste it here
+        to confirm, then finish setup.
       </p>
       <form
         className="mt-8 space-y-3"
@@ -1840,11 +1906,13 @@ function VerifyStep({
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Check your email
+        Enter your code
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Enter the 6-digit code we sent. Wrong address? Update the email and
-        resend.
+        We emailed a 6-digit code to{" "}
+        <span className="font-medium text-foreground">{email.trim() || "your inbox"}</span>.
+        Paste it here to stay in the app — no link required. Wrong address?
+        Update the email and resend.
       </p>
       <form
         className="mt-8 space-y-3"

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Plus } from "lucide-react";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
+import { ThinkingIndicator } from "@/components/chat/ThinkingIndicator";
 import { UserMessage } from "@/components/chat/UserMessage";
 import {
   ComposerDictationButton,
@@ -82,8 +83,9 @@ export function AdminChatColumn({ className }: { className?: string }) {
       msg({
         id: `pending-${Date.now()}`,
         role: "assistant",
-        content: "Checking…",
+        content: "",
         status: "pending",
+        activity: { phase: "generating", detail: "Thinking" },
       }),
     ]);
 
@@ -173,6 +175,14 @@ export function AdminChatColumn({ className }: { className?: string }) {
             message.role === "user" ? (
               <div key={message.id} className="flex flex-col items-end gap-1">
                 <UserMessage content={message.content} />
+              </div>
+            ) : message.status === "pending" ? (
+              <div key={message.id} className="group/assistant w-full space-y-1">
+                <ThinkingIndicator
+                  phase={message.activity?.phase}
+                  detail={message.activity?.detail}
+                  label="Thinking"
+                />
               </div>
             ) : (
               <div key={message.id} className="group/assistant w-full space-y-1">

@@ -148,8 +148,76 @@ export function AccountsSection() {
           ) : (
             <div className="space-y-3 text-sm">
               <pre className="max-h-48 overflow-auto rounded-md bg-muted/40 p-2 text-[11px]">
-                {JSON.stringify(detail, null, 2)}
+                {JSON.stringify(
+                  {
+                    account: (detail as { account?: unknown }).account,
+                    billing: (detail as { billing?: unknown }).billing,
+                    overrides: (detail as { overrides?: unknown }).overrides,
+                  },
+                  null,
+                  2,
+                )}
               </pre>
+              {Array.isArray((detail as { authEvents?: unknown[] }).authEvents) &&
+              ((detail as { authEvents: unknown[] }).authEvents?.length ?? 0) >
+                0 ? (
+                <div className="space-y-2">
+                  <p className="text-[12px] font-medium">Acquisition / auth events</p>
+                  <div className="max-h-56 space-y-2 overflow-y-auto rounded-md border border-border/50 p-2">
+                    {(
+                      detail as {
+                        authEvents: Array<Record<string, unknown>>;
+                      }
+                    ).authEvents.map((event) => (
+                      <div
+                        key={String(event.id)}
+                        className="rounded-md bg-muted/30 px-2 py-1.5 text-[11px] leading-relaxed"
+                      >
+                        <div className="font-medium">
+                          {String(event.event_type)} ·{" "}
+                          {event.created_at
+                            ? new Date(String(event.created_at)).toLocaleString()
+                            : "—"}
+                        </div>
+                        <div className="text-muted-foreground">
+                          {[
+                            event.ip ? `IP ${event.ip}` : null,
+                            event.geo_country
+                              ? [
+                                  event.geo_city,
+                                  event.geo_region,
+                                  event.geo_country,
+                                ]
+                                  .filter(Boolean)
+                                  .join(", ")
+                              : null,
+                            event.utm_source
+                              ? `utm ${event.utm_source}/${event.utm_medium || "—"}/${event.utm_campaign || "—"}`
+                              : null,
+                            event.referrer
+                              ? `ref ${String(event.referrer).slice(0, 80)}`
+                              : null,
+                            event.landing_path
+                              ? `land ${event.landing_path}`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "No attribution fields"}
+                        </div>
+                        {event.user_agent ? (
+                          <div className="truncate text-muted-foreground/80">
+                            {String(event.user_agent)}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  No acquisition events recorded for this account yet.
+                </p>
+              )}
               <p className="text-[11px] text-muted-foreground">
                 Open period snapshots are unchanged by override writes.
               </p>

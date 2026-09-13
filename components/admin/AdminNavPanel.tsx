@@ -50,7 +50,17 @@ const SECTION_ICONS: Record<AdminSection, LucideIcon> = {
  * placement as Cander).
  */
 export function AdminNavPanel({ className }: { className?: string }) {
-  const { section, setSection, setMobileSurface, setNavCollapsed } = useAdmin();
+  const {
+    section,
+    setSection,
+    setMobileSurface,
+    setNavCollapsed,
+    setSearchOpen,
+    canGoBack,
+    canGoForward,
+    goBack,
+    goForward,
+  } = useAdmin();
   const desktop = useDesktopShell();
   // Electron classic: chrome shares the traffic-light titlebar row (like Sidebar).
   const macDesktop = desktop;
@@ -62,6 +72,11 @@ export function AdminNavPanel({ className }: { className?: string }) {
       leading={
         <ShellNavToggleButton onClick={() => setNavCollapsed(true)} />
       }
+      onSearch={() => setSearchOpen(true)}
+      onBack={goBack}
+      onForward={goForward}
+      canGoBack={canGoBack}
+      canGoForward={canGoForward}
     />
   );
 

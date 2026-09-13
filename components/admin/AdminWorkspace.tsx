@@ -1,7 +1,7 @@
 "use client";
 
 import { useAdmin } from "@/components/admin/AdminProvider";
-import { ADMIN_SECTION_LABELS } from "@/lib/admin/sections";
+import { AdminPanelChrome } from "@/components/admin/AdminPanelChrome";
 import { OverviewSection } from "@/components/admin/sections/OverviewSection";
 import { PlansSection } from "@/components/admin/sections/PlansSection";
 import { PricingSection } from "@/components/admin/sections/PricingSection";
@@ -25,11 +25,7 @@ export function AdminWorkspace({ className }: { className?: string }) {
       )}
     >
       <div className="shell-panel flex min-h-0 flex-1 flex-col overflow-hidden">
-        <header className="flex h-11 shrink-0 items-center gap-1 border-b border-border/40 px-2">
-          <div className="inline-flex h-8 max-w-[14rem] items-center truncate rounded-lg bg-muted/70 px-3 text-[13px] font-medium tracking-[-0.01em]">
-            {ADMIN_SECTION_LABELS[section]}
-          </div>
-        </header>
+        <AdminPanelChrome />
         <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-5">
           {section === "overview" && <OverviewSection />}
           {section === "plans" && <PlansSection />}

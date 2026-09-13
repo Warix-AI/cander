@@ -2,12 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PanelLeft } from "lucide-react";
+import { PanelLeft, PanelRight } from "lucide-react";
 import { AdminChatColumn } from "@/components/admin/AdminChatColumn";
 import { AdminNavPanel } from "@/components/admin/AdminNavPanel";
+import { AdminSearchModal } from "@/components/admin/AdminSearchModal";
 import { AdminWorkspace } from "@/components/admin/AdminWorkspace";
 import { useAdmin } from "@/components/admin/AdminProvider";
 import { ShellProductSwitcher } from "@/components/shell/ShellProductSwitcher";
+import {
+  BrowserChromeIconButton,
+  clearBrowserChromeHovers,
+} from "@/components/shell/PanelToggle";
 import { ADMIN_SECTION_LABELS, ADMIN_SECTIONS } from "@/lib/admin/sections";
 import {
   DEFAULT_PANEL_RATIO,
@@ -44,8 +49,10 @@ export function AdminShell() {
     setMobileSurface,
     navCollapsed,
     setNavCollapsed,
+    panelCollapsed,
+    setPanelCollapsed,
+    panelImmersive,
   } = useAdmin();
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const dragging = useRef(false);
   const [panelRatio, setPanelRatio] = useState(DEFAULT_PANEL_RATIO);
 
@@ -87,6 +94,7 @@ export function AdminShell() {
           MOBILE_MENU_BG,
         )}
       >
+        <AdminSearchModal />
         {mobileSurface === "menu" ? (
           <div className="flex min-h-0 flex-1 flex-col bg-sidebar">
             <div className="px-3 pt-4 pb-2">
@@ -207,6 +215,7 @@ export function AdminShell() {
       data-app-shell=""
       className="relative flex h-svh min-h-0 overflow-hidden bg-background text-foreground"
     >
+      <AdminSearchModal />
       {!navCollapsed ? (
         <div className="hidden h-full shrink-0 lg:flex">
           <AdminNavPanel />
@@ -226,72 +235,75 @@ export function AdminShell() {
         id="admin-main"
         className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden"
       >
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-col",
-            !panelCollapsed ? PINNED_CHAT_WIDTH : "min-w-0 flex-1",
-          )}
-        >
-          <AdminChatColumn className="h-full" />
-        </div>
+        {!panelImmersive ? (
+          <div
+            className={cn(
+              "flex min-h-0 min-w-0 flex-col",
+              !panelCollapsed ? PINNED_CHAT_WIDTH : "min-w-0 flex-1",
+            )}
+          >
+            <AdminChatColumn className="h-full" />
+          </div>
+        ) : null}
 
         {!panelCollapsed ? (
           <>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label="Resize admin workspace"
-              className="relative z-10 w-px shrink-0 cursor-col-resize bg-border/40 hover:bg-chart-2/50"
-              onPointerDown={(e) => {
-                if (e.button !== 0) return;
-                e.preventDefault();
-                dragging.current = true;
-                const main = document.getElementById("admin-main");
-                if (!main) return;
-                const move = (ev: PointerEvent) => {
-                  if (!dragging.current) return;
-                  onPanelDrag(ev.clientX, main);
-                };
-                const up = () => {
-                  dragging.current = false;
-                  window.removeEventListener("pointermove", move);
-                  window.removeEventListener("pointerup", up);
-                };
-                window.addEventListener("pointermove", move);
-                window.addEventListener("pointerup", up);
-              }}
-            />
+            {!panelImmersive ? (
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize admin workspace"
+                className="relative z-10 w-px shrink-0 cursor-col-resize bg-border/40 hover:bg-chart-2/50"
+                onPointerDown={(e) => {
+                  if (e.button !== 0) return;
+                  e.preventDefault();
+                  dragging.current = true;
+                  const main = document.getElementById("admin-main");
+                  if (!main) return;
+                  const move = (ev: PointerEvent) => {
+                    if (!dragging.current) return;
+                    onPanelDrag(ev.clientX, main);
+                  };
+                  const up = () => {
+                    dragging.current = false;
+                    window.removeEventListener("pointermove", move);
+                    window.removeEventListener("pointerup", up);
+                  };
+                  window.addEventListener("pointermove", move);
+                  window.addEventListener("pointerup", up);
+                }}
+              />
+            ) : null}
             <div
               className="flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden"
-              style={{
-                width: `${panelRatio * 100}%`,
-                minWidth: "20rem",
-                maxWidth: "78%",
-              }}
+              style={
+                panelImmersive
+                  ? { width: "100%", minWidth: "20rem" }
+                  : {
+                      width: `${panelRatio * 100}%`,
+                      minWidth: "20rem",
+                      maxWidth: "78%",
+                    }
+              }
             >
               <AdminWorkspace className="h-full" />
             </div>
           </>
         ) : (
-          <button
-            type="button"
-            className="absolute right-3 top-3 z-20 rounded-lg border border-border/60 bg-background/90 px-2 py-1 text-[11px] text-muted-foreground"
-            onClick={() => setPanelCollapsed(false)}
+          <div
+            className="pointer-events-none absolute top-0 right-0 z-50 hidden h-11 items-center gap-1 px-3 lg:flex"
+            onPointerLeave={clearBrowserChromeHovers}
           >
-            Show panel
-          </button>
+            <span className="pointer-events-auto">
+              <BrowserChromeIconButton
+                aria-label="Open right panel"
+                onClick={() => setPanelCollapsed(false)}
+              >
+                <PanelRight className="h-3.5 w-3.5" strokeWidth={1.6} />
+              </BrowserChromeIconButton>
+            </span>
+          </div>
         )}
-
-        {!panelCollapsed ? (
-          <button
-            type="button"
-            aria-label="Collapse workspace panel"
-            className="absolute right-3 top-3 z-20 rounded-lg border border-border/60 bg-background/90 px-2 py-1 text-[11px] text-muted-foreground"
-            onClick={() => setPanelCollapsed(true)}
-          >
-            Hide panel
-          </button>
-        ) : null}
       </div>
     </div>
   );

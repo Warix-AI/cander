@@ -221,16 +221,25 @@ If Connectors / spaces are missing after sign-in: hard-refresh once after `007` 
 - [ ] OAuth: enable Google / Apple in Supabase → Authentication → Providers (skips email verify)
 - [ ] Redirect URLs include `{APP_ORIGIN}/auth/callback` (and `/auth/reset` as needed)
 
-### Confirm signup email template (OTP)
+### Confirm signup email template (OTP — stay in app)
 
-In Supabase → **Authentication → Email Templates → Confirm signup**, include the code so the in-app verify screen works:
+In Supabase → **Authentication → Email Templates → Confirm signup**, use a
+**code-first** template so users stay in Cander and paste the OTP:
 
 ```html
-<p>Your Cander code is: <strong>{{ .Token }}</strong></p>
-<p>Or confirm here: <a href="{{ .ConfirmationURL }}">Verify email</a></p>
+<h2>Your Cander code</h2>
+<p>Enter this 6-digit code in the app to confirm your email:</p>
+<p style="font-size:28px;letter-spacing:4px;font-weight:700">{{ .Token }}</p>
+<p>This code expires shortly. You don’t need to open a link.</p>
 ```
 
-Enable **Confirm email** under Authentication → Providers → Email. Without `{{ .Token }}` in the template, users only get a link (still works; OTP field will fail until the template is updated).
+Subject suggestion: `{{ .Token }} is your Cander code`
+
+Enable **Confirm email** under Authentication → Providers → Email.
+
+Without `{{ .Token }}` in the template, users only get a link (OTP field will
+fail until the template is updated). Link confirm via `/auth/callback` remains
+as a fallback for older emails and password reset.
 
 ## Verification checklist
 

@@ -48,10 +48,47 @@ export async function GET(request: Request, ctx: Ctx) {
   const provider = resolveBillingProviderDisplay(profile);
   const polar = await NotConnectedBillingProvider.getCustomer(id);
 
+  const eventSelect =
+    "id, event_type, email, ip, user_agent, referrer, landing_url, landing_path, utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid, fbclid, timezone, locale, geo_country, geo_region, geo_city, metadata, created_at";
+
+  const [byProfile, byEmail] = await Promise.all([
+    admin
+      .from("auth_events")
+      .select(eventSelect)
+      .eq("profile_id", id)
+      .order("created_at", { ascending: false })
+      .limit(40),
+    profile.email
+      ? admin
+          .from("auth_events")
+          .select(eventSelect)
+          .eq("email", String(profile.email).toLowerCase())
+          .order("created_at", { ascending: false })
+          .limit(40)
+      : Promise.resolve({ data: [] as unknown[], error: null }),
+  ]);
+
+  if (byProfile.error) {
+    console.warn("[admin/accounts] auth_events", byProfile.error.message);
+  }
+  if (byEmail.error) {
+    console.warn("[admin/accounts] auth_events email", byEmail.error.message);
+  }
+
+  const authEventsById = new Map<string, Record<string, unknown>>();
+  for (const row of [...(byProfile.data ?? []), ...(byEmail.data ?? [])]) {
+    const event = row as { id?: string };
+    if (event.id) authEventsById.set(event.id, row as Record<string, unknown>);
+  }
+  const authEvents = [...authEventsById.values()].sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
+  );
+
   return NextResponse.json({
     ok: true,
     account: profile,
     overrides,
+    authEvents,
     billing: {
       provider,
       stripe:

@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Blocks, CircleUser, Gauge, History, Settings, Shield } from "lucide-react";
+import { Blocks, CircleUser, Gauge, History, Settings } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
-import { useIsPlatformAdmin } from "@/lib/admin/use-platform-admin";
 import { signOutAccount } from "@/lib/auth/sign-out";
 import { closeAllPinSections } from "@/lib/pin-display-prefs";
 import { USAGE_METER_TONES } from "@/lib/usage-meters";
@@ -74,8 +72,6 @@ function UsageFlyoutRow({ onOpen }: { onOpen: () => void }) {
 
 export function AccountMenu() {
   const { view, openSettings, openRecents, openSpace } = useApp();
-  const router = useRouter();
-  const isPlatformAdmin = useIsPlatformAdmin();
 
   return (
     <Dropdown
@@ -164,19 +160,6 @@ export function AccountMenu() {
             />
             Settings
           </button>
-          {isPlatformAdmin ? (
-            <button
-              type="button"
-              className={flyoutRowClass}
-              onClick={() => {
-                close();
-                router.push("/admin");
-              }}
-            >
-              <Shield className={flyoutIconClass} strokeWidth={2} />
-              Platform Admin
-            </button>
-          ) : null}
         </div>
       )}
     </Dropdown>
