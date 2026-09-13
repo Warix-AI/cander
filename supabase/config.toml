@@ -29,4 +29,5 @@ additional_redirect_urls = ["http://localhost:3000/auth/callback"]
 [auth.email]
 enable_signup = true
 enable_confirmations = true
-# OTP length defaults to 6 — matches VerifyCodeInput.
+# Number of characters used in the email OTP (hosted dashboard may differ).
+otp_length = 8

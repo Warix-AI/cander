@@ -41,7 +41,7 @@ import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { HostingModePicker } from "@/components/settings/HostingModePicker";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
-import { VerifyCodeInput } from "@/components/onboarding/VerifyCodeInput";
+import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/VerifyCodeInput";
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
 import { resetAppearance, setColorMode } from "@/lib/appearance";
 import type { AccountPresetId, BillingPlan, Member } from "@/lib/types";
@@ -844,7 +844,7 @@ function OnboardingShell({
           const message =
             err instanceof Error ? err.message : "Could not sign in.";
           if (/confirm|not confirmed|verif/i.test(message)) {
-            setInfo("We sent a 6-digit code to your email. Enter it below to continue.");
+            setInfo("We sent a code to your email. Enter it below to continue.");
             setStep("verify");
             return;
           }
@@ -872,10 +872,10 @@ function OnboardingShell({
         return;
       }
 
-      // Confirm-email on — stay in-app and enter the 6-digit code from email.
+      // Confirm-email on — stay in-app and enter the code from email.
       setPassedVerify(false);
       setStep("verify");
-      setInfo(`We sent a 6-digit code to ${email.trim()}. Paste it below — no need to leave this screen.`);
+      setInfo(`We sent a ${SIGNUP_OTP_LENGTH}-digit code to ${email.trim()}. Paste it below — no need to leave this screen.`);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not create account.";
@@ -916,8 +916,8 @@ function OnboardingShell({
       return;
     }
     const code = verifyCode.replace(/\s/g, "");
-    if (code.length < 6) {
-      setError("Enter the 6-digit code from your email.");
+    if (code.length < SIGNUP_OTP_LENGTH) {
+      setError(`Enter the ${SIGNUP_OTP_LENGTH}-digit code from your email.`);
       return;
     }
     setBusy(true);
@@ -1005,7 +1005,7 @@ function OnboardingShell({
           err instanceof Error ? err.message : "Sign in failed.";
         if (/confirm|not confirmed|verif/i.test(message)) {
           persistOnboardingPending(true);
-          setInfo("We sent a 6-digit code to your email. Enter it below to continue.");
+          setInfo("We sent a code to your email. Enter it below to continue.");
           setStep("verify");
         } else {
           setError(message);
@@ -1832,7 +1832,7 @@ function CreateStep({
         Create account
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Basics first. Next we&apos;ll email you a 6-digit code — paste it here
+        Basics first. Next we&apos;ll email you a code — paste it here
         to confirm, then finish setup.
       </p>
       <form
@@ -1909,7 +1909,7 @@ function VerifyStep({
         Enter your code
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        We emailed a 6-digit code to{" "}
+        We emailed a {SIGNUP_OTP_LENGTH}-digit code to{" "}
         <span className="font-medium text-foreground">{email.trim() || "your inbox"}</span>.
         Paste it here to stay in the app — no link required. Wrong address?
         Update the email and resend.

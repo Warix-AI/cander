@@ -50,7 +50,7 @@ export async function signUpWithPassword({
   return data;
 }
 
-/** Confirm signup with the 6-digit code from the email (ChatGPT-style). */
+/** Confirm signup with the email OTP code (length set in Supabase Auth). */
 export async function verifySignupOtp(email: string, token: string) {
   const supabase = createSupabaseBrowserClient();
   const trimmed = email.trim();

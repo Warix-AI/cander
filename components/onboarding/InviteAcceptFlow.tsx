@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CanderMark } from "@/components/brand/CanderMark";
-import { VerifyCodeInput } from "@/components/onboarding/VerifyCodeInput";
+import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/VerifyCodeInput";
 import {
   resendSignupEmail,
   signInWithPassword,
@@ -79,8 +79,8 @@ export function InviteAcceptFlow({ token }: { token: string }) {
     if (!preview) return;
     if (mode === "verify") {
       const code = verifyCode.replace(/\s/g, "");
-      if (code.length < 6) {
-        setError("Enter the 6-digit code from your email.");
+      if (code.length < SIGNUP_OTP_LENGTH) {
+        setError(`Enter the ${SIGNUP_OTP_LENGTH}-digit code from your email.`);
         return;
       }
       setBusy(true);
