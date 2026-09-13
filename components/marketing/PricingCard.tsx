@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { Check, X } from "lucide-react";
 import { PricingPlanCta } from "@/components/marketing/PricingPlanCta";
 import { courierPlans, money } from "@/lib/billing";
+import { formatIncludedActiveAiMinutes } from "@/lib/billing/plan-catalog";
 import { cn } from "@/lib/utils";
 
 export function PricingCard({
@@ -11,6 +11,13 @@ export function PricingCard({
 }: {
   plan: (typeof courierPlans)[number];
 }) {
+  const priceLabel =
+    plan.price == null
+      ? "Custom"
+      : plan.price <= 0
+        ? "Free"
+        : money(plan.price);
+
   return (
     <article
       className={cn(
@@ -27,11 +34,14 @@ export function PricingCard({
       </p>
       <p className="mt-5 flex items-baseline gap-1">
         <span className="text-3xl font-medium tracking-[-0.03em]">
-          {money(plan.price)}
+          {priceLabel}
         </span>
-        {plan.price > 0 ? (
+        {plan.price != null && plan.price > 0 ? (
           <span className="text-[13px] text-muted-foreground">USD / month</span>
         ) : null}
+      </p>
+      <p className="mt-2 text-[13px] text-muted-foreground">
+        {formatIncludedActiveAiMinutes(plan.id)}
       </p>
       {plan.popular ? (
         <p className="mt-2 text-[12px] font-medium text-muted-foreground">
@@ -50,7 +60,7 @@ export function PricingCard({
 
 export function PricingCards() {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
       {courierPlans.map((plan) => (
         <PricingCard key={plan.id} plan={plan} />
       ))}

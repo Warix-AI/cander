@@ -1,3 +1,4 @@
+import { canonicalizePlan } from "../billing/plan-catalog.ts";
 import type { BillingPlan } from "../types.ts";
 import {
   USAGE_PLAN_CONFIG_VERSION,
@@ -36,7 +37,7 @@ function feature(
 }
 
 /** Approved plan limits (v2) — adjust here without touching route handlers. */
-function freeFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
+function minimalFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
   const base = (overrides: Partial<FeatureUsageLimit>) =>
     feature({
       enabled: true,
@@ -78,7 +79,7 @@ function freeFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
   };
 }
 
-function proFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
+function lightFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
   const generous = (overrides: Partial<FeatureUsageLimit>) =>
     feature({
       enabled: true,
@@ -132,7 +133,7 @@ function proFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
   };
 }
 
-function maxFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
+function moderateFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
   const nearUnlimited = (overrides: Partial<FeatureUsageLimit>) =>
     feature({
       enabled: true,
@@ -188,71 +189,71 @@ function maxFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
 }
 
 const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
-  free: {
-    plan: "free",
-    label: "Free",
+  minimal: {
+    plan: "minimal",
+    label: "Minimal",
     marketingUnlimited: false,
-    features: freeFeatures(),
+    features: minimalFeatures(),
     workspaceDailyCostCeilingMicros: 500_000,
     workspaceMonthlyCostCeilingMicros: 5_000_000,
     userDailyExpensiveActionCeilingMicros: 200_000,
     billAmountMicros: 0,
     usableBudgetMicros: 1_000_000, // $1 usable (internal)
-    includedMinutes: 10,
-    minimumMinutes: 10,
-    maximumMinutes: 10,
+    includedMinutes: 25,
+    minimumMinutes: 25,
+    maximumMinutes: 25,
     usageLimitBehavior: "hard",
   },
-  pro: {
-    plan: "pro",
-    label: "Pro",
+  light: {
+    plan: "light",
+    label: "Light",
     marketingUnlimited: true,
-    features: proFeatures(),
-    workspaceDailyCostCeilingMicros: 15_000_000,
-    workspaceMonthlyCostCeilingMicros: 150_000_000,
-    userDailyExpensiveActionCeilingMicros: 5_000_000,
-    billAmountMicros: 20_000_000, // $20
-    usableBudgetMicros: 15_000_000, // $15 usable (internal)
-    includedMinutes: 50,
-    minimumMinutes: 10,
-    maximumMinutes: 50,
+    features: lightFeatures(),
+    workspaceDailyCostCeilingMicros: 22_000_000,
+    workspaceMonthlyCostCeilingMicros: 220_000_000,
+    userDailyExpensiveActionCeilingMicros: 7_000_000,
+    billAmountMicros: 30_000_000, // $30
+    usableBudgetMicros: 22_000_000, // $22 usable (internal)
+    includedMinutes: 100,
+    minimumMinutes: 100,
+    maximumMinutes: 100,
     usageLimitBehavior: "hard",
   },
-  max: {
-    plan: "max",
-    label: "Max",
+  moderate: {
+    plan: "moderate",
+    label: "Moderate",
     marketingUnlimited: true,
-    features: maxFeatures(),
-    workspaceDailyCostCeilingMicros: 40_000_000,
-    workspaceMonthlyCostCeilingMicros: 400_000_000,
-    userDailyExpensiveActionCeilingMicros: 12_000_000,
-    billAmountMicros: 50_000_000, // $50
-    usableBudgetMicros: 40_000_000, // $40 usable (internal)
-    includedMinutes: 150,
-    minimumMinutes: 50,
-    maximumMinutes: 150,
+    features: moderateFeatures(),
+    workspaceDailyCostCeilingMicros: 55_000_000,
+    workspaceMonthlyCostCeilingMicros: 550_000_000,
+    userDailyExpensiveActionCeilingMicros: 18_000_000,
+    billAmountMicros: 75_000_000, // $75
+    usableBudgetMicros: 55_000_000, // $55 usable (internal)
+    includedMinutes: 250,
+    minimumMinutes: 250,
+    maximumMinutes: 250,
     usageLimitBehavior: "hard",
   },
-  ultra: {
-    plan: "ultra",
-    label: "Ultra",
+  heavy: {
+    plan: "heavy",
+    label: "Heavy",
     marketingUnlimited: true,
-    features: maxFeatures(),
-    workspaceDailyCostCeilingMicros: 80_000_000,
-    workspaceMonthlyCostCeilingMicros: 800_000_000,
-    userDailyExpensiveActionCeilingMicros: 25_000_000,
-    billAmountMicros: 150_000_000, // $150 placeholder
-    usableBudgetMicros: 120_000_000, // $120 usable (internal)
+    features: moderateFeatures(),
+    workspaceDailyCostCeilingMicros: 110_000_000,
+    workspaceMonthlyCostCeilingMicros: 1_100_000_000,
+    userDailyExpensiveActionCeilingMicros: 35_000_000,
+    billAmountMicros: 150_000_000, // $150
+    usableBudgetMicros: 110_000_000, // $110 usable (internal)
     includedMinutes: 500,
-    minimumMinutes: 200,
+    minimumMinutes: 500,
     maximumMinutes: 500,
     usageLimitBehavior: "hard",
   },
-  enterprise: {
-    plan: "enterprise",
-    label: "Enterprise",
+  limitless: {
+    plan: "limitless",
+    label: "Limitless",
     marketingUnlimited: true,
-    features: maxFeatures(),
+    features: moderateFeatures(),
     workspaceDailyCostCeilingMicros: 200_000_000,
     workspaceMonthlyCostCeilingMicros: 2_000_000_000,
     userDailyExpensiveActionCeilingMicros: 80_000_000,
@@ -270,7 +271,8 @@ export function usagePlanConfigVersion() {
 }
 
 export function planUsagePolicy(plan: BillingPlan): PlanUsagePolicy {
-  return PLAN_POLICIES[plan];
+  const canonical = canonicalizePlan(plan);
+  return PLAN_POLICIES[canonical] ?? PLAN_POLICIES.minimal;
 }
 
 export function featureLimitFor(

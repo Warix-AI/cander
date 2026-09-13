@@ -35,7 +35,7 @@ export async function adminQueryOverview() {
     admin
       .from("profiles")
       .select("id", { count: "exact", head: true })
-      .eq("plan", "enterprise"),
+      .eq("plan", "limitless"),
     admin
       .from("account_usage_periods")
       .select("id", { count: "exact", head: true })
@@ -54,7 +54,7 @@ export async function adminQueryOverview() {
 
   const accountsByPlan: Record<string, number> = {};
   for (const row of byPlanRes.data ?? []) {
-    const p = String((row as { plan?: string }).plan ?? "free");
+    const p = String((row as { plan?: string }).plan ?? "minimal");
     accountsByPlan[p] = (accountsByPlan[p] ?? 0) + 1;
   }
 
@@ -168,7 +168,7 @@ export async function adminQueryEnterprise(limit = 25) {
       "id, email, name, plan, ai_minutes_override, ai_minutes_plan, subscription_status, created_at",
       { count: "exact" },
     )
-    .eq("plan", "enterprise")
+    .eq("plan", "limitless")
     .order("created_at", { ascending: false })
     .range(0, Math.min(limit, 50) - 1);
   if (error) throw new Error(error.message);

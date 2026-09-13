@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import { isPaidPlan, normalizePlan } from "@/lib/plans";
 
 /**
  * Deletes the authenticated Auth user (and cascaded profile rows).
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
     }
 
     const activePaid =
-      (profile?.plan === "pro" || profile?.plan === "max") &&
+      isPaidPlan(normalizePlan(profile?.plan)) &&
       (profile?.subscription_status === "active" ||
         profile?.subscription_status === "trialing");
 

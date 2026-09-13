@@ -53,7 +53,7 @@ export function OrgMemberDetailSettings({ memberId, onBack }: Props) {
   }
 
   const pending = member.seatStatus === "pending";
-  const seatPlan: "pro" | "max" = member.plan === "max" ? "max" : "pro";
+  const seatPlan: "light" | "moderate" = member.plan === "moderate" ? "moderate" : "light";
   const canEditPlan =
     entitlements.canManageMembers &&
     !nativeShell &&
@@ -66,7 +66,7 @@ export function OrgMemberDetailSettings({ memberId, onBack }: Props) {
     member.id !== actor.id &&
     member.role !== "Owner";
 
-  const changeMemberPlan = async (plan: "pro" | "max") => {
+  const changeMemberPlan = async (plan: "light" | "moderate") => {
     if (plan === seatPlan || !orgId) return;
     setPlanBusy(true);
     setPlanError(null);

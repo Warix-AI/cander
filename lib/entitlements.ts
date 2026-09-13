@@ -55,7 +55,7 @@ export type Entitlements = {
   workspaceCap: number;
   /** Max owner/admin — full org controls. */
   showOrgAdmin: boolean;
-  /** Pro/Max org member — read-only managed-by view. */
+  /** Paid org member — read-only managed-by view. */
   showOrgManaged: boolean;
   /** @deprecated Use showOrgAdmin || showOrgManaged */
   showOrgSettings: boolean;
@@ -63,7 +63,7 @@ export type Entitlements = {
   showPlansBilling: boolean;
   showInviteWall: boolean;
   canUseSharedResource: (resourceId: string) => boolean;
-  /** Pro/Max only — Free keeps a hidden First Workspace under the hood. */
+  /** Light+ only — Minimal keeps a hidden First Workspace under the hood. */
   hasWorkspaces: boolean;
   canDeleteAccount: boolean;
   canEditWorkspaceSettings: (workspaceId: string) => boolean;
@@ -86,20 +86,20 @@ export function subscriptionBlocksAccountDeletion(actor: Member): boolean {
   return true;
 }
 
-/** Paid plan without active subscription is treated as Free for capabilities. */
+/** Paid plan without active subscription is treated as Minimal for capabilities. */
 export function effectivePlan(actor: Member): BillingPlan {
-  if (actor.plan === "free") return "free";
+  if (actor.plan === "minimal") return "minimal";
   if (actor.kind === "org" && actor.role !== "Owner") {
-    return actor.seatStatus === "active" ? actor.plan : "free";
+    return actor.seatStatus === "active" ? actor.plan : "minimal";
   }
   // Downgrade only when billing is known-bad. Unset / `none` still honors the
-  // selected plan so pre-Stripe onboarding and bypass checkout unlock Pro/Max.
+  // selected plan so pre-Polar onboarding and bypass checkout unlock paid tiers.
   if (
     isPaidPlan(actor.plan) &&
     (actor.subscriptionStatus === "canceled" ||
       actor.subscriptionStatus === "past_due")
   ) {
-    return "free";
+    return "minimal";
   }
   return actor.plan;
 }
@@ -112,23 +112,28 @@ export function entitlementsFor(actor: Member): Entitlements {
   const pendingInvite = inOrg && actor.seatStatus === "pending";
   const orgOwnerOrAdmin =
     inOrg &&
-    plan === "max" &&
+    isTeamPlan(plan) &&
     seatActive &&
     (actor.role === "Owner" || actor.role === "Admin");
   const orgAdminFromDeferred =
     Boolean(actor.orgSetupDeferred) &&
-    plan === "max" &&
+    isTeamPlan(plan) &&
     actor.role === "Owner" &&
     seatActive;
   const showOrgAdmin =
     (orgOwnerOrAdmin || orgAdminFromDeferred) &&
     hasOrganizationControls(plan);
   const showOrgManaged =
-    inOrg && seatActive && !showOrgAdmin && (plan === "pro" || plan === "max");
+    inOrg &&
+    seatActive &&
+    !showOrgAdmin &&
+    (plan === "light" || isTeamPlan(plan));
   const orgActive =
     inOrg && !actor.orgSetupDeferred && isTeamPlan(plan) && seatActive;
   const canActivateOrganization =
-    (!inOrg || Boolean(actor.orgSetupDeferred)) && plan === "max" && seatActive;
+    (!inOrg || Boolean(actor.orgSetupDeferred)) &&
+    isTeamPlan(plan) &&
+    seatActive;
   const isOwner = orgActive && actor.role === "Owner";
   const isAdmin = orgActive && actor.role === "Admin";
   const isMember = orgActive && actor.role === "Member";
@@ -190,7 +195,7 @@ export function orgMembersOf(members: Member[]) {
 
 export function orgMaxSeats(members: Member[]) {
   return orgMembersOf(members).filter(
-    (item) => item.plan === "max" && item.seatStatus === "active",
+    (item) => isTeamPlan(item.plan) && item.seatStatus === "active",
   ).length;
 }
 

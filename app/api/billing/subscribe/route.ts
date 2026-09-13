@@ -1,6 +1,6 @@
 /**
  * POST /api/billing/subscribe
- * Simulated subscription for purchased monthly AI minutes (Polar later).
+ * Simulated subscription for a fixed catalog plan (Polar later).
  * Requires Authorization: Bearer <access_token>.
  */
 import { NextResponse } from "next/server";
@@ -24,11 +24,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  let body: { selectedMinutes?: number };
+  let body: { plan?: string };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  if (!body.plan || typeof body.plan !== "string") {
+    return NextResponse.json({ error: "plan is required." }, { status: 400 });
   }
 
   try {
@@ -44,21 +48,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const selectedMinutes = Number(body.selectedMinutes);
     const result = await createSubscription({
       accountId: user.id,
-      selectedMinutes,
+      plan: body.plan,
     });
 
-    const admin = createSupabaseAdminClient();
+    const monthlyPrice = Number(result.monthlyPriceUsd ?? 0);
     const profilePatch: Record<string, unknown> = {
       plan: result.plan,
       purchased_ai_minutes: result.purchasedMinutes,
       subscription_monthly_price_usd: result.monthlyPriceUsd,
-      subscription_status:
-        result.monthlyPriceUsd > 0 ? "active" : "none",
+      subscription_status: monthlyPrice > 0 ? "active" : "none",
     };
 
+    const admin = createSupabaseAdminClient();
     const { error: profileError } = await admin
       .from("profiles")
       .update(profilePatch)
@@ -70,8 +73,7 @@ export async function POST(request: Request) {
         .from("profiles")
         .update({
           plan: result.plan,
-          subscription_status:
-            result.monthlyPriceUsd > 0 ? "active" : "none",
+          subscription_status: monthlyPrice > 0 ? "active" : "none",
         })
         .eq("id", user.id);
       if (fallbackError) {

@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (body.plan !== "pro" && body.plan !== "max") {
+  if (body.plan !== "light" && body.plan !== "moderate") {
     return NextResponse.json({ error: "Invalid plan." }, { status: 400 });
   }
 

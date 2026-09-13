@@ -71,7 +71,7 @@ function monthDetailFromFeature(
       detail: `${used.toLocaleString()} / ${limit.toLocaleString()}`,
     };
   }
-  if (plan !== "free") {
+  if (plan !== "minimal") {
     return { percent: demoPercent, detail: "Unlimited" };
   }
   return {

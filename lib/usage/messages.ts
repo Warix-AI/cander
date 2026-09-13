@@ -32,8 +32,8 @@ export function quotaExceededMessage(
   plan: BillingPlan,
 ): string {
   const label = usageFeatureLabel(feature);
-  if (plan === "free") {
-    return `You've reached this month's ${label.toLowerCase()} allowance on the Free plan. Upgrade for higher limits.`;
+  if (plan === "minimal") {
+    return `You've reached this month's ${label.toLowerCase()} allowance on the Minimal plan. Upgrade for higher limits.`;
   }
   return `You've reached today's ${label.toLowerCase()} capacity for unusually high usage. It resets soon.`;
 }
@@ -44,17 +44,17 @@ export function concurrencyLimitedMessage(feature: UsageFeatureCategory): string
 }
 
 export function costCeilingMessage(plan: BillingPlan): string {
-  if (plan === "free") {
+  if (plan === "minimal") {
     return "This workspace reached its daily usage safeguard. Upgrade or try again tomorrow.";
   }
   return "Your workspace reached a temporary usage safeguard due to unusually high activity. Try again later today.";
 }
 
 export function aiMinutesExhaustedMessage(plan: BillingPlan): string {
-  if (plan === "free") {
-    return "You've used all of this month's AI minutes on the Free plan. Upgrade for more AI time.";
+  if (plan === "minimal") {
+    return "You've used all of this month's Active AI Minutes on the Minimal plan. Upgrade for more AI time.";
   }
-  return "You've used all of this month's AI minutes. Usage resets at the start of your next billing period.";
+  return "You've used all of this month's Active AI Minutes. Usage resets at the start of your next billing period.";
 }
 
 export function featureDisabledMessage(feature: UsageFeatureCategory, plan: BillingPlan): string {

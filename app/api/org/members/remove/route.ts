@@ -5,7 +5,6 @@ import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { adjustSeatQuantity } from "@/lib/stripe/subscription";
 import { isStripeConfigured } from "@/lib/stripe/config";
-import type { BillingPlan } from "@/lib/types";
 import { assertOrgManager } from "@/lib/supabase/org-auth";
 
 export async function POST(request: Request) {
@@ -77,7 +76,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const seatPlan = member.plan === "max" ? "max" : "pro";
+  const seatPlan = member.plan === "moderate" ? "moderate" : "light";
 
   if (
     org.stripe_subscription_id &&
@@ -87,7 +86,7 @@ export async function POST(request: Request) {
     try {
       await adjustSeatQuantity({
         subscriptionId: org.stripe_subscription_id,
-        plan: seatPlan as Extract<BillingPlan, "pro" | "max">,
+        plan: seatPlan,
         delta: -1,
       });
     } catch (err) {

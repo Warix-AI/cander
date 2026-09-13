@@ -134,8 +134,8 @@ export function OrgTeammateInvitePanel({
     <SettingsGroup>
       <form className="space-y-4 px-4 py-4" onSubmit={(event) => void submit(event)}>
         <p className="text-[13px] leading-relaxed text-muted-foreground">
-          Invite Pro or Max teammates. Billing prorates on your organization
-          subscription when they accept.
+          Invite Light or Moderate teammates. Billing prorates on your
+          organization subscription when they accept.
         </p>
 
         <div className="space-y-2.5">

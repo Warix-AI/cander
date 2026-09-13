@@ -79,7 +79,7 @@ function profileToMember(
     name,
     short,
     initials: initials || "U",
-    plan: (profile.plan as BillingPlan) ?? "free",
+    plan: (profile.plan as BillingPlan) ?? "minimal",
     role: "Owner",
     kind: "personal",
     seatStatus: "active",

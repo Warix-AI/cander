@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     admin
       .from("profiles")
       .select("id", { count: "exact", head: true })
-      .eq("plan", "enterprise"),
+      .eq("plan", "limitless"),
     admin
       .from("account_usage_periods")
       .select("included_minutes, profile_id", { count: "exact", head: true })
@@ -60,7 +60,7 @@ export async function GET(request: Request) {
 
   const planCounts: Record<string, number> = {};
   for (const row of byPlanRes.data ?? []) {
-    const p = String((row as { plan?: string }).plan ?? "free");
+    const p = String((row as { plan?: string }).plan ?? "minimal");
     planCounts[p] = (planCounts[p] ?? 0) + 1;
   }
 

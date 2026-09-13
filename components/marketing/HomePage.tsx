@@ -49,7 +49,7 @@ export function HomePage() {
         <PageWidth>
           <SectionHeader
             title="Run AI where it fits"
-            body="Cloud is included on every plan with usage limits. Local and On-device give you unlimited inference on your hardware — Pro and above."
+            body="Cloud is included on every plan with Active AI Minutes limits. Local and On-device give you unlimited inference on your hardware — Light and above."
           />
           <div className="mt-8">
             <HostingCards />
@@ -62,7 +62,7 @@ export function HomePage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <SectionHeader
               title="Plans and pricing"
-              body="Free, Pro, and Max — per month."
+              body="Minimal to Limitless — monthly Active AI Minutes."
             />
             <Cta href="/pricing" variant="secondary">
               Compare plans

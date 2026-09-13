@@ -310,7 +310,7 @@ export function addPendingOrgInvite(opts: {
     initials: name.slice(0, 2).toUpperCase() || "IN",
     role: "Member",
     workspaceIds: opts.workspaceIds,
-    plan: opts.plan === "max" ? "max" : "pro",
+    plan: opts.plan === "moderate" ? "moderate" : "light",
     seatStatus: "pending",
     kind: "org",
     managedByOrgName: opts.orgName,
@@ -432,7 +432,9 @@ export function setMemberRole(memberId: string, role: Role, actorId?: string) {
       (item) =>
         item.role === "Owner" &&
         item.seatStatus === "active" &&
-        item.plan === "max",
+        item.plan === "moderate" ||
+        item.plan === "heavy" ||
+        item.plan === "limitless",
     );
     if (owners.length <= 1) return;
   }
@@ -447,7 +449,7 @@ export function activateMaxSeat(memberId: string) {
     if (member.id !== memberId) return member;
     return {
       ...member,
-      plan: "max" as const,
+      plan: "moderate" as const,
       seatStatus: "active" as const,
       role: member.role === "Owner" ? "Owner" : "Member",
       workspaceIds: member.workspaceIds,
@@ -477,10 +479,10 @@ export function setMemberSeat(memberId: string, plan: BillingPlan) {
   persist();
 }
 
-/** Org roster Pro/Max seat change (keeps org membership). */
+/** Org roster Light/Moderate seat change (keeps org membership). */
 export function setMemberOrgPlan(
   memberId: string,
-  plan: Extract<BillingPlan, "pro" | "max">,
+  plan: Extract<BillingPlan, "light" | "moderate">,
 ) {
   orgMembers = orgMembers.map((member) =>
     member.id === memberId ? { ...member, plan, kind: "org" } : member,

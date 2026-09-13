@@ -21,7 +21,7 @@ type InvitePreview = {
   email: string;
   firstName: string;
   lastName: string;
-  plan: "pro" | "max";
+  plan: "light" | "moderate";
 };
 
 export function InviteAcceptFlow({ token }: { token: string }) {

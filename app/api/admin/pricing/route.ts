@@ -10,12 +10,18 @@ import {
   upsertPricingPlan,
   type PricingPlanPatch,
 } from "@/lib/admin/pricing";
+import {
+  isCanonicalBillingPlan,
+  isLegacyBillingPlan,
+} from "@/lib/billing/plan-catalog";
 import { normalizePlan } from "@/lib/plans";
 import type { BillingPlan } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-const PLAN_IDS = new Set(["free", "pro", "max", "ultra", "enterprise"]);
+function isAcceptablePlanId(value: unknown): boolean {
+  return isCanonicalBillingPlan(value) || isLegacyBillingPlan(value);
+}
 
 export async function GET(request: Request) {
   const auth = await requirePlatformAdmin(request);
@@ -50,7 +56,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  if (!body.planId || !PLAN_IDS.has(String(body.planId))) {
+  if (!body.planId || !isAcceptablePlanId(body.planId)) {
     return NextResponse.json({ error: "Valid planId required." }, { status: 400 });
   }
 

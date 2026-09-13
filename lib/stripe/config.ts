@@ -8,6 +8,8 @@ export type SubscriptionStatus =
   | "past_due"
   | "canceled";
 
+export type StripeSeatPlan = Extract<BillingPlan, "light" | "moderate">;
+
 export function isStripeConfigured() {
   return Boolean(
     process.env.STRIPE_SECRET_KEY &&
@@ -22,9 +24,9 @@ export function stripeClient() {
   return new Stripe(key);
 }
 
-export function priceIdForPlan(plan: Extract<BillingPlan, "pro" | "max">) {
+export function priceIdForPlan(plan: StripeSeatPlan) {
   const id =
-    plan === "pro"
+    plan === "light"
       ? process.env.STRIPE_PRICE_PRO
       : process.env.STRIPE_PRICE_MAX;
   if (!id) throw new Error(`Missing Stripe price for ${plan}`);
@@ -43,13 +45,17 @@ export function mapStripeSubscriptionStatus(
 
 export function planFromSubscription(
   subscription: Stripe.Subscription,
-): Extract<BillingPlan, "pro" | "max"> | null {
+): StripeSeatPlan | null {
   const proPrice = process.env.STRIPE_PRICE_PRO;
   const maxPrice = process.env.STRIPE_PRICE_MAX;
   for (const item of subscription.items.data) {
     const priceId = item.price.id;
-    if (maxPrice && priceId === maxPrice && (item.quantity ?? 0) > 0) return "max";
-    if (proPrice && priceId === proPrice && (item.quantity ?? 0) > 0) return "pro";
+    if (maxPrice && priceId === maxPrice && (item.quantity ?? 0) > 0) {
+      return "moderate";
+    }
+    if (proPrice && priceId === proPrice && (item.quantity ?? 0) > 0) {
+      return "light";
+    }
   }
   return null;
 }

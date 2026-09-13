@@ -11,8 +11,8 @@ export function PricingSection() {
   const { fetchJson } = useAdmin();
   const [plans, setPlans] = useState<PricingPlanRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [previewPlan, setPreviewPlan] = useState<string>("pro");
-  const [previewMinutes, setPreviewMinutes] = useState(50);
+  const [previewPlan, setPreviewPlan] = useState<string>("light");
+  const [previewMinutes, setPreviewMinutes] = useState(100);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<PricingPlanRow>>({});
   const [saving, setSaving] = useState(false);
@@ -78,7 +78,7 @@ export function PricingSection() {
             Plan
             <select
               className="mt-1 block rounded-md border border-border bg-background px-2 py-1.5"
-              value={selected?.planId ?? "pro"}
+              value={selected?.planId ?? "light"}
               onChange={(e) => {
                 setPreviewPlan(e.target.value);
                 const p = plans.find((x) => x.planId === e.target.value);

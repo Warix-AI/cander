@@ -1,4 +1,4 @@
-import { normalizePlan } from "@/lib/plans";
+import { canonicalizePlan } from "@/lib/billing/plan-catalog";
 import type { BillingPlan } from "@/lib/types";
 
 /** Resolve billing plan for a profile (usage metering). */
@@ -13,9 +13,9 @@ export async function resolveBillingPlanForProfile(
       .select("plan, ai_minutes_plan")
       .eq("id", profileId)
       .maybeSingle();
-    if (data?.ai_minutes_plan) return normalizePlan(data.ai_minutes_plan);
-    return normalizePlan(data?.plan);
+    if (data?.ai_minutes_plan) return canonicalizePlan(data.ai_minutes_plan);
+    return canonicalizePlan(data?.plan);
   } catch {
-    return "free";
+    return "minimal";
   }
 }

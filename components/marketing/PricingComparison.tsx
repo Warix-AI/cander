@@ -1,6 +1,8 @@
 import { ALL_PLANS, comparisonRows, planLabel } from "@/lib/billing";
 import { CompareCell } from "@/components/marketing/PricingCard";
 
+type ComparePlan = keyof (typeof comparisonRows)[number]["values"];
+
 export function PricingComparison() {
   return (
     <>
@@ -29,7 +31,9 @@ export function PricingComparison() {
                 </th>
                 {ALL_PLANS.map((plan) => (
                   <td key={plan} className="px-3 py-2.5 text-center">
-                    <CompareCell included={row.values[plan]} />
+                    <CompareCell
+                      included={row.values[plan as ComparePlan]}
+                    />
                   </td>
                 ))}
               </tr>
@@ -63,7 +67,9 @@ export function PricingComparison() {
                 </th>
                 {ALL_PLANS.map((plan) => (
                   <td key={plan} className="px-2 py-2 text-center">
-                    <CompareCell included={row.values[plan]} />
+                    <CompareCell
+                      included={row.values[plan as ComparePlan]}
+                    />
                   </td>
                 ))}
               </tr>

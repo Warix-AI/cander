@@ -593,7 +593,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       initials: "YO",
       role: "Owner" as const,
       workspaceIds: [] as string[],
-      plan: "free" as const,
+      plan: "minimal" as const,
       seatStatus: "active" as const,
       kind: "personal" as const,
     };
@@ -887,7 +887,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setBillingPlan = useCallback((plan: BillingPlan) => {
     if (isSupabaseConfigured()) return;
     const preset: AccountPresetId =
-      plan === "free" ? "free" : plan === "pro" ? "pro" : "max-owner";
+      plan === "minimal" ? "free" : plan === "light" ? "pro" : "max-owner";
     const match = accountPresets.find((item) => item.id === preset);
     if (match) persistActor(match.actorId);
   }, []);

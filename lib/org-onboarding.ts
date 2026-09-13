@@ -1,16 +1,17 @@
 "use client";
 
 import type { BillingPlan } from "@/lib/types";
+import { canonicalizePlan } from "@/lib/billing/plan-catalog";
 
 export type OrgInviteDraft = {
   firstName: string;
   lastName: string;
   email: string;
-  plan: Extract<BillingPlan, "pro" | "max">;
+  plan: Extract<BillingPlan, "light" | "moderate">;
 };
 
 export function emptyOrgInvite(
-  plan: OrgInviteDraft["plan"] = "pro",
+  plan: OrgInviteDraft["plan"] = "light",
 ): OrgInviteDraft {
   return { firstName: "", lastName: "", email: "", plan };
 }
@@ -81,7 +82,12 @@ export function getOrgInviteDraftSnapshot(): OrgInviteDraft[] {
       firstName: String(row.firstName ?? ""),
       lastName: String(row.lastName ?? ""),
       email: String(row.email ?? ""),
-      plan: row.plan === "max" ? "max" : "pro",
+      plan: (() => {
+        const p = canonicalizePlan(row.plan);
+        return p === "moderate" || p === "heavy" || p === "limitless"
+          ? "moderate"
+          : "light";
+      })(),
     }));
   } catch {
     return [];

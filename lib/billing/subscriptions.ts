@@ -1,33 +1,34 @@
 /**
- * Subscription billing boundary.
- * Simulated now; Polar can replace the implementation without rewriting onboarding/usage.
+ * Fixed-plan subscription boundary (Polar later).
+ * Simulated now — selects a catalog plan, not arbitrary minutes.
  */
 
-import type { BillingPlan } from "@/lib/types";
 import {
-  minutesArePurchasable,
-  planForMinutes,
-  priceForMinutes,
-} from "@/lib/billing/minutes-pricing";
+  getPlan,
+  isSelfServePlan,
+  canonicalizePlan,
+} from "@/lib/billing/plan-catalog";
+import type { BillingPlan } from "@/lib/types";
 
 export type BillingProvider = "simulated" | "polar";
 
 export type CreateSubscriptionInput = {
   accountId: string;
-  selectedMinutes: number;
+  /** Canonical or legacy plan id */
+  plan: BillingPlan | string;
 };
 
 export type CreateSubscriptionResult = {
-  purchasedMinutes: number;
-  monthlyPriceUsd: number;
   plan: BillingPlan;
+  purchasedMinutes: number | null;
+  monthlyPriceUsd: number | null;
   provider: BillingProvider;
   status: "active";
 };
 
 /**
- * Create (or simulate) a subscription for purchased monthly AI minutes.
- * Authoritative price + plan are computed server-side from selectedMinutes.
+ * Create (or simulate) a subscription for a fixed plan.
+ * Authoritative minutes + price come from the plan catalog server-side.
  */
 export async function createSubscription(
   input: CreateSubscriptionInput,
@@ -38,23 +39,22 @@ export async function createSubscription(
 async function createSimulatedSubscription(
   input: CreateSubscriptionInput,
 ): Promise<CreateSubscriptionResult> {
-  const purchasedMinutes = Math.round(input.selectedMinutes);
-  if (!minutesArePurchasable(purchasedMinutes)) {
-    throw new Error(
-      `Minutes ${purchasedMinutes} are not available for self-serve purchase.`,
-    );
-  }
   if (!input.accountId?.trim()) {
     throw new Error("accountId is required.");
   }
 
-  const monthlyPriceUsd = priceForMinutes(purchasedMinutes);
-  const plan = planForMinutes(purchasedMinutes);
+  const plan = canonicalizePlan(input.plan);
+  if (!isSelfServePlan(plan)) {
+    throw new Error(
+      "Limitless is not available for self-serve checkout. Contact us.",
+    );
+  }
 
+  const entry = getPlan(plan);
   return {
-    purchasedMinutes,
-    monthlyPriceUsd,
     plan,
+    purchasedMinutes: entry.includedActiveAiMinutes,
+    monthlyPriceUsd: entry.monthlyPriceUsd,
     provider: "simulated",
     status: "active",
   };

@@ -25,7 +25,7 @@ export async function GET(request: Request) {
     .select(
       "id, email, name, plan, ai_minutes_override, ai_minutes_plan, subscription_status, created_at, updated_at",
     )
-    .or("plan.eq.enterprise,ai_minutes_plan.eq.enterprise")
+    .or("plan.eq.limitless,ai_minutes_plan.eq.limitless")
     .order("updated_at", { ascending: false })
     .limit(200);
 

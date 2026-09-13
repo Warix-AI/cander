@@ -68,7 +68,7 @@ export async function POST(
     isStripeConfigured() &&
     org?.stripe_subscription_id &&
     invite?.plan &&
-    (invite.plan === "pro" || invite.plan === "max")
+    (invite.plan === "light" || invite.plan === "moderate")
   ) {
     const { adjustSeatQuantity } = await import("@/lib/stripe/subscription");
     try {

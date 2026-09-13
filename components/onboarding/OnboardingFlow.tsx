@@ -49,14 +49,12 @@ import { HostingModePicker } from "@/components/settings/HostingModePicker";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
 import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/VerifyCodeInput";
 import {
-  SELF_SERVE_MAX_MINUTES,
-  SELF_SERVE_MINUTE_STEP,
-  SELF_SERVE_MIN_MINUTES,
-  clampPurchasableMinutes,
-  minutesArePurchasable,
-  planForMinutes,
-  priceForMinutes,
-} from "@/lib/billing/minutes-pricing";
+  LIMITLESS_CONTACT_HREF,
+  PLAN_CATALOG_LIST,
+  formatIncludedActiveAiMinutes,
+  formatPlanPrice,
+  isSelfServePlan,
+} from "@/lib/billing/plan-catalog";
 import { planLabel } from "@/lib/billing";
 import { isTeamPlan } from "@/lib/plans";
 
@@ -99,8 +97,8 @@ const INVITE_SEND_WARNING_KEY = "cander-invite-send-warning";
 const supabaseMode = () => isSupabaseConfigured();
 
 function presetForPlan(plan: BillingPlan): AccountPresetId {
-  if (plan === "free") return "free";
-  if (plan === "pro") return "pro";
+  if (plan === "minimal") return "free";
+  if (plan === "light") return "pro";
   return "max-owner";
 }
 
@@ -130,11 +128,11 @@ function createStepsFor(
   const steps: Step[] = ["create"];
   if (!nativeShell) {
     steps.push("plan");
-    if (plan && isTeamPlan(plan) && plan !== "enterprise") {
+    if (plan && isTeamPlan(plan) && plan !== "limitless") {
       steps.push("max-intent");
     }
     if (maxIntent === "org-now") steps.push("org-setup");
-    if (plan && plan !== "free") steps.push("workspace");
+    if (plan && plan !== "minimal") steps.push("workspace");
   }
   if (SHOW_ONBOARDING_CONNECTORS) steps.push("connectors");
   steps.push("appearance");
@@ -142,7 +140,7 @@ function createStepsFor(
   return steps;
 }
 
-/** After email verify: web picks minutes; Cap/iOS starts Free (no in-app purchase). */
+/** After email verify: web picks a plan; Cap/iOS starts Minimal (no in-app purchase). */
 function stepAfterEmailVerified(nativeShell: boolean): Step {
   if (nativeShell) {
     return SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance";
@@ -185,35 +183,35 @@ function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
 }
 
 const PLAN_PANEL_BULLETS: Record<BillingPlan, string[]> = {
-  free: [
-    "Your purchased AI minutes each month",
+  minimal: [
+    "25 Active AI Minutes / month",
     "Home, Build, Studio, and Connectors",
     "Persistent memory included",
-    "Upgrade anytime for more power",
+    "Upgrade anytime for more capacity",
   ],
-  pro: [
-    "Your purchased AI minutes each month",
+  light: [
+    "100 Active AI Minutes / month",
     "Voice, advanced memory, knowledge bases",
     "Up to three visible workspaces",
-    "Built for individuals",
+    "Built for everyday work",
   ],
-  max: [
-    "Your purchased AI minutes each month",
+  moderate: [
+    "250 Active AI Minutes / month",
     "Shared workspaces and member invites",
     "Roles, permissions, and org controls",
-    "Built for teams and power users",
+    "Built for teams",
   ],
-  ultra: [
-    "Your purchased AI minutes each month",
-    "Maximum AI capacity",
+  heavy: [
+    "500 Active AI Minutes / month",
+    "Maximum self-serve AI capacity",
     "Shared workspaces and org controls",
-    "Built for heavy AI workloads",
+    "Built for heavy workloads",
   ],
-  enterprise: [
-    "Custom AI minutes (500+)",
-    "Negotiated pricing and model access",
-    "Organization controls and support",
-    "Contact sales to get started",
+  limitless: [
+    "Custom Active AI Minutes",
+    "Negotiated pricing and support",
+    "Organization controls",
+    "Contact us to get started",
   ],
 };
 
@@ -246,11 +244,11 @@ const PANEL_COPY: Record<
     body: "A short name keeps replies personal without cluttering every thread.",
   },
   plan: {
-    title: "Buy the AI minutes you need.",
-    body: "Slide to set your monthly allowance — price and plan label update as you go.",
+    title: "Choose a plan.",
+    body: "Each plan includes monthly Active AI Minutes. Pick the fit for how you work.",
   },
   "max-intent": {
-    title: "How will you use Max?",
+    title: "How will you use this plan?",
     body: "Personal power or a team organization — you can change this later.",
   },
   "org-setup": {
@@ -283,8 +281,8 @@ const MOBILE_PANEL_LINE: Record<Step, string> = {
   create: "Create an account, then finish setup.",
   verify: "Enter the code we sent to your email.",
   profile: "Choose a name Cander should use for you.",
-  plan: "Choose the depth you need today.",
-  "max-intent": "How will you use Max?",
+  plan: "Choose a plan with Active AI Minutes.",
+  "max-intent": "Personal use or set up an organization?",
   "org-setup": "Set up your organization and invite teammates.",
   workspace: "Name the workspace you'll land in.",
   connectors: "Apps you'll use with Cander later.",
@@ -331,10 +329,7 @@ function OnboardingShell({
   const [shortName, setShortName] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [plan, setPlan] = useState<BillingPlan | null>(
-    nativeShell ? "free" : null,
-  );
-  const [selectedMinutes, setSelectedMinutes] = useState(() =>
-    nativeShell ? 10 : 10,
+    nativeShell ? "minimal" : null,
   );
   const [maxIntent, setMaxIntent] = useState<MaxIntent | null>(null);
   const [orgName, setOrgName] = useState("");
@@ -545,7 +540,7 @@ function OnboardingShell({
             restore(cp, emailConfirmed);
             return;
           }
-          if (profile?.plan && profile.plan !== "free") {
+          if (profile?.plan && profile.plan !== "minimal" && profile.plan !== "free") {
             setPlan(profile.plan as BillingPlan);
             if (!emailConfirmed && usingSupabase) {
               setPassedVerify(false);
@@ -567,7 +562,7 @@ function OnboardingShell({
 
   const buildCheckpoint = (): OnboardingCheckpoint => ({
     step,
-    plan: plan ?? "free",
+    plan: plan ?? "minimal",
     maxIntent,
     orgName,
     orgInvites,
@@ -578,26 +573,20 @@ function OnboardingShell({
     selectedConnectors,
   });
 
-  const applyMinutesSelection = (minutes: number) => {
-    const next = clampPurchasableMinutes(minutes);
-    setSelectedMinutes(next);
-    setPlan(planForMinutes(next));
-  };
-
-  const simulateSubscribeAndContinue = async () => {
-    const minutes = clampPurchasableMinutes(selectedMinutes);
-    if (!minutesArePurchasable(minutes)) {
-      setError("Choose a valid monthly minute allowance.");
+  const simulateSubscribeAndContinue = async (chosen: BillingPlan) => {
+    if (!isSelfServePlan(chosen)) {
+      window.location.href = LIMITLESS_CONTACT_HREF;
       return;
     }
+
     setBusy(true);
     setError("");
     setInfo("");
-    persistOnboardingCheckpoint(buildCheckpoint());
-
-    const derivedPlan = planForMinutes(minutes);
-    setSelectedMinutes(minutes);
-    setPlan(derivedPlan);
+    setPlan(chosen);
+    persistOnboardingCheckpoint({
+      ...buildCheckpoint(),
+      plan: chosen,
+    });
 
     try {
       if (isSupabaseConfigured()) {
@@ -614,32 +603,28 @@ function OnboardingShell({
             "Content-Type": "application/json",
             Authorization: `Bearer ${session.access_token}`,
           },
-          body: JSON.stringify({ selectedMinutes: minutes }),
+          body: JSON.stringify({ plan: chosen }),
         });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(
             typeof data.error === "string"
               ? data.error
-              : "Could not save your minute allowance.",
+              : "Could not save your plan.",
           );
         }
         if (typeof data.plan === "string") {
           setPlan(data.plan as BillingPlan);
         }
-        if (typeof data.purchasedMinutes === "number") {
-          setSelectedMinutes(data.purchasedMinutes);
-        }
       }
 
-      const nextPlan = planForMinutes(minutes);
-      if (nextPlan === "free") {
+      if (chosen === "minimal") {
         setStep(
           SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance",
         );
         return;
       }
-      if (isTeamPlan(nextPlan) && nextPlan !== "enterprise") {
+      if (isTeamPlan(chosen) && chosen !== "limitless") {
         setStep("max-intent");
         return;
       }
@@ -681,7 +666,7 @@ function OnboardingShell({
       initials,
       role: "Owner",
       workspaceIds,
-      plan: isOrgNow || isDeferred ? (plan ?? "max") : plan ?? "max",
+      plan: isOrgNow || isDeferred ? (plan ?? "moderate") : plan ?? "moderate",
       seatStatus: "active",
       kind: isOrgNow ? "org" : "personal",
       ...(orgId ? { orgId } : {}),
@@ -718,7 +703,7 @@ function OnboardingShell({
     [],
   );
 
-  const enterWithPlan = async (chosen: BillingPlan = "max") => {
+  const enterWithPlan = async (chosen: BillingPlan = "moderate") => {
     persistOnboardingPending(false);
     clearOnboardingCheckpoint();
     if (isSupabaseConfigured()) {
@@ -751,14 +736,14 @@ function OnboardingShell({
 
   const finishLocalAccount = async () => {
     // Connectors step only records interest — real OAuth installs happen later.
-    const signupPlan = nativeShell ? "free" : (plan ?? "free");
-    const isOrgNow = signupPlan === "max" && maxIntent === "org-now";
+    const signupPlan = nativeShell ? "minimal" : (plan ?? "minimal");
+    const isOrgNow = isTeamPlan(signupPlan) && maxIntent === "org-now";
     const workspaceKind = isOrgNow ? "business" : "personal";
     const resolvedName = name.trim();
     const resolvedShort =
       shortName.trim() || resolvedName.split(/\s+/)[0] || "You";
     const finalWorkspaceName =
-      signupPlan === "free"
+      signupPlan === "minimal"
         ? DEFAULT_FREE_WORKSPACE_NAME
         : isOrgNow && orgName.trim()
           ? orgName.trim()
@@ -787,7 +772,6 @@ function OnboardingShell({
         shortName: resolvedShort,
         email,
         plan: signupPlan,
-        selectedMinutes: nativeShell ? 10 : selectedMinutes,
         workspaceName: finalWorkspaceName,
         workspaceKind,
       });
@@ -852,7 +836,7 @@ function OnboardingShell({
             : new Error("Could not set up organization.");
         }
       }
-      if (signupPlan === "max" && maxIntent && maxIntent !== "personal") {
+      if (isTeamPlan(signupPlan) && maxIntent && maxIntent !== "personal") {
         applyOrgOwnerMember(user.id, [wsId], orgId);
       }
       if (inviteSendError && typeof window !== "undefined") {
@@ -869,7 +853,7 @@ function OnboardingShell({
     if (created) {
       persistWorkspace(created.id);
       setWorkspace(created.id);
-      if (signupPlan === "max" && maxIntent && maxIntent !== "personal") {
+      if (isTeamPlan(signupPlan) && maxIntent && maxIntent !== "personal") {
         const ownerId = `local-${email.trim().toLowerCase().replace(/[^a-z0-9]/gi, "") || "owner"}`;
         applyOrgOwnerMember(ownerId, [created.id]);
         persistActor(ownerId);
@@ -1248,12 +1232,11 @@ function OnboardingShell({
       return;
     }
     if (step === "plan") {
-      void simulateSubscribeAndContinue();
       return;
     }
     if (step === "max-intent") {
       if (!maxIntent) {
-        setError("Choose how you’ll use Max.");
+        setError("Choose how you’ll use this plan.");
         return;
       }
       setError("");
@@ -1348,7 +1331,7 @@ function OnboardingShell({
         setStep("org-setup");
         return;
       }
-      if (plan && isTeamPlan(plan) && plan !== "enterprise") {
+      if (plan && isTeamPlan(plan) && plan !== "limitless") {
         setStep("max-intent");
         return;
       }
@@ -1497,23 +1480,20 @@ function OnboardingShell({
 
             {step === "plan" ? (
               <PlanStep
-                minutes={selectedMinutes}
+                selectedPlan={plan}
                 busy={busy}
                 error={error}
                 info={info}
-                onMinutes={(value) => {
-                  applyMinutesSelection(value);
-                  setError("");
-                  setInfo("");
+                onChoose={(value) => {
+                  void simulateSubscribeAndContinue(value);
                 }}
-                onSubmit={goCreateNext}
               />
             ) : null}
 
             {step === "max-intent" ? (
               <MaxIntentStep
                 intent={maxIntent}
-                planLabelText={plan ? planLabel(plan) : "Max"}
+                planLabelText={plan ? planLabel(plan) : "your plan"}
                 error={error}
                 onIntent={(value) => {
                   setMaxIntent(value);
@@ -2141,120 +2121,69 @@ function WorkspaceStep({
 }
 
 function PlanStep({
-  minutes,
+  selectedPlan,
   busy,
   error,
   info = "",
-  onMinutes,
-  onSubmit,
+  onChoose,
 }: {
-  minutes: number;
+  selectedPlan: BillingPlan | null;
   busy: boolean;
   error: string;
   info?: string;
-  onMinutes: (value: number) => void;
-  onSubmit: () => void;
+  onChoose: (plan: BillingPlan) => void;
 }) {
-  const plan = planForMinutes(minutes);
-  const price = priceForMinutes(minutes);
-  const ticks = [10, 50, 150, 500] as const;
-
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        How much AI do you need?
+        Choose a plan
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Choose monthly AI minutes. Price updates as you slide — plan label is
-        just a classification for your allowance.
+        Pick monthly Active AI Minutes that match how you work. You can change
+        plans later.
       </p>
-      <form
-        className="mt-8 space-y-6"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <div
-          className={cn(
-            "border border-foreground/12 bg-background/60 px-4 py-4",
-            SHELL_G3_RADIUS,
-          )}
-        >
-          <div className="flex items-end justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                Monthly minutes
-              </p>
-              <p className="mt-1 text-[2rem] font-semibold tabular-nums tracking-[-0.04em] text-foreground">
-                {minutes}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                {planLabel(plan)}
-              </p>
-              <p className="mt-1 text-[1.35rem] font-semibold tabular-nums tracking-[-0.03em] text-foreground">
-                {price <= 0 ? "$0" : `$${price.toFixed(price % 1 ? 2 : 0)}`}
-                <span className="ml-1 text-[13px] font-medium text-muted-foreground">
-                  /mo
-                </span>
-              </p>
-            </div>
-          </div>
-
-          <label className="mt-6 block">
-            <span className="sr-only">Monthly AI minutes</span>
-            <input
-              type="range"
-              min={SELF_SERVE_MIN_MINUTES}
-              max={SELF_SERVE_MAX_MINUTES}
-              step={SELF_SERVE_MINUTE_STEP}
-              value={minutes}
+      <div className="mt-8 space-y-2.5">
+        {PLAN_CATALOG_LIST.map((entry) => {
+          const active = selectedPlan === entry.id;
+          return (
+            <button
+              key={entry.id}
+              type="button"
               disabled={busy}
-              onChange={(event) => onMinutes(Number(event.target.value))}
-              className="w-full accent-foreground"
-            />
-          </label>
-          <div className="mt-2 flex justify-between text-[11px] tabular-nums text-muted-foreground">
-            {ticks.map((tick) => (
-              <span key={tick}>{tick}</span>
-            ))}
-          </div>
-        </div>
-
-        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          You’re buying <span className="font-medium text-foreground">{minutes} minutes</span>
-          {" "}per month
-          {price > 0 ? (
-            <>
-              {" "}
-              for{" "}
-              <span className="font-medium text-foreground">
-                ${price.toFixed(price % 1 ? 2 : 0)}/mo
+              onClick={() => onChoose(entry.id)}
+              className={cn(
+                "flex w-full flex-col gap-1 border px-3.5 py-3.5 text-left transition-colors duration-200",
+                SHELL_G3_RADIUS,
+                active
+                  ? onboardingSelectorActiveClass
+                  : onboardingSelectorIdleClass,
+                busy && "opacity-60",
+              )}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[14.5px] font-medium tracking-[-0.01em]">
+                  {entry.name}
+                </span>
+                <span className="text-[13.5px] font-medium tabular-nums text-foreground">
+                  {formatPlanPrice(entry.id)}
+                </span>
+              </div>
+              <span className="text-[12.5px] leading-relaxed text-muted-foreground">
+                {formatIncludedActiveAiMinutes(entry.id)}
               </span>
-            </>
-          ) : (
-            <> at no charge</>
-          )}
-          . Classified as{" "}
-          <span className="font-medium text-foreground">{planLabel(plan)}</span>.
-        </p>
-
-        {error ? (
-          <p className="text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-        {info ? (
-          <p className="text-[12.5px] text-muted-foreground">{info}</p>
-        ) : null}
-        <button
-          type="submit"
-          disabled={busy}
-          className={primaryBtnClass}
-        >
-          {busy ? "Saving…" : "Continue"}
-        </button>
-      </form>
+              <span className="mt-1 text-[12px] font-medium text-foreground/80">
+                {busy && active ? "Saving…" : entry.ctaLabel}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {error ? (
+        <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
+      ) : null}
+      {info ? (
+        <p className="mt-4 text-[12.5px] text-muted-foreground">{info}</p>
+      ) : null}
     </>
   );
 }
@@ -2267,17 +2196,17 @@ const MAX_INTENT_OPTIONS: {
   {
     id: "personal",
     title: "Personal",
-    body: "Max for one person — your workspaces, your pace.",
+    body: "For one person — your workspaces, your pace.",
   },
   {
     id: "org-now",
     title: "Set up organization",
-    body: "Company signup — invite Pro or Max teammates now.",
+    body: "Company signup — invite Light or Moderate teammates now.",
   },
   {
     id: "org-later",
     title: "Set up later",
-    body: "Use Max now; finish org setup anytime in Settings.",
+    body: "Use this plan now; finish org setup anytime in Settings.",
   },
 ];
 
@@ -2286,7 +2215,7 @@ function MaxIntentStep({
   error,
   onIntent,
   onSubmit,
-  planLabelText = "Max",
+  planLabelText = "your plan",
 }: {
   intent: MaxIntent | null;
   error: string;
@@ -2364,7 +2293,7 @@ function PlanSeatToggle({
         SHELL_G3_RADIUS,
       )}
     >
-      {(["pro", "max"] as const).map((plan) => (
+      {(["light", "moderate"] as const).map((plan) => (
         <button
           key={plan}
           type="button"
@@ -2378,7 +2307,7 @@ function PlanSeatToggle({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {plan === "pro" ? "Pro" : "Max"}
+          {plan === "light" ? "Light" : "Moderate"}
         </button>
       ))}
     </div>
@@ -2455,7 +2384,7 @@ function OrgSetupStep({
         Set up your organization
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Invite Pro or Max teammates now, or add people later in Settings.
+        Invite Light or Moderate teammates now, or add people later in Settings.
       </p>
       <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
         <div className="space-y-2">

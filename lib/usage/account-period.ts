@@ -2,6 +2,7 @@
  * Account-level monthly usable-dollar periods (shared across workspaces).
  */
 
+import { normalizePlan } from "@/lib/plans";
 import type { BillingPlan } from "../types.ts";
 import { planUsagePolicy } from "./plan-config.ts";
 import { createSupabaseAdminClient } from "../supabase/admin.ts";
@@ -34,7 +35,7 @@ function mapPeriod(row: Record<string, unknown>): AccountUsagePeriod {
   return {
     id: String(row.id),
     profileId: String(row.profile_id),
-    plan: row.plan as BillingPlan,
+    plan: normalizePlan(row.plan),
     periodStart: String(row.period_start),
     periodEnd: String(row.period_end),
     billAmountMicros: Number(row.bill_amount_micros ?? 0),
@@ -58,7 +59,8 @@ export async function ensureAccountUsagePeriod(opts: {
 }): Promise<AccountUsagePeriod | null> {
   try {
     const admin = createSupabaseAdminClient();
-    const policy = planUsagePolicy(opts.plan);
+    const plan = normalizePlan(opts.plan);
+    const policy = planUsagePolicy(plan);
     const periodStart = windowStartIso("month");
     const periodEnd = periodEndFromStart(periodStart);
 
@@ -78,7 +80,7 @@ export async function ensureAccountUsagePeriod(opts: {
       const { resolveIncludedMinutesForPlan } = await import(
         "./ai-minutes/plan-minutes-config.ts"
       );
-      const resolved = await resolveIncludedMinutesForPlan(opts.plan);
+      const resolved = await resolveIncludedMinutesForPlan(plan);
       includedMinutes = resolved.includedMinutes;
       usageLimitBehavior = resolved.usageLimitBehavior;
       usableBudgetMicros = Math.round(resolved.internalBudgetUsd * 1_000_000);
@@ -86,7 +88,7 @@ export async function ensureAccountUsagePeriod(opts: {
       /* keep policy defaults */
     }
 
-    // Purchased minutes are the allowance source of truth (minutes-first billing).
+    // Purchased minutes are the included-minutes snapshot source of truth.
     try {
       const { data: profile } = await admin
         .from("profiles")
@@ -113,7 +115,7 @@ export async function ensureAccountUsagePeriod(opts: {
       .upsert(
         {
           profile_id: opts.profileId,
-          plan: opts.plan,
+          plan,
           period_start: periodStart,
           period_end: periodEnd,
           bill_amount_micros: policy.billAmountMicros,

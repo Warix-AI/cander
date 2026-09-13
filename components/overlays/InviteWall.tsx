@@ -6,7 +6,7 @@ import { planLabel } from "@/lib/billing";
 
 export function InviteWall() {
   const { overlay, closeOverlay, openSettings, entitlements, actor } = useApp();
-  const isPro = entitlements.plan === "pro";
+  const isPro = entitlements.plan === "light";
   const orgName = actor.managedByOrgName || "Your organization";
 
   return (
@@ -24,7 +24,7 @@ export function InviteWall() {
           id="invite-wall-title"
           className="mt-2 text-[18px] font-medium tracking-[-0.02em]"
         >
-          {isPro ? "Accept your Pro seat" : "Accept your Max seat"}
+          Accept your {planLabel(entitlements.plan)} seat
         </h2>
         <p className="mt-2 text-[14px] leading-relaxed text-muted-foreground">
           {orgName} invited you with a {planLabel(entitlements.plan)} seat.
@@ -52,8 +52,8 @@ export function InviteWall() {
           </button>
         </div>
         <p className="mt-4 text-[12.5px] text-muted-foreground">
-          Organizations can mix Pro and Max seats — Pro for personal workspaces,
-          Max for shared workspace features.
+          Organizations can mix Light and Moderate seats — Light for personal
+          workspaces, Moderate for shared workspace features.
         </p>
       </div>
     </Modal>

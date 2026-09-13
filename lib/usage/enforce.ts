@@ -100,7 +100,7 @@ export async function guardUsage(
   input: UsageGuardInput,
   opts?: { plan: BillingPlan; store?: UsageStore },
 ): Promise<UsageGuardResult> {
-  const plan = opts?.plan ?? "free";
+  const plan = opts?.plan ?? "minimal";
   const store = opts?.store ?? (await getUsageStore());
   const policy = planUsagePolicy(plan);
   const limit = featureLimitFor(plan, input.feature);
@@ -422,7 +422,7 @@ export async function guardUsage(
     if (pct >= soft) {
       throttled = true;
       notice =
-        plan === "free"
+        plan === "minimal"
           ? `You're approaching this month's ${usageFeatureLabel(input.feature).toLowerCase()} allowance.`
           : "Your workspace is in fair-use throttle due to unusually high usage today.";
     }
@@ -698,10 +698,10 @@ export async function buildUsageStatusSnapshot(input: {
       ? ["Your plan includes generous fair-use limits for normal work."]
       : []),
     ...(aiMinutes?.status === "approaching"
-      ? ["You're approaching this month's AI minute allowance."]
+      ? ["You're approaching this month's Active AI Minutes allowance."]
       : []),
     ...(aiMinutes?.status === "exhausted"
-      ? ["You've used all of this month's AI minutes."]
+      ? ["You've used all of this month's Active AI Minutes."]
       : []),
     ...(accountSpend?.status === "approaching" && !aiMinutes
       ? ["You're approaching this month's account usage budget."]
@@ -718,14 +718,14 @@ export async function buildUsageStatusSnapshot(input: {
     features,
     notices,
     upgradePlan:
-      input.plan === "free"
-        ? "pro"
-        : input.plan === "pro"
-          ? "max"
-          : input.plan === "max"
-            ? "ultra"
-            : input.plan === "ultra"
-              ? "enterprise"
+      input.plan === "minimal"
+        ? "light"
+        : input.plan === "light"
+          ? "moderate"
+          : input.plan === "moderate"
+            ? "heavy"
+            : input.plan === "heavy"
+              ? "limitless"
               : null,
     accountSpend,
     aiMinutes,

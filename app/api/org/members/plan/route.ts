@@ -30,7 +30,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
-  let body: { memberId?: string; orgId?: string; plan?: "pro" | "max" };
+  let body: { memberId?: string; orgId?: string; plan?: "light" | "moderate" };
   try {
     body = await request.json();
   } catch {
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   if (
     !body.memberId ||
     !body.orgId ||
-    (body.plan !== "pro" && body.plan !== "max")
+    (body.plan !== "light" && body.plan !== "moderate")
   ) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
@@ -79,14 +79,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Member not found." }, { status: 404 });
   }
 
-  if (target.role === "Owner" && body.plan === "pro") {
+  if (target.role === "Owner" && body.plan === "light") {
     return NextResponse.json(
-      { error: "Organization owners must stay on Max." },
+      { error: "Organization owners must stay on Moderate." },
       { status: 400 },
     );
   }
 
-  const currentPlan = target.plan === "max" ? "max" : "pro";
+  const currentPlan = target.plan === "moderate" ? "moderate" : "light";
   if (currentPlan === body.plan) {
     return NextResponse.json({ ok: true });
   }

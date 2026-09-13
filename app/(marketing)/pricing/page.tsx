@@ -17,7 +17,7 @@ export default function PricingPage() {
             as="h1"
             kicker="One AI"
             title="Pricing"
-            body="Free, Pro, and Max. Unlimited AI usage on every plan. Personal and business workspaces on all tiers."
+            body="Minimal through Heavy — fixed monthly Active AI Minutes. Limitless is custom."
             center
           />
           <div className="mt-10">

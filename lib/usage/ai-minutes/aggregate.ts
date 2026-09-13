@@ -3,6 +3,7 @@
  */
 
 import type { BillingPlan } from "../../types.ts";
+import { canonicalizePlan } from "../../billing/plan-catalog.ts";
 import {
   ensureAccountUsagePeriod,
   type AccountUsagePeriod,
@@ -10,7 +11,6 @@ import {
 import { planUsagePolicy } from "../plan-config.ts";
 import {
   formatMinutesDetail,
-  formatMinutesRemainingLine,
   formatRemainingMinutes,
   formatUsedMinutes,
 } from "./format.ts";
@@ -22,6 +22,38 @@ import {
   upsertPeriodAggregate,
 } from "./store.ts";
 import type { AIMinutesSnapshot, AIUsageLimitBehavior } from "./types.ts";
+
+async function limitlessAllowanceConfigured(
+  profileId: string,
+): Promise<boolean> {
+  try {
+    const { createSupabaseAdminClient } = await import(
+      "../../supabase/admin.ts"
+    );
+    const admin = createSupabaseAdminClient();
+    const { data } = await admin
+      .from("profiles")
+      .select("purchased_ai_minutes, ai_minutes_override")
+      .eq("id", profileId)
+      .maybeSingle();
+    return (
+      (data?.purchased_ai_minutes != null &&
+        Number.isFinite(Number(data.purchased_ai_minutes))) ||
+      (data?.ai_minutes_override != null &&
+        Number.isFinite(Number(data.ai_minutes_override)))
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function resolveFixedAllowance(
+  plan: BillingPlan,
+  profileId: string,
+): Promise<boolean> {
+  if (canonicalizePlan(plan) !== "limitless") return true;
+  return limitlessAllowanceConfigured(profileId);
+}
 
 export async function refreshAIMinutesAggregate(opts: {
   profileId: string;
@@ -65,6 +97,11 @@ export async function refreshAIMinutesAggregate(opts: {
     eventCount: listed.eventCount,
   });
 
+  const fixedAllowance = await resolveFixedAllowance(
+    opts.plan,
+    opts.profileId,
+  );
+
   return toSnapshot({
     planId: opts.plan,
     includedMinutes,
@@ -75,6 +112,7 @@ export async function refreshAIMinutesAggregate(opts: {
     periodStart: period.periodStart,
     periodEnd: period.periodEnd,
     limitBehavior,
+    fixedAllowance,
   });
 }
 
@@ -119,6 +157,7 @@ export async function getAIMinutesSnapshot(opts: {
     periodEnd: cached.periodEnd || period.periodEnd,
     limitBehavior:
       period.usageLimitBehavior ?? policy.usageLimitBehavior,
+    fixedAllowance: await resolveFixedAllowance(opts.plan, opts.profileId),
   });
 }
 
@@ -132,16 +171,20 @@ function toSnapshot(input: {
   periodStart: string;
   periodEnd: string;
   limitBehavior: AIUsageLimitBehavior;
+  fixedAllowance: boolean;
 }): AIMinutesSnapshot {
   const included = Math.max(0, input.includedMinutes);
   const used = Math.max(0, input.usedMinutes);
-  const remaining = Math.max(0, included - used);
-  const percentUsed =
-    included > 0 ? Math.min(100, Math.round((used / included) * 100)) : 0;
+  const remaining = input.fixedAllowance
+    ? Math.max(0, included - used)
+    : 0;
+  const percentUsed = input.fixedAllowance && included > 0
+    ? Math.min(100, Math.round((used / included) * 100))
+    : 0;
   const status: AIMinutesSnapshot["status"] =
-    included > 0 && used >= included
+    input.fixedAllowance && included > 0 && used >= included
       ? "exhausted"
-      : percentUsed >= 85
+      : input.fixedAllowance && percentUsed >= 85
         ? "approaching"
         : "ok";
 
@@ -150,7 +193,7 @@ function toSnapshot(input: {
     includedMinutes: included,
     usedMinutes: used,
     remainingMinutes: remaining,
-    percentUsed,
+    percentUsed: input.fixedAllowance ? percentUsed : 0,
     usedBillableMs: input.usedBillableMs,
     estimatedCostUsd: input.estimatedCostUsd,
     actualCostUsd: input.actualCostUsd,
@@ -159,10 +202,14 @@ function toSnapshot(input: {
     status,
     limitBehavior: input.limitBehavior,
     usedLabel: formatUsedMinutes(used),
-    remainingLabel: formatRemainingMinutes(remaining),
-    detailLabel: formatMinutesDetail({
-      usedMinutes: used,
-      includedMinutes: included,
-    }),
+    remainingLabel: input.fixedAllowance
+      ? formatRemainingMinutes(remaining)
+      : formatUsedMinutes(used),
+    detailLabel: input.fixedAllowance
+      ? formatMinutesDetail({
+          usedMinutes: used,
+          includedMinutes: included,
+        })
+      : `${formatUsedMinutes(used)} Active AI Minutes used`,
   };
 }

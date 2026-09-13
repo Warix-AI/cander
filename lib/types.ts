@@ -10,7 +10,12 @@ export type ModelRequirements = {
 export type HardwareCapabilities = {
   memoryGb?: number;
 };
-export type BillingPlan = "free" | "pro" | "max" | "ultra" | "enterprise";
+export type BillingPlan =
+  | "minimal"
+  | "light"
+  | "moderate"
+  | "heavy"
+  | "limitless";
 export type Theme = "light" | "dark";
 export type SpaceId = "home" | "work" | "build" | "research" | "studio";
 

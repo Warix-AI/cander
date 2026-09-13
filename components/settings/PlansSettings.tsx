@@ -9,6 +9,10 @@ import {
   SettingsSection,
 } from "@/components/settings/SettingsChrome";
 import { planLabel } from "@/lib/billing";
+import {
+  formatIncludedActiveAiMinutes,
+  formatPlanPrice,
+} from "@/lib/billing/plan-catalog";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isPaidPlan, webAppPlansSettingsUrl } from "@/lib/plans";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
@@ -158,6 +162,10 @@ export function PlansSettings() {
         <h3 className="text-[1.35rem] font-medium tracking-[-0.03em]">
           {planLabel(entitlements.plan)}
         </h3>
+        <p className="mt-1 text-[13px] text-muted-foreground">
+          {formatPlanPrice(entitlements.plan)} ·{" "}
+          {formatIncludedActiveAiMinutes(entitlements.plan)}
+        </p>
         {paidPlan && periodLabel ? (
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
             {cancelScheduled
@@ -178,7 +186,7 @@ export function PlansSettings() {
           </p>
           <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
             {cancelScheduled
-              ? "You can delete your account after your plan ends. Until then, Pro/Max features stay available."
+              ? "You can delete your account after your plan ends. Until then, paid features stay available."
               : "Canceling keeps your plan active through the end of the current billing period. You can delete your account once billing has ended."}
           </p>
           {!cancelScheduled ? (
@@ -232,6 +240,15 @@ export function PlansSettings() {
 
       <SettingsSection className="mt-8">
         <SettingsGroup>{billingBody}</SettingsGroup>
+        {!managed ? (
+          <p className="mt-4 text-[12.5px] leading-relaxed text-muted-foreground">
+            Change plans anytime on the{" "}
+            <a href="/pricing" className="underline underline-offset-2">
+              pricing page
+            </a>
+            .
+          </p>
+        ) : null}
       </SettingsSection>
     </SettingsPage>
   );

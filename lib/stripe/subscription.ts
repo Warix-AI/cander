@@ -10,7 +10,7 @@ import {
   subscriptionCancelAtPeriodEnd,
   subscriptionPeriodEndIso,
 } from "@/lib/stripe/period-end";
-import type { BillingPlan } from "@/lib/types";
+import type { StripeSeatPlan } from "@/lib/stripe/config";
 
 export async function ensureStripeCustomer(opts: {
   profileId: string;
@@ -34,7 +34,7 @@ export async function createOnboardingCheckoutSession(opts: {
   profileId: string;
   email: string;
   name?: string;
-  plan: Extract<BillingPlan, "pro" | "max">;
+  plan: StripeSeatPlan;
   origin: string;
   customerId?: string | null;
   successUrl?: string;
@@ -95,7 +95,7 @@ export async function syncProfileFromCheckoutSession(sessionId: string) {
   if (!subscription) return null;
 
   const plan =
-    (session.metadata?.plan as Extract<BillingPlan, "pro" | "max"> | undefined) ??
+    (session.metadata?.plan as StripeSeatPlan | undefined) ??
     planFromSubscription(subscription);
   if (!plan) return null;
 
@@ -115,7 +115,7 @@ export async function syncProfileFromCheckoutSession(sessionId: string) {
 
 export async function adjustSeatQuantity(opts: {
   subscriptionId: string;
-  plan: Extract<BillingPlan, "pro" | "max">;
+  plan: StripeSeatPlan;
   delta: 1 | -1;
 }) {
   const stripe = stripeClient();
@@ -156,8 +156,8 @@ export async function adjustSeatQuantity(opts: {
 
 export async function swapMemberSeatPlan(opts: {
   subscriptionId: string;
-  from: Extract<BillingPlan, "pro" | "max">;
-  to: Extract<BillingPlan, "pro" | "max">;
+  from: StripeSeatPlan;
+  to: StripeSeatPlan;
 }) {
   if (opts.from === opts.to) return;
   await adjustSeatQuantity({

@@ -70,27 +70,29 @@ export async function POST(request: Request) {
         ? Number(existingProfile.purchased_ai_minutes)
         : null;
 
-    if (
-      body.selectedMinutes != null &&
-      Number.isFinite(Number(body.selectedMinutes))
-    ) {
+    if (body.plan) {
       const { createSubscription } = await import("@/lib/billing/subscriptions");
-      const sub = await createSubscription({
-        accountId: user.id,
-        selectedMinutes: Number(body.selectedMinutes),
-      });
-      plan = sub.plan;
-      purchasedMinutes = sub.purchasedMinutes;
-      await admin
-        .from("profiles")
-        .update({
-          plan: sub.plan,
-          purchased_ai_minutes: sub.purchasedMinutes,
-          subscription_monthly_price_usd: sub.monthlyPriceUsd,
-          subscription_status:
-            sub.monthlyPriceUsd > 0 ? "active" : "none",
-        })
-        .eq("id", user.id);
+      try {
+        const sub = await createSubscription({
+          accountId: user.id,
+          plan: body.plan,
+        });
+        plan = sub.plan;
+        purchasedMinutes = sub.purchasedMinutes;
+        const monthlyPrice = Number(sub.monthlyPriceUsd ?? 0);
+        await admin
+          .from("profiles")
+          .update({
+            plan: sub.plan,
+            purchased_ai_minutes: sub.purchasedMinutes,
+            subscription_monthly_price_usd: sub.monthlyPriceUsd,
+            subscription_status: monthlyPrice > 0 ? "active" : "none",
+          })
+          .eq("id", user.id);
+      } catch {
+        // Limitless / invalid self-serve — keep normalized body.plan without checkout.
+        plan = normalizePlan(body.plan);
+      }
     }
 
     const teamPlan = isTeamPlan(plan);
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
     if (purchasedMinutes != null && Number.isFinite(purchasedMinutes)) {
       profilePatch.purchased_ai_minutes = purchasedMinutes;
     }
-    if (plan === "free") {
+    if (plan === "minimal") {
       profilePatch.subscription_status = "none";
     } else {
       profilePatch.subscription_status = "active";

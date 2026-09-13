@@ -1,44 +1,51 @@
 import { APP_DOMAIN } from "@/lib/app-brand";
+import {
+  SELF_SERVE_PLANS,
+  canonicalizePlan,
+  isSelfServePlan,
+  planDisplayName,
+} from "@/lib/billing/plan-catalog";
 import type { BillingPlan } from "@/lib/types";
 
-/** Self-serve plans (minutes purchasable via slider / marketing). */
-export const BILLING_PLANS = ["free", "pro", "max", "ultra"] as const;
+/** Self-serve plans (checkout / marketing cards excluding Limitless). */
+export const BILLING_PLANS = SELF_SERVE_PLANS;
 
 export type SelfServePlan = (typeof BILLING_PLANS)[number];
 
-/** All plans including Ultra + Enterprise (contracts / admin). */
+/** All plans including Limitless (contracts / admin). */
 export const ALL_BILLING_PLANS: BillingPlan[] = [
-  "free",
-  "pro",
-  "max",
-  "ultra",
-  "enterprise",
+  "minimal",
+  "light",
+  "moderate",
+  "heavy",
+  "limitless",
 ];
 
-/** Map legacy DB / demo values to the active plan set. */
+/** Map legacy DB / demo values and canonical ids to the active plan set. */
 export function normalizePlan(value: unknown): BillingPlan {
-  if (
-    value === "pro" ||
-    value === "max" ||
-    value === "ultra" ||
-    value === "enterprise"
-  ) {
-    return value;
-  }
-  return "free";
+  return canonicalizePlan(value);
 }
 
 export function isPaidPlan(plan: BillingPlan) {
-  return plan !== "free";
+  const p = normalizePlan(plan);
+  return p !== "minimal";
 }
 
+/** Team / org features — Moderate and above. */
 export function isTeamPlan(plan: BillingPlan) {
-  return plan === "max" || plan === "ultra" || plan === "enterprise";
+  const p = normalizePlan(plan);
+  return p === "moderate" || p === "heavy" || p === "limitless";
 }
 
 export function isEnterprisePlan(plan: BillingPlan) {
-  return plan === "enterprise";
+  return normalizePlan(plan) === "limitless";
 }
+
+export function isLimitlessPlan(plan: BillingPlan) {
+  return normalizePlan(plan) === "limitless";
+}
+
+export { isSelfServePlan, planDisplayName };
 
 /** Web billing page — upgrades happen outside the iOS app (no IAP). */
 export function subscriptionManageUrl(origin?: string) {

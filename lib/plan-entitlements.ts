@@ -1,4 +1,5 @@
 import type { BillingPlan } from "./types";
+import { canonicalizePlan } from "./billing/plan-catalog.ts";
 
 export type AiCapacity = "standard" | "expanded" | "maximum";
 
@@ -19,7 +20,7 @@ export type PlanCapabilities = {
 };
 
 const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
-  free: {
+  minimal: {
     aiCapacity: "standard",
     voice: false,
     workspaceLimit: 1,
@@ -32,7 +33,7 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
     sharedWorkspaceKnowledge: false,
     organizationControls: false,
   },
-  pro: {
+  light: {
     aiCapacity: "expanded",
     voice: true,
     workspaceLimit: 3,
@@ -45,7 +46,7 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
     sharedWorkspaceKnowledge: false,
     organizationControls: false,
   },
-  max: {
+  moderate: {
     aiCapacity: "maximum",
     voice: true,
     workspaceLimit: Infinity,
@@ -58,7 +59,7 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
     sharedWorkspaceKnowledge: true,
     organizationControls: true,
   },
-  ultra: {
+  heavy: {
     aiCapacity: "maximum",
     voice: true,
     workspaceLimit: Infinity,
@@ -71,7 +72,7 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
     sharedWorkspaceKnowledge: true,
     organizationControls: true,
   },
-  enterprise: {
+  limitless: {
     aiCapacity: "maximum",
     voice: true,
     workspaceLimit: Infinity,
@@ -87,7 +88,7 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
 };
 
 export function capabilitiesFor(plan: BillingPlan): PlanCapabilities {
-  return PLAN_CAPABILITIES[plan];
+  return PLAN_CAPABILITIES[canonicalizePlan(plan)];
 }
 
 export function hasExpandedAiCapacity(plan: BillingPlan) {
@@ -111,9 +112,9 @@ export function hasMultipleWorkspaces(plan: BillingPlan) {
   return capabilitiesFor(plan).workspaceLimit > 1;
 }
 
-/** Pro/Max show workspace chrome; Free keeps one hidden workspace under the hood. */
+/** Light+ show workspace chrome; Minimal keeps one hidden workspace under the hood. */
 export function hasVisibleWorkspaces(plan: BillingPlan) {
-  return plan !== "free";
+  return canonicalizePlan(plan) !== "minimal";
 }
 
 export function hasUnlimitedWorkspaces(plan: BillingPlan) {
@@ -133,91 +134,189 @@ export function hasOrganizationControls(plan: BillingPlan) {
 }
 
 export function nextPlanTier(plan: BillingPlan): BillingPlan | null {
-  if (plan === "free") return "pro";
-  if (plan === "pro") return "max";
-  if (plan === "max") return "ultra";
-  if (plan === "ultra") return "enterprise";
+  const p = canonicalizePlan(plan);
+  if (p === "minimal") return "light";
+  if (p === "light") return "moderate";
+  if (p === "moderate") return "heavy";
+  if (p === "heavy") return "limitless";
   return null;
 }
+
+type SelfServeCompare = "minimal" | "light" | "moderate" | "heavy";
 
 /** Pricing comparison rows — self-serve plans only in marketing matrix. */
 export function planComparisonRows(): {
   label: string;
-  values: Record<"free" | "pro" | "max" | "ultra", boolean>;
+  values: Record<SelfServeCompare, boolean>;
 }[] {
-  const all = (values: Record<"free" | "pro" | "max" | "ultra", boolean>) =>
-    values;
+  const all = (values: Record<SelfServeCompare, boolean>) => values;
   return [
     {
-      label: "Unlimited AI usage",
-      values: all({ free: true, pro: true, max: true, ultra: true }),
+      label: "Active AI Minutes included",
+      values: all({
+        minimal: true,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Expanded AI capacity",
-      values: all({ free: false, pro: true, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Maximum AI capacity",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
-      label: "Ultra AI capacity",
-      values: all({ free: false, pro: false, max: false, ultra: true }),
+      label: "Highest self-serve capacity",
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: false,
+        heavy: true,
+      }),
     },
-    { label: "Chat", values: all({ free: true, pro: true, max: true, ultra: true }) },
-    { label: "Work", values: all({ free: true, pro: true, max: true, ultra: true }) },
-    { label: "Create", values: all({ free: true, pro: true, max: true, ultra: true }) },
-    { label: "Explore", values: all({ free: true, pro: true, max: true, ultra: true }) },
+    {
+      label: "Chat",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
+    {
+      label: "Work",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
+    {
+      label: "Create",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
+    {
+      label: "Explore",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
     {
       label: "Connectors",
-      values: all({ free: true, pro: true, max: true, ultra: true }),
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
     },
-    { label: "Pins", values: all({ free: true, pro: true, max: true, ultra: true }) },
-    { label: "Recents", values: all({ free: true, pro: true, max: true, ultra: true }) },
+    {
+      label: "Pins",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
+    {
+      label: "Recents",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
     {
       label: "Workspaces",
-      values: all({ free: false, pro: true, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Multiple workspaces",
-      values: all({ free: false, pro: true, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Unlimited workspaces",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
-    { label: "Voice", values: all({ free: false, pro: true, max: true, ultra: true }) },
+    {
+      label: "Voice",
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
+    },
     {
       label: "Persistent memory",
-      values: all({ free: true, pro: true, max: true, ultra: true }),
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
     },
     {
       label: "Advanced memory",
-      values: all({ free: false, pro: true, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Knowledge bases",
-      values: all({ free: false, pro: true, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Shared workspaces",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Invite members",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Roles & permissions",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Shared workspace knowledge",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
     {
       label: "Organization controls",
-      values: all({ free: false, pro: false, max: true, ultra: true }),
+      values: all({
+        minimal: false,
+        light: false,
+        moderate: true,
+        heavy: true,
+      }),
     },
   ];
 }

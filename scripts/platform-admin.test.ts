@@ -47,12 +47,12 @@ describe("pricing preview", () => {
   it("returns base price for fixed plans", () => {
     const price = previewPriceForMinutes(
       {
-        planId: "free",
-        displayName: "Free",
+        planId: "minimal",
+        displayName: "Minimal",
         baseMonthlyPriceUsd: 0,
-        includedMinutes: 10,
-        minimumMinutes: 10,
-        maximumMinutes: 10,
+        includedMinutes: 25,
+        minimumMinutes: 25,
+        maximumMinutes: 25,
         minutesStep: 1,
         priceIncrementUsd: 1,
         pricingMode: "fixed",
@@ -70,12 +70,12 @@ describe("pricing preview", () => {
   it("adds increments for adjustable plans", () => {
     const price = previewPriceForMinutes(
       {
-        planId: "pro",
-        displayName: "Pro",
-        baseMonthlyPriceUsd: 20,
-        includedMinutes: 50,
-        minimumMinutes: 10,
-        maximumMinutes: 50,
+        planId: "light",
+        displayName: "Light",
+        baseMonthlyPriceUsd: 30,
+        includedMinutes: 100,
+        minimumMinutes: 100,
+        maximumMinutes: 200,
         minutesStep: 10,
         priceIncrementUsd: 2,
         pricingMode: "adjustable",
@@ -85,19 +85,19 @@ describe("pricing preview", () => {
         sortOrder: 20,
         metadata: {},
       },
-      70,
+      120,
     );
-    assert.equal(price, 24);
+    assert.equal(price, 34);
   });
 });
 
 describe("plan minute defaults", () => {
-  it("keeps free/pro/max/ultra/enterprise defaults", () => {
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.free.includedMinutes, 10);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.pro.includedMinutes, 50);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.max.includedMinutes, 150);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.ultra.includedMinutes, 500);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.enterprise.maximumMinutes, null);
+  it("keeps minimal/light/moderate/heavy/limitless defaults", () => {
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal.includedMinutes, 25);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.light.includedMinutes, 100);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate.includedMinutes, 250);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy.includedMinutes, 500);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.limitless.maximumMinutes, null);
   });
 });
 

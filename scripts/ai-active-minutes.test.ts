@@ -18,19 +18,9 @@ import {
   defaultAiPlanMinuteConfig,
 } from "../lib/usage/ai-minutes/plan-minutes-config.ts";
 import { resetAIUsageMemoryStore } from "../lib/usage/ai-minutes/store.ts";
+import { canonicalizePlan } from "../lib/billing/plan-catalog.ts";
 import { planUsagePolicy } from "../lib/usage/plan-config.ts";
 
-function normalizePlan(value: unknown): string {
-  if (
-    value === "pro" ||
-    value === "max" ||
-    value === "ultra" ||
-    value === "enterprise"
-  ) {
-    return value;
-  }
-  return "free";
-}
 describe("AI active minutes — intervals", () => {
   it("merges overlapping parallel spans without double-counting", () => {
     const ms = mergeIntervalsDurationMs([
@@ -67,8 +57,8 @@ describe("AI active minutes — display", () => {
   it("shows <1 for sub-minute aggregates", () => {
     assert.equal(formatUsedMinutes(0.4), "<1");
     assert.equal(
-      formatMinutesDetail({ usedMinutes: 7.2, includedMinutes: 10 }),
-      "7 / 10 minutes",
+      formatMinutesDetail({ usedMinutes: 7.2, includedMinutes: 25 }),
+      "7 / 25 Active AI Minutes",
     );
   });
 });
@@ -78,7 +68,7 @@ describe("AI active minutes — hierarchy", () => {
     resetAIUsageMemoryStore();
     const parent = await startAIUsageExecution({
       userId: "user-1",
-      planId: "pro",
+      planId: "light",
       source: "chat",
       executionId: "exec-parent",
     });
@@ -86,7 +76,7 @@ describe("AI active minutes — hierarchy", () => {
 
     const child = await startAIUsageExecution({
       userId: "user-1",
-      planId: "pro",
+      planId: "light",
       source: "expert",
       executionId: "exec-child",
       parentExecutionId: parent.executionId,
@@ -115,7 +105,7 @@ describe("AI active minutes — hierarchy", () => {
     resetAIUsageMemoryStore();
     await startAIUsageExecution({
       userId: "u",
-      planId: "free",
+      planId: "minimal",
       source: "image",
       executionId: "fail-1",
     });
@@ -129,7 +119,7 @@ describe("AI active minutes — hierarchy", () => {
 
     await startAIUsageExecution({
       userId: "u",
-      planId: "free",
+      planId: "minimal",
       source: "voice",
       executionId: "cancel-1",
     });
@@ -148,7 +138,7 @@ describe("AI active minutes — hierarchy", () => {
       await withAIUsageMeter(
         {
           userId: "user-2",
-          planId: "free",
+          planId: "minimal",
           source: "speculation",
           executionId: "exec-wrap",
         },
@@ -170,54 +160,46 @@ describe("AI active minutes — hierarchy", () => {
 });
 
 describe("AI minutes plan configuration", () => {
-  it("Free defaults to 10 minutes", () => {
-    assert.equal(defaultAiPlanMinuteConfig("free").includedMinutes, 10);
-    assert.equal(planUsagePolicy("free").includedMinutes, 10);
+  it("Minimal defaults to 25 Active AI Minutes", () => {
+    assert.equal(defaultAiPlanMinuteConfig("minimal").includedMinutes, 25);
+    assert.equal(planUsagePolicy("minimal").includedMinutes, 25);
   });
 
-  it("Pro range is 10–50 with default 50", () => {
-    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.pro;
-    assert.equal(cfg.minimumMinutes, 10);
-    assert.equal(cfg.maximumMinutes, 50);
-    assert.equal(cfg.includedMinutes, 50);
-    assert.equal(planUsagePolicy("pro").includedMinutes, 50);
+  it("Light includes 100 Active AI Minutes", () => {
+    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.light;
+    assert.equal(cfg.includedMinutes, 100);
+    assert.equal(planUsagePolicy("light").includedMinutes, 100);
   });
 
-  it("Max range is 50–150 with default 150", () => {
-    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.max;
-    assert.equal(cfg.minimumMinutes, 50);
-    assert.equal(cfg.maximumMinutes, 150);
-    assert.equal(cfg.includedMinutes, 150);
+  it("Moderate includes 250 Active AI Minutes", () => {
+    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate;
+    assert.equal(cfg.includedMinutes, 250);
   });
 
-  it("Ultra range is 200–500 with default 500", () => {
-    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.ultra;
-    assert.equal(cfg.minimumMinutes, 200);
-    assert.equal(cfg.maximumMinutes, 500);
+  it("Heavy includes 500 Active AI Minutes", () => {
+    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy;
     assert.equal(cfg.includedMinutes, 500);
   });
 
-  it("Enterprise supports >500 with no hard maximum", () => {
-    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.enterprise;
+  it("Limitless uses metering fallback with no hard maximum", () => {
+    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.limitless;
     assert.equal(cfg.isEnterprise, true);
     assert.ok((cfg.minimumMinutes ?? 0) > 500);
     assert.equal(cfg.maximumMinutes, null);
-    assert.ok(cfg.includedMinutes > 500);
+    assert.ok(cfg.includedMinutes >= 1000);
   });
 
-  it("normalizePlan accepts ultra and enterprise", () => {
-    assert.equal(normalizePlan("ultra"), "ultra");
-    assert.equal(normalizePlan("enterprise"), "enterprise");
-    assert.equal(normalizePlan("unknown"), "free");
+  it("canonicalizePlan maps legacy + unknown", () => {
+    assert.equal(canonicalizePlan("ultra"), "heavy");
+    assert.equal(canonicalizePlan("enterprise"), "limitless");
+    assert.equal(canonicalizePlan("unknown"), "minimal");
   });
 
   it("period snapshot fields exist independently of live defaults", () => {
-    // Historical periods keep included_minutes on the period row; live config
-    // can change without rewriting that snapshot (ensureAccountUsagePeriod).
-    assert.equal(planUsagePolicy("pro").includedMinutes, 50);
+    assert.equal(planUsagePolicy("light").includedMinutes, 100);
     assert.notEqual(
-      planUsagePolicy("pro").includedMinutes,
-      planUsagePolicy("pro").usableBudgetMicros / 1_000_000,
+      planUsagePolicy("light").includedMinutes,
+      planUsagePolicy("light").usableBudgetMicros / 1_000_000,
     );
   });
 });

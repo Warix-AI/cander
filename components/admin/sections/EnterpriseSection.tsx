@@ -17,7 +17,7 @@ export function EnterpriseSection() {
   const [rows, setRows] = useState<EntRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [profileId, setProfileId] = useState("");
-  const [plan, setPlan] = useState("enterprise");
+  const [plan, setPlan] = useState("limitless");
   const [minutes, setMinutes] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -44,9 +44,9 @@ export function EnterpriseSection() {
         body: JSON.stringify({
           profileId,
           plan,
-          aiMinutesPlan: "enterprise",
+          aiMinutesPlan: "limitless",
           aiMinutesOverride: minutes ? Number(minutes) : undefined,
-          reason: notes || "Enterprise assign",
+          reason: notes || "Limitless assign",
           budgetNotes: notes || undefined,
         }),
       });
@@ -61,7 +61,7 @@ export function EnterpriseSection() {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Enterprise roster. Assignments are audited; open period snapshots stay
+        Limitless roster. Assignments are audited; open period snapshots stay
         unchanged by default.
       </p>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -80,7 +80,7 @@ export function EnterpriseSection() {
             onChange={(e) => setPlan(e.target.value)}
             className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
           >
-            {["enterprise", "ultra", "max", "pro", "free"].map((p) => (
+            {["limitless", "heavy", "moderate", "light", "minimal"].map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>

@@ -4,62 +4,46 @@ import {
   planComparisonRows,
   workspaceLimit,
 } from "./plan-entitlements";
+import {
+  PLAN_CATALOG_LIST,
+  formatPlanPrice,
+  planDisplayName,
+  type PlanCatalogEntry,
+} from "@/lib/billing/plan-catalog";
 import { BILLING_PLANS, ALL_BILLING_PLANS } from "./plans";
 import type { BillingPlan, Member } from "./types";
 
 export const ALL_PLANS = BILLING_PLANS;
 
+/** Seat cost hints for org mix (display); Limitless is custom. */
 export const courierSeat: Record<BillingPlan, number> = {
-  free: 0,
-  pro: 20,
-  max: 50,
-  ultra: 150,
-  enterprise: 0,
+  minimal: 0,
+  light: 30,
+  moderate: 75,
+  heavy: 150,
+  limitless: 0,
 };
 
+/** Marketing / pricing cards from the canonical catalog (includes Limitless). */
 export const courierPlans: {
   id: BillingPlan;
   name: string;
-  price: number;
+  price: number | null;
   audience: string;
   blurb: string;
   cta: string;
   popular?: boolean;
-}[] = [
-  {
-    id: "free",
-    name: "Free",
-    price: 0,
-    audience: "Cander",
-    blurb: "The full app — Work, Build, Studio, and Connectors.",
-    cta: "Start free",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: 20,
-    audience: "More powerful Cander",
-    blurb: "Voice, memory, knowledge bases, and more workspaces.",
-    cta: "Choose Pro",
-    popular: true,
-  },
-  {
-    id: "max",
-    name: "Max",
-    price: 50,
-    audience: "Most powerful Cander",
-    blurb: "Maximum AI capacity plus teams, sharing, and organization controls.",
-    cta: "Choose Max",
-  },
-  {
-    id: "ultra",
-    name: "Ultra",
-    price: 150,
-    audience: "Highest self-serve capacity",
-    blurb: "Up to 500 AI minutes with team sharing and organization controls.",
-    cta: "Choose Ultra",
-  },
-];
+  includedActiveAiMinutes: number | null;
+}[] = PLAN_CATALOG_LIST.map((p: PlanCatalogEntry) => ({
+  id: p.id,
+  name: p.name,
+  price: p.monthlyPriceUsd,
+  audience: p.name,
+  blurb: p.blurb,
+  cta: p.ctaLabel,
+  popular: p.popular,
+  includedActiveAiMinutes: p.includedActiveAiMinutes,
+}));
 
 /** Flat comparison matrix — every cell is boolean (✓ / × in UI). */
 export const comparisonRows = planComparisonRows();
@@ -67,15 +51,19 @@ export const comparisonRows = planComparisonRows();
 export const pricingFaqs: { q: string; a: string }[] = [
   {
     q: "Is every plan the same app?",
-    a: "Yes. Free, Pro, and Max all use the same Cander application — Work, Build, Studio, Connectors, and more. Plans increase power and collaboration, not separate products.",
+    a: "Yes. Minimal through Heavy (and Limitless) all use the same Cander application — Work, Build, Studio, Connectors, and more. Plans change your monthly Active AI Minutes and collaboration features.",
+  },
+  {
+    q: "What are Active AI Minutes?",
+    a: "Active AI Minutes measure how long Cander’s AI is actively working for you each month. Each plan includes a monthly allowance that resets with your billing period.",
   },
   {
     q: "What changes between plans?",
-    a: "AI capacity, voice, memory, workspace count, and — on Max — shared workspaces, invites, roles, and organization controls.",
+    a: "Monthly Active AI Minutes, voice, memory, workspace count, and — on Moderate and above — shared workspaces, invites, roles, and organization controls.",
   },
   {
     q: "Can I use personal and business workspaces on any plan?",
-    a: "Workspaces are on Pro and Max. Free uses the app without a workspace switcher. Max adds shared workspaces, invites, and organization controls.",
+    a: "Workspaces are on Light and above. Minimal uses the app without a workspace switcher. Moderate and above add shared workspaces, invites, and organization controls.",
   },
   {
     q: "How do I upgrade on iPhone?",
@@ -83,7 +71,7 @@ export const pricingFaqs: { q: string; a: string }[] = [
   },
   {
     q: "Need something custom?",
-    a: "Enterprise is request-only. Email enterprise@thinkrecursion.ai.",
+    a: "Limitless is request-only. Email enterprise@thinkrecursion.ai.",
   },
 ];
 
@@ -92,12 +80,7 @@ export function money(n: number) {
 }
 
 export function planLabel(plan: BillingPlan) {
-  if (plan === "ultra") return "Ultra";
-  if (plan === "enterprise") return "Enterprise";
-  if (plan === "free") return "Free";
-  if (plan === "max") return "Max";
-  if (plan === "pro") return "Pro";
-  return courierPlans.find((item) => item.id === plan)?.name ?? "Free";
+  return planDisplayName(plan);
 }
 
 export function hasWorkspaceKnowledge(plan: BillingPlan) {
@@ -108,81 +91,48 @@ export function workspaceCap(plan: BillingPlan) {
   return workspaceLimit(plan);
 }
 
-export { hasVoice };
+export { hasVoice, formatPlanPrice };
 
 export type SeatMix = Record<BillingPlan, number>;
 
 export function orgSeatMix(members: Member[]): SeatMix {
   const mix: SeatMix = {
-    free: 0,
-    pro: 0,
-    max: 0,
-    ultra: 0,
-    enterprise: 0,
+    minimal: 0,
+    light: 0,
+    moderate: 0,
+    heavy: 0,
+    limitless: 0,
   };
   for (const member of members) {
-    if (member.kind !== "org" || member.seatStatus !== "active") continue;
-    mix[member.plan] += 1;
+    const plan = member.plan as BillingPlan | undefined;
+    if (plan && plan in mix) mix[plan] += 1;
   }
   return mix;
 }
 
-export function seatMixLabel(mix: SeatMix) {
-  return ALL_BILLING_PLANS.filter((plan) => mix[plan] > 0).map(
-    (plan) => `${mix[plan]} ${planLabel(plan)}`,
-  );
+export function formatSeatMix(mix: SeatMix): string {
+  return ALL_BILLING_PLANS.filter((plan) => mix[plan] > 0)
+    .map((plan) => `${mix[plan]} ${planLabel(plan)}`)
+    .join(" · ");
 }
 
-export function billingFor(
-  opts?: {
-    users?: number;
-    plan?: BillingPlan;
-    seatMix?: SeatMix;
-  },
-) {
-  const mix =
-    opts?.seatMix ??
-    ({
-      free: 0,
-      pro: 0,
-      max: opts?.plan === "max" ? (opts?.users ?? 1) : 0,
-      ultra: 0,
-      enterprise: 0,
-    } satisfies SeatMix);
-  if (opts?.plan && !opts?.seatMix) {
-    mix.free = 0;
-    mix.pro = 0;
-    mix.max = 0;
-    mix.ultra = 0;
-    mix.enterprise = 0;
-    if (opts.plan === "pro") mix.pro = opts.users ?? 1;
-    else if (opts.plan === "max") mix.max = opts.users ?? 1;
-    else if (opts.plan === "ultra") mix.ultra = opts.users ?? 1;
-    else if (opts.plan === "enterprise") mix.enterprise = opts.users ?? 1;
-    else if (opts.plan === "free") mix.free = opts.users ?? 1;
-  }
-  const users = Object.values(mix).reduce((sum, count) => sum + count, 0);
-  const courier = ALL_PLANS.reduce(
+export function seatCost(mix: SeatMix): number {
+  return (Object.keys(mix) as BillingPlan[]).reduce(
     (sum, plan) => sum + mix[plan] * courierSeat[plan],
     0,
   );
-  const primary =
-    opts?.plan ??
-    (mix.enterprise
-      ? "enterprise"
-      : mix.ultra
-        ? "ultra"
-        : mix.max
-          ? "max"
-          : mix.pro
-            ? "pro"
-            : "free");
+}
+
+export function demoSeatMix(): SeatMix {
   return {
-    users,
-    seat: courierSeat[primary],
-    seatMix: mix,
-    courier,
-    total: courier,
-    plan: primary,
+    minimal: 0,
+    light: 2,
+    moderate: 1,
+    heavy: 0,
+    limitless: 0,
   };
+}
+
+export function orgInvitePlanOptions(): Array<"light" | "moderate"> {
+  return ["light", "moderate"];
 }

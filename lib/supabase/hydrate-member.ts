@@ -314,6 +314,7 @@ export async function applySignupPlanAndSpaces(opts: {
   shortName?: string;
   email: string;
   plan: BillingPlan;
+  /** @deprecated Ignored — fixed plans use `plan` only. */
   selectedMinutes?: number;
   workspaceName?: string;
   workspaceKind?: WorkspaceKind;
@@ -337,7 +338,6 @@ export async function applySignupPlanAndSpaces(opts: {
         shortName: opts.shortName,
         email: opts.email,
         plan: opts.plan,
-        selectedMinutes: opts.selectedMinutes,
         workspaceName: opts.workspaceName,
         workspaceKind: opts.workspaceKind,
       }),
@@ -418,7 +418,7 @@ function finalizeLocalMember(
     seatStatus: "active",
     kind: teamPlan ? "org" : "personal",
     workspaceIds: ids,
-    subscriptionStatus: opts.plan === "free" ? "none" : "active",
+    subscriptionStatus: opts.plan === "minimal" ? "none" : "active",
   });
 
   for (const workspaceId of ids) {

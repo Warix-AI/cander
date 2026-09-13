@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
 import { Cta } from "@/components/marketing/Cta";
 import { APP_HREF } from "@/lib/marketing";
+import {
+  LIMITLESS_CONTACT_HREF,
+  isSelfServePlan,
+} from "@/lib/billing/plan-catalog";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { BillingPlan } from "@/lib/types";
+import { useState } from "react";
 
 const checkoutBtnClass =
   "inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-full border border-foreground/15 bg-transparent px-4 text-[13.5px] font-medium tracking-[-0.01em] transition-colors duration-200 hover:bg-muted disabled:opacity-50";
@@ -30,7 +33,7 @@ export function PricingPlanCta({
 }: Props) {
   const [busy, setBusy] = useState(false);
 
-  if (plan === "free") {
+  if (plan === "minimal") {
     return (
       <Cta href={APP_HREF} className={className} variant={variant}>
         {label}
@@ -38,9 +41,21 @@ export function PricingPlanCta({
     );
   }
 
+  if (!isSelfServePlan(plan)) {
+    return (
+      <Cta
+        href={LIMITLESS_CONTACT_HREF}
+        className={className}
+        variant={variant}
+      >
+        {label}
+      </Cta>
+    );
+  }
+
   const startCheckout = async () => {
     if (!isSupabaseConfigured()) {
-      window.location.href = APP_HREF;
+      window.location.href = `${APP_HREF}?plan=${plan}`;
       return;
     }
 
@@ -56,25 +71,25 @@ export function PricingPlanCta({
         return;
       }
 
-      const response = await fetch("/api/stripe/checkout", {
+      // Simulated fixed-plan subscribe until Polar product IDs are wired.
+      const response = await fetch("/api/billing/subscribe", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ plan, returnTo: "settings" }),
+        body: JSON.stringify({ plan }),
       });
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
-      if (data.bypass) {
+      if (response.ok) {
         window.location.href = `${APP_HREF}?settings=plans`;
         return;
       }
-      if (data.url) {
-        window.location.href = data.url;
-        return;
-      }
-      throw new Error(data.error ?? "Checkout failed.");
+
+      throw new Error(
+        typeof data.error === "string" ? data.error : "Checkout failed.",
+      );
     } catch {
       window.location.href = `${APP_HREF}?plan=${plan}`;
     } finally {
@@ -92,8 +107,7 @@ export function PricingPlanCta({
         className,
       )}
     >
-      {busy ? "Opening checkout…" : label}
+      {busy ? "Saving…" : label}
     </button>
   );
 }
-

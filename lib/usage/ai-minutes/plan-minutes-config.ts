@@ -5,6 +5,7 @@
  * when admin changes defaults — only new periods pick up new included_minutes.
  */
 
+import { canonicalizePlan } from "../../billing/plan-catalog.ts";
 import type { BillingPlan } from "../../types.ts";
 import type { AIUsageLimitBehavior } from "./types.ts";
 
@@ -22,17 +23,17 @@ export type AiPlanMinuteConfig = {
   active: boolean;
 };
 
-/** Code defaults — must match migration seed (073). */
+/** Code defaults — must match plan catalog + migration 077 seed. */
 export const DEFAULT_AI_PLAN_MINUTE_CONFIGS: Record<
   BillingPlan,
   AiPlanMinuteConfig
 > = {
-  free: {
-    planId: "free",
-    label: "Free",
-    includedMinutes: 10,
-    minimumMinutes: 10,
-    maximumMinutes: 10,
+  minimal: {
+    planId: "minimal",
+    label: "Minimal",
+    includedMinutes: 25,
+    minimumMinutes: 25,
+    maximumMinutes: 25,
     minutesStep: 1,
     internalBudgetUsd: 1,
     usageLimitBehavior: "hard",
@@ -40,48 +41,48 @@ export const DEFAULT_AI_PLAN_MINUTE_CONFIGS: Record<
     isSelfServe: true,
     active: true,
   },
-  pro: {
-    planId: "pro",
-    label: "Pro",
-    includedMinutes: 50,
-    minimumMinutes: 10,
-    maximumMinutes: 50,
+  light: {
+    planId: "light",
+    label: "Light",
+    includedMinutes: 100,
+    minimumMinutes: 100,
+    maximumMinutes: 100,
     minutesStep: 1,
-    internalBudgetUsd: 15,
+    internalBudgetUsd: 22,
     usageLimitBehavior: "hard",
     isEnterprise: false,
     isSelfServe: true,
     active: true,
   },
-  max: {
-    planId: "max",
-    label: "Max",
-    includedMinutes: 150,
-    minimumMinutes: 50,
-    maximumMinutes: 150,
+  moderate: {
+    planId: "moderate",
+    label: "Moderate",
+    includedMinutes: 250,
+    minimumMinutes: 250,
+    maximumMinutes: 250,
     minutesStep: 1,
-    internalBudgetUsd: 40,
+    internalBudgetUsd: 55,
     usageLimitBehavior: "hard",
     isEnterprise: false,
     isSelfServe: true,
     active: true,
   },
-  ultra: {
-    planId: "ultra",
-    label: "Ultra",
+  heavy: {
+    planId: "heavy",
+    label: "Heavy",
     includedMinutes: 500,
-    minimumMinutes: 200,
+    minimumMinutes: 500,
     maximumMinutes: 500,
     minutesStep: 1,
-    internalBudgetUsd: 120,
+    internalBudgetUsd: 110,
     usageLimitBehavior: "hard",
     isEnterprise: false,
     isSelfServe: true,
     active: true,
   },
-  enterprise: {
-    planId: "enterprise",
-    label: "Enterprise",
+  limitless: {
+    planId: "limitless",
+    label: "Limitless",
     includedMinutes: 1000,
     minimumMinutes: 501,
     maximumMinutes: null,
@@ -106,16 +107,17 @@ function clampIncluded(
   let next = value;
   if (cfg.minimumMinutes != null) next = Math.max(cfg.minimumMinutes, next);
   if (cfg.maximumMinutes != null) next = Math.min(cfg.maximumMinutes, next);
-  if (plan === "enterprise" && cfg.minimumMinutes != null) {
+  if (plan === "limitless" && cfg.minimumMinutes != null) {
     next = Math.max(cfg.minimumMinutes, value);
   }
   return next;
 }
 
 function mapRow(row: Record<string, unknown>): AiPlanMinuteConfig {
-  const planId = String(row.plan_id) as BillingPlan;
-  const fallback = DEFAULT_AI_PLAN_MINUTE_CONFIGS[planId] ??
-    DEFAULT_AI_PLAN_MINUTE_CONFIGS.free;
+  const planId = canonicalizePlan(row.plan_id);
+  const fallback =
+    DEFAULT_AI_PLAN_MINUTE_CONFIGS[planId] ??
+    DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal;
   return {
     planId,
     label: String(row.label ?? fallback.label),
@@ -128,14 +130,18 @@ function mapRow(row: Record<string, unknown>): AiPlanMinuteConfig {
     internalBudgetUsd: Number(row.internal_budget_usd ?? fallback.internalBudgetUsd),
     usageLimitBehavior:
       row.usage_limit_behavior === "soft" ? "soft" : "hard",
-    isEnterprise: Boolean(row.is_enterprise),
-    isSelfServe: row.is_self_serve !== false,
+    isEnterprise: Boolean(row.is_enterprise) || planId === "limitless",
+    isSelfServe: row.is_self_serve !== false && planId !== "limitless",
     active: row.active !== false,
   };
 }
 
 export function defaultAiPlanMinuteConfig(plan: BillingPlan): AiPlanMinuteConfig {
-  return DEFAULT_AI_PLAN_MINUTE_CONFIGS[plan] ?? DEFAULT_AI_PLAN_MINUTE_CONFIGS.free;
+  const canonical = canonicalizePlan(plan);
+  return (
+    DEFAULT_AI_PLAN_MINUTE_CONFIGS[canonical] ??
+    DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal
+  );
 }
 
 export async function loadAiPlanMinuteConfigs(opts?: {
@@ -179,14 +185,15 @@ export async function resolveIncludedMinutesForPlan(
   usageLimitBehavior: AIUsageLimitBehavior;
   internalBudgetUsd: number;
 }> {
+  const canonical = canonicalizePlan(plan);
   const configs = await loadAiPlanMinuteConfigs();
-  const config = configs[plan] ?? defaultAiPlanMinuteConfig(plan);
+  const config = configs[canonical] ?? defaultAiPlanMinuteConfig(canonical);
   const base =
     opts?.overrideMinutes != null && Number.isFinite(opts.overrideMinutes)
       ? Number(opts.overrideMinutes)
       : config.includedMinutes;
   return {
-    includedMinutes: clampIncluded(plan, base, config),
+    includedMinutes: clampIncluded(canonical, base, config),
     config,
     usageLimitBehavior: config.usageLimitBehavior,
     internalBudgetUsd: config.internalBudgetUsd,
@@ -197,19 +204,21 @@ export async function upsertAiPlanMinuteConfig(
   input: Partial<AiPlanMinuteConfig> & { planId: BillingPlan },
   updatedBy?: string | null,
 ): Promise<AiPlanMinuteConfig> {
-  const current = (await loadAiPlanMinuteConfigs({ force: true }))[input.planId]
-    ?? defaultAiPlanMinuteConfig(input.planId);
+  const planId = canonicalizePlan(input.planId);
+  const current =
+    (await loadAiPlanMinuteConfigs({ force: true }))[planId] ??
+    defaultAiPlanMinuteConfig(planId);
   const next: AiPlanMinuteConfig = {
     ...current,
     ...input,
-    planId: input.planId,
+    planId,
     includedMinutes: clampIncluded(
-      input.planId,
+      planId,
       input.includedMinutes ?? current.includedMinutes,
       {
         ...current,
         ...input,
-        planId: input.planId,
+        planId,
       },
     ),
   };

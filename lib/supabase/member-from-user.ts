@@ -22,7 +22,7 @@ export function memberFromSupabaseUser(user: User): Member {
     initials,
     role: "Owner",
     workspaceIds: [],
-    plan: "free",
+    plan: "minimal",
     seatStatus: "active",
     kind: "personal",
   };

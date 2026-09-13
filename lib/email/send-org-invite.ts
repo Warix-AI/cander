@@ -7,7 +7,7 @@ export async function sendOrgInviteEmail(opts: {
   orgName: string;
   inviteUrl: string;
   inviterName?: string;
-  plan: "pro" | "max";
+  plan: "light" | "moderate";
 }) {
   const key = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL ?? "Cander <onboarding@cander.app>";
@@ -15,7 +15,7 @@ export async function sendOrgInviteEmail(opts: {
   const orgName = escapeHtml(opts.orgName);
   const inviter = opts.inviterName ? escapeHtml(opts.inviterName) : null;
   const inviteUrl = escapeHtml(opts.inviteUrl);
-  const planLabel = opts.plan === "max" ? "Max" : "Pro";
+  const planLabel = opts.plan === "moderate" ? "Moderate" : "Light";
 
   const subject = `Join ${opts.orgName} on Cander`;
   const html = `

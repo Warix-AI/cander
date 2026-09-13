@@ -1,6 +1,6 @@
 import type { BillingPlan } from "../types.ts";
 
-/** Versioned plan config — bump when allowance structure changes. AI minutes Free=10 / Pro=50 / Max=150 / Ultra=500 2026-09-12. */
+/** Versioned plan config — bump when allowance structure changes. Active AI Minutes Minimal=25 / Light=100 / Moderate=250 / Heavy=500 / Limitless=custom. */
 export const USAGE_PLAN_CONFIG_VERSION = 5;
 
 /** Normalized feature categories for metering and enforcement. */

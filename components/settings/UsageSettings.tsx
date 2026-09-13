@@ -19,14 +19,22 @@ export function UsageSettings() {
   const planLabel = snapshot?.planLabel ?? billingPlan;
 
   const percent = minutes?.percentUsed ?? 0;
+  const showMeter =
+    Boolean(minutes) &&
+    !(
+      String(billingPlan) === "limitless" &&
+      minutes?.detailLabel?.includes("used") &&
+      !minutes.detailLabel.includes("/")
+    );
   const headline = !loaded
     ? "Loading…"
     : minutes
       ? minutes.detailLabel
       : "No AI usage yet";
-  const remainingLine = minutes
-    ? formatMinutesRemainingLine(minutes.remainingMinutes)
-    : null;
+  const remainingLine =
+    minutes && minutes.detailLabel.includes("/")
+      ? formatMinutesRemainingLine(minutes.remainingMinutes)
+      : null;
 
   return (
     <SettingsPage>
@@ -38,16 +46,17 @@ export function UsageSettings() {
             <div className="flex items-baseline justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[13.5px] font-medium tracking-[-0.01em]">
-                  AI Usage
+                  Active AI Minutes
                 </p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  {planLabel} plan · active AI minutes this period
+                  {planLabel} plan · this billing period
                 </p>
               </div>
               <p className="shrink-0 tabular-nums text-[12.5px] text-foreground/50 dark:text-zinc-400">
                 {headline}
               </p>
             </div>
+            {showMeter ? (
             <div
               className={cn(
                 "mt-2.5 h-2 overflow-hidden rounded-full",
@@ -57,7 +66,7 @@ export function UsageSettings() {
               aria-valuenow={percent}
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-label="AI usage minutes"
+              aria-label="Active AI Minutes usage"
             >
               <div
                 className={cn(
@@ -67,6 +76,7 @@ export function UsageSettings() {
                 style={{ width: `${percent}%` }}
               />
             </div>
+            ) : null}
             {remainingLine ? (
               <p className="mt-2 text-[12px] text-muted-foreground">
                 {remainingLine}

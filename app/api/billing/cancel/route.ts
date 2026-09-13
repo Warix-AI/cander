@@ -127,7 +127,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      plan: (authed.profile?.plan as string | undefined) ?? "free",
+      plan: (authed.profile?.plan as string | undefined) ?? "minimal",
       subscriptionStatus:
         (authed.profile?.subscription_status as string | undefined) ?? "none",
       periodEnd,

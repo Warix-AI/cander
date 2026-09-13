@@ -22,9 +22,9 @@ export const marketingPages: Record<string, MarketingPage> = {
   },
   "/pricing": {
     path: "/pricing",
-    title: "Pricing — Free, Pro & Max",
+    title: "Pricing — Active AI Minutes plans",
     description:
-      "Free to start. Pro $20, Max $50 per month. Same Cander app on every plan — more power and collaboration as you upgrade.",
+      "Minimal (Free, 25 minutes), Light $30, Moderate $75, Heavy $150, Limitless custom. Same Cander app — pick monthly Active AI Minutes.",
   },
   "/spaces": {
     path: "/spaces",
@@ -78,19 +78,19 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/models",
     title: "Models — Catalog, Runtime & Hardware",
     description:
-      "Plan is permission. Hardware is capacity. Model is requirements. Pro has one shared model; Max the catalog; Ultra production.",
-  },
+      "Plan is permission. Hardware is capacity. Model is requirements. Light includes shared models; Moderate+ opens the broader catalog.",
+    },
   "/connectors": {
     path: "/connectors",
     title: "Connectors — Gmail, Slack, GitHub & More",
     description:
-      "Works with what you already use. Featured connectors, categorized catalog, and policies on Max and Ultra.",
+      "Works with what you already use. Featured connectors, categorized catalog, and policies on Moderate and above.",
   },
   "/enterprise": {
     path: "/enterprise",
-    title: "Enterprise — Custom Plans, SSO & Residency",
+    title: "Limitless — Custom Plans, SSO & Residency",
     description:
-      "Custom plans, SSO, residency, SLAs, and mixed Cloud, Local, and On-device compute. Talk to Recursion AI.",
+      "Custom Active AI Minutes, SSO, residency, SLAs, and mixed Cloud, Local, and On-device compute. Talk to Recursion AI.",
   },
   "/security": {
     path: "/security",
@@ -182,7 +182,7 @@ export const marketingSpaces = [
     id: "work",
     href: "/work",
     title: "Work",
-    kicker: "Max & Ultra",
+    kicker: "Moderate+",
     blurb: "Inbox, calendar, customers.",
     media: "media-a",
   },

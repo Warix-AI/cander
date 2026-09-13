@@ -9,8 +9,8 @@ export function MemberPlanToggle({
   disabled = false,
   label,
 }: {
-  value: "pro" | "max";
-  onChange: (plan: "pro" | "max") => void;
+  value: "light" | "moderate";
+  onChange: (plan: "light" | "moderate") => void;
   disabled?: boolean;
   label?: string;
 }) {
@@ -24,7 +24,7 @@ export function MemberPlanToggle({
         disabled && "opacity-50",
       )}
     >
-      {(["pro", "max"] as const).map((plan) => (
+      {(["light", "moderate"] as const).map((plan) => (
         <button
           key={plan}
           type="button"
@@ -39,7 +39,7 @@ export function MemberPlanToggle({
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          {plan === "pro" ? "Pro" : "Max"}
+          {plan === "light" ? "Light" : "Moderate"}
         </button>
       ))}
     </div>

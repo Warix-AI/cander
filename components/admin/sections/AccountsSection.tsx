@@ -234,7 +234,7 @@ export function AccountsSection() {
                   className="rounded-md border border-border bg-background px-2 py-1.5 text-xs"
                 >
                   <option value="">Metering plan…</option>
-                  {["free", "pro", "max", "ultra", "enterprise"].map((p) => (
+                  {["minimal", "light", "moderate", "heavy", "limitless"].map((p) => (
                     <option key={p} value={p}>
                       {p}
                     </option>

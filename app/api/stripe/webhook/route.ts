@@ -51,14 +51,20 @@ export async function POST(request: Request) {
             : session.subscription.id;
         const subscription = await stripeClient().subscriptions.retrieve(subscriptionId);
         const resolvedPlan =
-          plan === "pro" || plan === "max" ? plan : planFromSubscription(subscription);
+          plan === "light" || plan === "moderate"
+            ? plan
+            : plan === "pro"
+              ? "light"
+              : plan === "max"
+                ? "moderate"
+                : planFromSubscription(subscription);
         const periodEnd = subscriptionPeriodEndIso(subscription);
         const cancelAtPeriodEnd = subscriptionCancelAtPeriodEnd(subscription);
 
         await admin
           .from("profiles")
           .update({
-            plan: resolvedPlan ?? "free",
+            plan: resolvedPlan ?? "minimal",
             stripe_customer_id:
               typeof session.customer === "string"
                 ? session.customer
@@ -70,7 +76,7 @@ export async function POST(request: Request) {
           })
           .eq("id", profileId);
 
-        if (resolvedPlan === "max") {
+        if (resolvedPlan === "moderate") {
           await admin
             .from("organizations")
             .update({
@@ -97,7 +103,7 @@ export async function POST(request: Request) {
         await admin
           .from("profiles")
           .update({
-            plan: plan ?? "free",
+            plan: plan ?? "minimal",
             stripe_subscription_id: subscription.id,
             subscription_status: mapStripeSubscriptionStatus(subscription.status),
             subscription_period_end: periodEnd,

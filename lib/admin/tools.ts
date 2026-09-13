@@ -97,9 +97,18 @@ export function matchAdminToolIntent(text: string): {
   }
 
   if (t.includes("open plan") || t.includes("show plans") || t === "plans") {
-    const planId = ["free", "pro", "max", "ultra", "enterprise"].find((p) =>
-      t.includes(p),
-    );
+    const planId = [
+      "minimal",
+      "light",
+      "moderate",
+      "heavy",
+      "limitless",
+      "free",
+      "pro",
+      "max",
+      "ultra",
+      "enterprise",
+    ].find((p) => t.includes(p));
     return { tool: ADMIN_TOOLS[1]!, args: planId ? { planId } : {} };
   }
 

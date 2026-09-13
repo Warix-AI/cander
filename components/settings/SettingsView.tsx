@@ -310,9 +310,9 @@ function ManagedOrganizationSettings() {
           ]}
         />
         <SettingsFootnote className="mt-4">
-          {actor.plan === "pro"
-            ? "Pro members get personal workspaces and limited org access."
-            : "Max members get shared workspace features and org collaboration."}
+          {actor.plan === "light"
+            ? "Light members get personal workspaces and limited org access."
+            : "Moderate members get shared workspace features and org collaboration."}
         </SettingsFootnote>
       </SettingsSection>
     </SettingsPage>

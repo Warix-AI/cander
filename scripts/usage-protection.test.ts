@@ -50,13 +50,13 @@ afterEach(() => {
 
 describe("plan configuration", () => {
   it("keeps free tighter than pro/max", () => {
-    const free = featureLimitFor("free", "ai_chat");
-    const pro = featureLimitFor("pro", "ai_chat");
+    const free = featureLimitFor("minimal", "ai_chat");
+    const pro = featureLimitFor("light", "ai_chat");
     assert.ok(free.monthlyUnits != null);
     assert.equal(pro.monthlyUnits, null);
     assert.ok(
-      planUsagePolicy("pro").workspaceMonthlyCostCeilingMicros >
-        planUsagePolicy("free").workspaceMonthlyCostCeilingMicros,
+      planUsagePolicy("light").workspaceMonthlyCostCeilingMicros >
+        planUsagePolicy("minimal").workspaceMonthlyCostCeilingMicros,
     );
   });
 
@@ -79,7 +79,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "pro", store },
+      { plan: "light", store },
     );
     assert.equal(result.ok, true);
   });
@@ -95,7 +95,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "free", store },
+      { plan: "minimal", store },
     );
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.code, "feature_disabled");
@@ -111,8 +111,8 @@ describe("usage guard", () => {
       estimatedUnits: 1,
       unitKind: "requests" as const,
     };
-    const first = await guardUsage(input, { plan: "pro", store });
-    const second = await guardUsage(input, { plan: "pro", store });
+    const first = await guardUsage(input, { plan: "light", store });
+    const second = await guardUsage(input, { plan: "light", store });
     assert.equal(first.ok, true);
     assert.equal(second.ok, true);
     if (first.ok && second.ok) {
@@ -122,7 +122,7 @@ describe("usage guard", () => {
 
   it("rate limits when minute window is exceeded", async () => {
     const store = new MemoryUsageStore();
-    const limit = featureLimitFor("free", "ai_chat").rateLimits.perMinute ?? 1;
+    const limit = featureLimitFor("minimal", "ai_chat").rateLimits.perMinute ?? 1;
     for (let i = 0; i < limit; i++) {
       const ok = await guardUsage(
         {
@@ -133,7 +133,7 @@ describe("usage guard", () => {
           estimatedUnits: 1,
           unitKind: "requests",
         },
-        { plan: "free", store },
+        { plan: "minimal", store },
       );
       assert.equal(ok.ok, true);
       if (ok.ok) {
@@ -152,7 +152,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "free", store },
+      { plan: "minimal", store },
     );
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.code, "rate_limited");
@@ -160,7 +160,7 @@ describe("usage guard", () => {
 
   it("blocks concurrent expensive jobs beyond limit", async () => {
     const store = new MemoryUsageStore();
-    const limit = featureLimitFor("free", "image_generation").concurrentJobs;
+    const limit = featureLimitFor("minimal", "image_generation").concurrentJobs;
     for (let i = 0; i < limit; i++) {
       await store.reserve({
         idempotencyKey: `img-${i}`,
@@ -181,7 +181,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "free", store },
+      { plan: "minimal", store },
     );
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.code, "concurrency_limited");
@@ -198,7 +198,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "pro", store },
+      { plan: "light", store },
     );
     assert.equal(allowed.ok, true);
     if (!allowed.ok) return;
@@ -227,7 +227,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "pro", store },
+      { plan: "light", store },
     );
     assert.equal(blocked.ok, false);
     if (!blocked.ok) assert.equal(blocked.code, "kill_switch");
@@ -246,7 +246,7 @@ describe("usage guard", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "free", store },
+      { plan: "minimal", store },
     );
     assert.equal(result.ok, true);
   });
@@ -264,7 +264,7 @@ describe("workspace isolation hooks", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "pro", store },
+      { plan: "light", store },
     );
     await guardUsage(
       {
@@ -275,7 +275,7 @@ describe("workspace isolation hooks", () => {
         estimatedUnits: 1,
         unitKind: "requests",
       },
-      { plan: "pro", store },
+      { plan: "light", store },
     );
     const windowStart = new Date(0).toISOString();
     const aCost = await store.sumWorkspaceCost({
@@ -385,12 +385,12 @@ describe("usage status snapshot", () => {
   it("returns plain-language statuses", async () => {
     const store = new MemoryUsageStore();
     const snapshot = await buildUsageStatusSnapshot({
-      plan: "pro",
+      plan: "light",
       workspaceId: "ws-a",
       profileId: "user-a",
       store,
     });
-    assert.equal(snapshot.plan, "pro");
+    assert.equal(snapshot.plan, "light");
     assert.ok(snapshot.features.some((feature) => feature.label === "AI chat"));
   });
 });

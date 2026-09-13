@@ -21,14 +21,14 @@ export function formatMinutesDetail(opts: {
 }): string {
   const used = formatUsedMinutes(opts.usedMinutes);
   const included = Math.round(opts.includedMinutes);
-  return `${used} / ${included} minutes`;
+  return `${used} / ${included} Active AI Minutes`;
 }
 
 export function formatMinutesRemainingLine(remainingMinutes: number): string {
   const remaining = formatRemainingMinutes(remainingMinutes);
-  if (remaining === "0") return "No minutes remaining";
-  if (remaining === "<1") return "Less than 1 minute remaining";
-  return `${remaining} minutes remaining`;
+  if (remaining === "0") return "No Active AI Minutes remaining";
+  if (remaining === "<1") return "Less than 1 Active AI Minute remaining";
+  return `${remaining} Active AI Minutes remaining`;
 }
 
 export function microsToUsd(micros: number | null | undefined): number | null {

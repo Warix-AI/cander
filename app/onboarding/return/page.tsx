@@ -12,7 +12,7 @@ export default function OnboardingReturnPage() {
   const [state, setState] = useState<
     "loading" | "ready" | "error" | "bypass"
   >("loading");
-  const [plan, setPlan] = useState<"pro" | "max" | null>(null);
+  const [plan, setPlan] = useState<"light" | "moderate" | "heavy" | null>(null);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -87,9 +87,9 @@ export default function OnboardingReturnPage() {
               Payment confirmed
             </p>
             <p className="mt-2 text-[13px] text-muted-foreground">
-              {plan === "max"
-                ? "Continuing Max setup…"
-                : "Continuing Pro setup…"}
+              {plan
+                ? `Continuing ${plan} setup…`
+                : "Continuing plan setup…"}
             </p>
           </>
         ) : null}
