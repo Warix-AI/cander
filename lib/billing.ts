@@ -7,7 +7,7 @@ import {
 import { BILLING_PLANS, ALL_BILLING_PLANS } from "./plans";
 import type { BillingPlan, Member } from "./types";
 
-export const ALL_PLANS = BILLING_PLANS as Array<"free" | "pro" | "max">;
+export const ALL_PLANS = BILLING_PLANS;
 
 export const courierSeat: Record<BillingPlan, number> = {
   free: 0,
@@ -51,6 +51,14 @@ export const courierPlans: {
     blurb: "Maximum AI capacity plus teams, sharing, and organization controls.",
     cta: "Choose Max",
   },
+  {
+    id: "ultra",
+    name: "Ultra",
+    price: 150,
+    audience: "Highest self-serve capacity",
+    blurb: "Up to 500 AI minutes with team sharing and organization controls.",
+    cta: "Choose Ultra",
+  },
 ];
 
 /** Flat comparison matrix — every cell is boolean (✓ / × in UI). */
@@ -86,7 +94,10 @@ export function money(n: number) {
 export function planLabel(plan: BillingPlan) {
   if (plan === "ultra") return "Ultra";
   if (plan === "enterprise") return "Enterprise";
-  return courierPlans.find((item) => item.id === plan)?.name ?? "Pro";
+  if (plan === "free") return "Free";
+  if (plan === "max") return "Max";
+  if (plan === "pro") return "Pro";
+  return courierPlans.find((item) => item.id === plan)?.name ?? "Free";
 }
 
 export function hasWorkspaceKnowledge(plan: BillingPlan) {

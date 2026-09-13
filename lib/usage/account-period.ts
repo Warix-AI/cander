@@ -86,14 +86,19 @@ export async function ensureAccountUsagePeriod(opts: {
       /* keep policy defaults */
     }
 
-    // Per-profile Enterprise / contract override.
+    // Purchased minutes are the allowance source of truth (minutes-first billing).
     try {
       const { data: profile } = await admin
         .from("profiles")
-        .select("ai_minutes_override")
+        .select("purchased_ai_minutes, ai_minutes_override")
         .eq("id", opts.profileId)
         .maybeSingle();
       if (
+        profile?.purchased_ai_minutes != null &&
+        Number.isFinite(Number(profile.purchased_ai_minutes))
+      ) {
+        includedMinutes = Number(profile.purchased_ai_minutes);
+      } else if (
         profile?.ai_minutes_override != null &&
         Number.isFinite(Number(profile.ai_minutes_override))
       ) {

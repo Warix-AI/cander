@@ -4,7 +4,6 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { normalizePlan, isTeamPlan } from "@/lib/plans";
-import { isStripeConfigured } from "@/lib/stripe/config";
 import type { BillingPlan, WorkspaceKind } from "@/lib/types";
 
 const NAV_SPACES = ["work", "build", "research", "studio"] as const;
@@ -32,6 +31,7 @@ export async function POST(request: Request) {
     shortName?: string;
     email?: string;
     plan?: BillingPlan;
+    selectedMinutes?: number;
     workspaceName?: string;
     workspaceKind?: WorkspaceKind;
   };
@@ -54,7 +54,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const plan = normalizePlan(body.plan);
+    // Prefer purchased minutes already stored by /api/billing/subscribe.
+    const admin = createSupabaseAdminClient();
+    const { data: existingProfile } = await admin
+      .from("profiles")
+      .select("plan, purchased_ai_minutes, subscription_monthly_price_usd")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    let plan = normalizePlan(
+      existingProfile?.plan ?? body.plan,
+    );
+    let purchasedMinutes =
+      existingProfile?.purchased_ai_minutes != null
+        ? Number(existingProfile.purchased_ai_minutes)
+        : null;
+
+    if (
+      body.selectedMinutes != null &&
+      Number.isFinite(Number(body.selectedMinutes))
+    ) {
+      const { createSubscription } = await import("@/lib/billing/subscriptions");
+      const sub = await createSubscription({
+        accountId: user.id,
+        selectedMinutes: Number(body.selectedMinutes),
+      });
+      plan = sub.plan;
+      purchasedMinutes = sub.purchasedMinutes;
+      await admin
+        .from("profiles")
+        .update({
+          plan: sub.plan,
+          purchased_ai_minutes: sub.purchasedMinutes,
+          subscription_monthly_price_usd: sub.monthlyPriceUsd,
+          subscription_status:
+            sub.monthlyPriceUsd > 0 ? "active" : "none",
+        })
+        .eq("id", user.id);
+    }
+
     const teamPlan = isTeamPlan(plan);
     const kind: WorkspaceKind =
       body.workspaceKind ?? (teamPlan ? "business" : "personal");
@@ -67,26 +105,20 @@ export async function POST(request: Request) {
       body.workspaceName?.trim() ||
       (kind === "personal" ? "Personal" : "Workspace");
     const navSpaces = [...NAV_SPACES];
-    const stripeLive = isStripeConfigured();
-    const billingBypass =
-      !stripeLive &&
-      (process.env.ALLOW_BILLING_BYPASS === "1" ||
-        process.env.NODE_ENV !== "production");
 
-    const admin = createSupabaseAdminClient();
-
-    // Persist the plan the user chose. Paid unlock without Stripe only when bypass allowed.
     const profilePatch: Record<string, unknown> = {
       name,
       short_name: shortName,
       role: "Owner",
       onboarding_completed_at: new Date().toISOString(),
+      plan,
     };
+    if (purchasedMinutes != null && Number.isFinite(purchasedMinutes)) {
+      profilePatch.purchased_ai_minutes = purchasedMinutes;
+    }
     if (plan === "free") {
-      profilePatch.plan = "free";
       profilePatch.subscription_status = "none";
-    } else if (billingBypass) {
-      profilePatch.plan = plan;
+    } else {
       profilePatch.subscription_status = "active";
     }
 
@@ -96,7 +128,6 @@ export async function POST(request: Request) {
       .eq("id", user.id);
 
     if (profileError) {
-      // Privilege revocation hits service_role too — surface clearly for grants fix.
       if (/permission denied|42501/i.test(profileError.message)) {
         return NextResponse.json(
           {
@@ -107,14 +138,13 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
-      // Retry without billing / short_name columns if migrations are not applied.
       const { error: fallbackError } = await admin
         .from("profiles")
         .update({
           name,
           role: "Owner",
           onboarding_completed_at: new Date().toISOString(),
-          ...(plan === "free" ? { plan: "free" } : {}),
+          plan,
         })
         .eq("id", user.id);
       if (fallbackError) {
@@ -123,10 +153,15 @@ export async function POST(request: Request) {
           { status: 500 },
         );
       }
-      // Fallback without billing columns — still persist plan name when possible.
-      if (plan !== "free" && !stripeLive) {
-        await admin.from("profiles").update({ plan }).eq("id", user.id);
-      }
+    }
+
+    try {
+      const { ensureAccountUsagePeriod } = await import(
+        "@/lib/usage/account-period"
+      );
+      await ensureAccountUsagePeriod({ profileId: user.id, plan });
+    } catch (periodErr) {
+      console.warn("[cander] usage period init failed", periodErr);
     }
 
     // Only touch the personal bootstrap workspace — never rewrite shared
@@ -189,6 +224,7 @@ export async function POST(request: Request) {
       ok: true,
       workspaceIds: [wsId],
       plan,
+      purchasedMinutes,
     });
   } catch (err) {
     const message =

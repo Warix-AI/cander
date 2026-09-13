@@ -48,6 +48,17 @@ import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { HostingModePicker } from "@/components/settings/HostingModePicker";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
 import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/VerifyCodeInput";
+import {
+  SELF_SERVE_MAX_MINUTES,
+  SELF_SERVE_MINUTE_STEP,
+  SELF_SERVE_MIN_MINUTES,
+  clampPurchasableMinutes,
+  minutesArePurchasable,
+  planForMinutes,
+  priceForMinutes,
+} from "@/lib/billing/minutes-pricing";
+import { planLabel } from "@/lib/billing";
+import { isTeamPlan } from "@/lib/plans";
 
 function digitsOnly(raw: string, length = SIGNUP_OTP_LENGTH) {
   return raw.replace(/\D/g, "").slice(0, length);
@@ -115,10 +126,13 @@ function createStepsFor(
   plan: BillingPlan | null,
   maxIntent: MaxIntent | null,
 ): Step[] {
-  const steps: Step[] = ["create", "profile"];
+  // Name/email already collected on create — skip the old profile/short-name step.
+  const steps: Step[] = ["create"];
   if (!nativeShell) {
     steps.push("plan");
-    if (plan === "max") steps.push("max-intent");
+    if (plan && isTeamPlan(plan) && plan !== "enterprise") {
+      steps.push("max-intent");
+    }
     if (maxIntent === "org-now") steps.push("org-setup");
     if (plan && plan !== "free") steps.push("workspace");
   }
@@ -126,6 +140,14 @@ function createStepsFor(
   steps.push("appearance");
   if (nativeShell) steps.push("hosting");
   return steps;
+}
+
+/** After email verify: web picks minutes; Cap/iOS starts Free (no in-app purchase). */
+function stepAfterEmailVerified(nativeShell: boolean): Step {
+  if (nativeShell) {
+    return SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance";
+  }
+  return "plan";
 }
 
 const DEFAULT_FREE_WORKSPACE_NAME = "First Workspace";
@@ -162,53 +184,27 @@ function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
   return "welcome";
 }
 
-const PLANS: {
-  id: BillingPlan;
-  title: string;
-  price: string;
-  body: string;
-}[] = [
-  {
-    id: "free",
-    title: "Free",
-    price: "$0",
-    body: "Unlimited AI · Home, Build, Studio · Connectors",
-  },
-  {
-    id: "pro",
-    title: "Pro",
-    price: "$20/mo",
-    body: "Higher AI capacity · Voice & memory · Up to 3 workspaces",
-  },
-  {
-    id: "max",
-    title: "Max",
-    price: "$50/mo",
-    body: "Highest AI capacity · Shared workspaces · Org invites & controls",
-  },
-];
-
 const PLAN_PANEL_BULLETS: Record<BillingPlan, string[]> = {
   free: [
-    "10 AI minutes per month",
+    "Your purchased AI minutes each month",
     "Home, Build, Studio, and Connectors",
     "Persistent memory included",
     "Upgrade anytime for more power",
   ],
   pro: [
-    "Up to 50 AI minutes per month",
+    "Your purchased AI minutes each month",
     "Voice, advanced memory, knowledge bases",
     "Up to three visible workspaces",
     "Built for individuals",
   ],
   max: [
-    "Up to 150 AI minutes per month",
+    "Your purchased AI minutes each month",
     "Shared workspaces and member invites",
     "Roles, permissions, and org controls",
     "Built for teams and power users",
   ],
   ultra: [
-    "Up to 500 AI minutes per month",
+    "Your purchased AI minutes each month",
     "Maximum AI capacity",
     "Shared workspaces and org controls",
     "Built for heavy AI workloads",
@@ -239,7 +235,7 @@ const PANEL_COPY: Record<
   },
   create: {
     title: "Create an account, then finish setup.",
-    body: "We’ll walk through profile, plan, and appearance — then open the app.",
+    body: "We’ll walk through plan and appearance — then open the app.",
   },
   verify: {
     title: "Confirm it’s you.",
@@ -250,8 +246,8 @@ const PANEL_COPY: Record<
     body: "A short name keeps replies personal without cluttering every thread.",
   },
   plan: {
-    title: "Choose the depth you need.",
-    body: "Free to start. Pro and Max unlock more capacity. Until billing is connected, paid plans unlock for testing without a charge.",
+    title: "Buy the AI minutes you need.",
+    body: "Slide to set your monthly allowance — price and plan label update as you go.",
   },
   "max-intent": {
     title: "How will you use Max?",
@@ -337,6 +333,9 @@ function OnboardingShell({
   const [plan, setPlan] = useState<BillingPlan | null>(
     nativeShell ? "free" : null,
   );
+  const [selectedMinutes, setSelectedMinutes] = useState(() =>
+    nativeShell ? 10 : 10,
+  );
   const [maxIntent, setMaxIntent] = useState<MaxIntent | null>(null);
   const [orgName, setOrgName] = useState("");
   const [orgInvites, setOrgInvites] = useState<OrgInviteDraft[]>([]);
@@ -374,7 +373,7 @@ function OnboardingShell({
         persistOnboardingPending(true);
         clearPendingSignupEmail();
         setPassedVerify(true);
-        setStep("profile");
+        setStep(stepAfterEmailVerified(nativeShell));
         setError("");
         if (user.email) setEmail(user.email);
         const metaName = user.user_metadata?.name;
@@ -393,7 +392,7 @@ function OnboardingShell({
         setStep("sign-in");
       }
     });
-  }, [usingSupabase]);
+  }, [usingSupabase, nativeShell]);
 
   // Hard gate: never allow post-verify steps without a confirmed email.
   useEffect(() => {
@@ -422,7 +421,7 @@ function OnboardingShell({
         if (step === "verify") {
           const entered = await tryEnterExistingAccount().catch(() => false);
           if (cancelled || entered) return;
-          setStep("profile");
+          setStep(stepAfterEmailVerified(nativeShell));
         }
         return;
       }
@@ -454,7 +453,7 @@ function OnboardingShell({
     };
     // Re-run when step advances past verify so a refresh mid-flow is pulled back.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on auth + step family
-  }, [usingSupabase, initialSignedIn, step]);
+  }, [usingSupabase, initialSignedIn, step, nativeShell]);
 
   useEffect(() => {
     captureAcquisitionContext();
@@ -579,57 +578,76 @@ function OnboardingShell({
     selectedConnectors,
   });
 
-  const startPaidCheckout = async (chosen: Extract<BillingPlan, "pro" | "max">) => {
-    setBusy(true);
-    setError("");
-    persistOnboardingCheckpoint(buildCheckpoint());
+  const applyMinutesSelection = (minutes: number) => {
+    const next = clampPurchasableMinutes(minutes);
+    setSelectedMinutes(next);
+    setPlan(planForMinutes(next));
+  };
 
-    if (!isSupabaseConfigured()) {
-      setBusy(false);
-      setStep(chosen === "max" ? "max-intent" : "workspace");
+  const simulateSubscribeAndContinue = async () => {
+    const minutes = clampPurchasableMinutes(selectedMinutes);
+    if (!minutesArePurchasable(minutes)) {
+      setError("Choose a valid monthly minute allowance.");
       return;
     }
+    setBusy(true);
+    setError("");
+    setInfo("");
+    persistOnboardingCheckpoint(buildCheckpoint());
+
+    const derivedPlan = planForMinutes(minutes);
+    setSelectedMinutes(minutes);
+    setPlan(derivedPlan);
 
     try {
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Sign in to continue checkout.");
+      if (isSupabaseConfigured()) {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error("Sign in to continue.");
+        }
+        const response = await fetch("/api/billing/subscribe", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ selectedMinutes: minutes }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(
+            typeof data.error === "string"
+              ? data.error
+              : "Could not save your minute allowance.",
+          );
+        }
+        if (typeof data.plan === "string") {
+          setPlan(data.plan as BillingPlan);
+        }
+        if (typeof data.purchasedMinutes === "number") {
+          setSelectedMinutes(data.purchasedMinutes);
+        }
       }
 
-      const response = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          plan: chosen,
-          checkpoint: buildCheckpoint(),
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok && !data.bypass) {
-        throw new Error(data.error ?? "Checkout failed.");
-      }
-      if (data.bypass) {
-        // Stripe not configured — server already unlocked the plan via admin.
-        setPlan(chosen);
-        setInfo(
-          `${chosen === "max" ? "Max" : "Pro"} unlocked for testing. Billing is not connected yet — nothing was charged.`,
+      const nextPlan = planForMinutes(minutes);
+      if (nextPlan === "free") {
+        setStep(
+          SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance",
         );
-        setStep(chosen === "max" ? "max-intent" : "workspace");
         return;
       }
-      if (data.url) {
-        window.location.href = data.url;
+      if (isTeamPlan(nextPlan) && nextPlan !== "enterprise") {
+        setStep("max-intent");
         return;
       }
-      throw new Error("No checkout URL returned.");
+      setStep("workspace");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Checkout failed.");
+      setError(
+        err instanceof Error ? err.message : "Could not save your selection.",
+      );
     } finally {
       setBusy(false);
     }
@@ -663,7 +681,7 @@ function OnboardingShell({
       initials,
       role: "Owner",
       workspaceIds,
-      plan: "max",
+      plan: isOrgNow || isDeferred ? (plan ?? "max") : plan ?? "max",
       seatStatus: "active",
       kind: isOrgNow ? "org" : "personal",
       ...(orgId ? { orgId } : {}),
@@ -736,6 +754,9 @@ function OnboardingShell({
     const signupPlan = nativeShell ? "free" : (plan ?? "free");
     const isOrgNow = signupPlan === "max" && maxIntent === "org-now";
     const workspaceKind = isOrgNow ? "business" : "personal";
+    const resolvedName = name.trim();
+    const resolvedShort =
+      shortName.trim() || resolvedName.split(/\s+/)[0] || "You";
     const finalWorkspaceName =
       signupPlan === "free"
         ? DEFAULT_FREE_WORKSPACE_NAME
@@ -762,10 +783,11 @@ function OnboardingShell({
       }
       await applySignupPlanAndSpaces({
         userId: user.id,
-        name,
-        shortName,
+        name: resolvedName,
+        shortName: resolvedShort,
         email,
         plan: signupPlan,
+        selectedMinutes: nativeShell ? 10 : selectedMinutes,
         workspaceName: finalWorkspaceName,
         workspaceKind,
       });
@@ -955,7 +977,7 @@ function OnboardingShell({
           }
           persistOnboardingPending(true);
           setPassedVerify(true);
-          setStep("profile");
+          setStep(stepAfterEmailVerified(nativeShell));
           return;
         } catch (err) {
           const message =
@@ -987,7 +1009,7 @@ function OnboardingShell({
       if (result.session && isAuthEmailConfirmed(result.session.user)) {
         clearPendingSignupEmail();
         setPassedVerify(true);
-        setStep("profile");
+        setStep(stepAfterEmailVerified(nativeShell));
         return;
       }
 
@@ -1015,7 +1037,7 @@ function OnboardingShell({
           }
           persistOnboardingPending(true);
           setPassedVerify(true);
-          setStep("profile");
+          setStep(stepAfterEmailVerified(nativeShell));
           return;
         } catch (signInErr) {
           const signInMessage =
@@ -1070,7 +1092,7 @@ function OnboardingShell({
       clearPendingSignupEmail();
       setPassedVerify(true);
       setVerifyCode("");
-      setStep("profile");
+      setStep(stepAfterEmailVerified(nativeShell));
     } catch (err) {
       setError(
         err instanceof Error
@@ -1145,7 +1167,7 @@ function OnboardingShell({
         if (entered) return;
         persistOnboardingPending(true);
         setPassedVerify(true);
-        setStep("profile");
+        setStep(stepAfterEmailVerified(nativeShell));
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Sign in failed.";
@@ -1225,35 +1247,8 @@ function OnboardingShell({
       void beginSignup();
       return;
     }
-    if (step === "profile") {
-      if (usingSupabase && !passedVerify) {
-        setStep("verify");
-        setError("Confirm your email with the code we sent before continuing.");
-        return;
-      }
-      if (!shortName.trim()) {
-        setError("Add a short name.");
-        return;
-      }
-      setError("");
-      setStep(nativeShell ? (SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance") : "plan");
-      return;
-    }
     if (step === "plan") {
-      if (!plan) {
-        setError("Choose a plan to continue.");
-        return;
-      }
-      setError("");
-      if (plan === "free") {
-        setStep("connectors");
-        return;
-      }
-      if (plan === "pro" || plan === "max") {
-        void startPaidCheckout(plan);
-        return;
-      }
-      setStep("workspace");
+      void simulateSubscribeAndContinue();
       return;
     }
     if (step === "max-intent") {
@@ -1336,14 +1331,8 @@ function OnboardingShell({
       setStep("welcome");
       return;
     }
-    if (step === "profile" && !passedVerify && usingSupabase) {
-      setStep("verify");
-      return;
-    }
-    if (step === "profile") {
-      // Already have a session — don't send them back into Create account.
-      if (usingSupabase && passedVerify) return;
-      setStep("create");
+    if (step === "plan") {
+      // Verified session — don't send them back through create/verify.
       return;
     }
     if (step === "org-setup") {
@@ -1355,18 +1344,16 @@ function OnboardingShell({
       return;
     }
     if (step === "workspace") {
-      if (plan === "max" && maxIntent === "org-now") {
+      if (plan && isTeamPlan(plan) && maxIntent === "org-now") {
         setStep("org-setup");
         return;
       }
-      if (plan === "max") {
+      if (plan && isTeamPlan(plan) && plan !== "enterprise") {
         setStep("max-intent");
         return;
       }
-      if (plan === "pro") {
-        setStep("plan");
-        return;
-      }
+      setStep("plan");
+      return;
     }
     const idx = createSteps.indexOf(step);
     if (idx > 0) setStep(createSteps[idx - 1]);
@@ -1374,7 +1361,7 @@ function OnboardingShell({
 
   const showBack =
     step !== "welcome" &&
-    !(usingSupabase && passedVerify && step === "profile");
+    !(usingSupabase && passedVerify && step === "plan");
 
   const panel = PANEL_COPY[step];
   const showAppearancePreview = step === "appearance";
@@ -1508,25 +1495,14 @@ function OnboardingShell({
               />
             ) : null}
 
-            {step === "profile" ? (
-              <ProfileStep
-                shortName={shortName}
-                error={error}
-                onShortName={(value) => {
-                  setShortName(value);
-                  setError("");
-                }}
-                onSubmit={goCreateNext}
-              />
-            ) : null}
-
             {step === "plan" ? (
               <PlanStep
-                plan={plan}
+                minutes={selectedMinutes}
+                busy={busy}
                 error={error}
                 info={info}
-                onPlan={(value) => {
-                  setPlan(value);
+                onMinutes={(value) => {
+                  applyMinutesSelection(value);
                   setError("");
                   setInfo("");
                 }}
@@ -1537,6 +1513,7 @@ function OnboardingShell({
             {step === "max-intent" ? (
               <MaxIntentStep
                 intent={maxIntent}
+                planLabelText={plan ? planLabel(plan) : "Max"}
                 error={error}
                 onIntent={(value) => {
                   setMaxIntent(value);
@@ -2114,54 +2091,6 @@ function VerifyStep({
   );
 }
 
-function ProfileStep({
-  shortName,
-  error,
-  onShortName,
-  onSubmit,
-}: {
-  shortName: string;
-  error: string;
-  onShortName: (value: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        What should we call you?
-      </h1>
-      <p className="mt-3 pl-0.5 text-[14.5px] leading-relaxed text-muted-foreground">
-        For greetings and short replies. Edit in Settings.
-      </p>
-      <form
-        className="mt-8 space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <input
-          value={shortName}
-          onChange={(event) => onShortName(event.target.value)}
-          placeholder="Your name"
-          aria-label="What should we call you?"
-          autoComplete="nickname"
-          className={inputClass}
-        />
-        {error ? (
-          <p className="text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-        <button
-          type="submit"
-          className={primaryBtnClass}
-        >
-          Continue
-        </button>
-      </form>
-    </>
-  );
-}
-
 function WorkspaceStep({
   workspaceName,
   error,
@@ -2212,65 +2141,106 @@ function WorkspaceStep({
 }
 
 function PlanStep({
-  plan,
+  minutes,
+  busy,
   error,
   info = "",
-  onPlan,
+  onMinutes,
   onSubmit,
 }: {
-  plan: BillingPlan | null;
+  minutes: number;
+  busy: boolean;
   error: string;
   info?: string;
-  onPlan: (value: BillingPlan) => void;
+  onMinutes: (value: number) => void;
   onSubmit: () => void;
 }) {
+  const plan = planForMinutes(minutes);
+  const price = priceForMinutes(minutes);
+  const ticks = [10, 50, 150, 500] as const;
+
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Choose a plan
+        How much AI do you need?
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Pick Free, Pro, or Max to continue. Until billing is connected, Pro and
-        Max unlock for testing without a charge.
+        Choose monthly AI minutes. Price updates as you slide — plan label is
+        just a classification for your allowance.
       </p>
       <form
-        className="mt-8 space-y-5"
+        className="mt-8 space-y-6"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
       >
-        <div className="grid gap-2">
-          {PLANS.map((item) => {
-            const active = plan === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onPlan(item.id)}
-                className={cn(
-                  "flex min-h-[4.5rem] flex-col justify-center border px-3.5 py-3 text-left transition-colors duration-200",
-                  SHELL_G3_RADIUS,
-                  active
-                    ? onboardingSelectorActiveClass
-                    : onboardingSelectorIdleClass,
-                )}
-              >
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="text-[13.5px] font-medium tracking-[-0.01em]">
-                    {item.title}
-                  </span>
-                  <span className="text-[13px] font-semibold tabular-nums tracking-[-0.02em] text-foreground">
-                    {item.price}
-                  </span>
+        <div
+          className={cn(
+            "border border-foreground/12 bg-background/60 px-4 py-4",
+            SHELL_G3_RADIUS,
+          )}
+        >
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                Monthly minutes
+              </p>
+              <p className="mt-1 text-[2rem] font-semibold tabular-nums tracking-[-0.04em] text-foreground">
+                {minutes}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+                {planLabel(plan)}
+              </p>
+              <p className="mt-1 text-[1.35rem] font-semibold tabular-nums tracking-[-0.03em] text-foreground">
+                {price <= 0 ? "$0" : `$${price.toFixed(price % 1 ? 2 : 0)}`}
+                <span className="ml-1 text-[13px] font-medium text-muted-foreground">
+                  /mo
                 </span>
-                <span className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-muted-foreground">
-                  {item.body}
-                </span>
-              </button>
-            );
-          })}
+              </p>
+            </div>
+          </div>
+
+          <label className="mt-6 block">
+            <span className="sr-only">Monthly AI minutes</span>
+            <input
+              type="range"
+              min={SELF_SERVE_MIN_MINUTES}
+              max={SELF_SERVE_MAX_MINUTES}
+              step={SELF_SERVE_MINUTE_STEP}
+              value={minutes}
+              disabled={busy}
+              onChange={(event) => onMinutes(Number(event.target.value))}
+              className="w-full accent-foreground"
+            />
+          </label>
+          <div className="mt-2 flex justify-between text-[11px] tabular-nums text-muted-foreground">
+            {ticks.map((tick) => (
+              <span key={tick}>{tick}</span>
+            ))}
+          </div>
         </div>
+
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          You’re buying <span className="font-medium text-foreground">{minutes} minutes</span>
+          {" "}per month
+          {price > 0 ? (
+            <>
+              {" "}
+              for{" "}
+              <span className="font-medium text-foreground">
+                ${price.toFixed(price % 1 ? 2 : 0)}/mo
+              </span>
+            </>
+          ) : (
+            <> at no charge</>
+          )}
+          . Classified as{" "}
+          <span className="font-medium text-foreground">{planLabel(plan)}</span>.
+        </p>
+
         {error ? (
           <p className="text-[12.5px] text-destructive">{error}</p>
         ) : null}
@@ -2279,9 +2249,10 @@ function PlanStep({
         ) : null}
         <button
           type="submit"
+          disabled={busy}
           className={primaryBtnClass}
         >
-          Continue
+          {busy ? "Saving…" : "Continue"}
         </button>
       </form>
     </>
@@ -2315,16 +2286,18 @@ function MaxIntentStep({
   error,
   onIntent,
   onSubmit,
+  planLabelText = "Max",
 }: {
   intent: MaxIntent | null;
   error: string;
   onIntent: (value: MaxIntent) => void;
   onSubmit: () => void;
+  planLabelText?: string;
 }) {
   return (
     <>
       <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        How will you use Max?
+        How will you use {planLabelText}?
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
         Personal power or a team organization — you can change this later.

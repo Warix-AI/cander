@@ -143,76 +143,81 @@ export function nextPlanTier(plan: BillingPlan): BillingPlan | null {
 /** Pricing comparison rows — self-serve plans only in marketing matrix. */
 export function planComparisonRows(): {
   label: string;
-  values: Record<"free" | "pro" | "max", boolean>;
+  values: Record<"free" | "pro" | "max" | "ultra", boolean>;
 }[] {
-  const all = (values: Record<"free" | "pro" | "max", boolean>) => values;
+  const all = (values: Record<"free" | "pro" | "max" | "ultra", boolean>) =>
+    values;
   return [
     {
       label: "Unlimited AI usage",
-      values: all({ free: true, pro: true, max: true }),
+      values: all({ free: true, pro: true, max: true, ultra: true }),
     },
     {
       label: "Expanded AI capacity",
-      values: all({ free: false, pro: true, max: true }),
+      values: all({ free: false, pro: true, max: true, ultra: true }),
     },
     {
       label: "Maximum AI capacity",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
-    { label: "Chat", values: all({ free: true, pro: true, max: true }) },
-    { label: "Work", values: all({ free: true, pro: true, max: true }) },
-    { label: "Create", values: all({ free: true, pro: true, max: true }) },
-    { label: "Explore", values: all({ free: true, pro: true, max: true }) },
+    {
+      label: "Ultra AI capacity",
+      values: all({ free: false, pro: false, max: false, ultra: true }),
+    },
+    { label: "Chat", values: all({ free: true, pro: true, max: true, ultra: true }) },
+    { label: "Work", values: all({ free: true, pro: true, max: true, ultra: true }) },
+    { label: "Create", values: all({ free: true, pro: true, max: true, ultra: true }) },
+    { label: "Explore", values: all({ free: true, pro: true, max: true, ultra: true }) },
     {
       label: "Connectors",
-      values: all({ free: true, pro: true, max: true }),
+      values: all({ free: true, pro: true, max: true, ultra: true }),
     },
-    { label: "Pins", values: all({ free: true, pro: true, max: true }) },
-    { label: "Recents", values: all({ free: true, pro: true, max: true }) },
+    { label: "Pins", values: all({ free: true, pro: true, max: true, ultra: true }) },
+    { label: "Recents", values: all({ free: true, pro: true, max: true, ultra: true }) },
     {
       label: "Workspaces",
-      values: all({ free: false, pro: true, max: true }),
+      values: all({ free: false, pro: true, max: true, ultra: true }),
     },
     {
       label: "Multiple workspaces",
-      values: all({ free: false, pro: true, max: true }),
+      values: all({ free: false, pro: true, max: true, ultra: true }),
     },
     {
       label: "Unlimited workspaces",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
-    { label: "Voice", values: all({ free: false, pro: true, max: true }) },
+    { label: "Voice", values: all({ free: false, pro: true, max: true, ultra: true }) },
     {
       label: "Persistent memory",
-      values: all({ free: true, pro: true, max: true }),
+      values: all({ free: true, pro: true, max: true, ultra: true }),
     },
     {
       label: "Advanced memory",
-      values: all({ free: false, pro: true, max: true }),
+      values: all({ free: false, pro: true, max: true, ultra: true }),
     },
     {
       label: "Knowledge bases",
-      values: all({ free: false, pro: true, max: true }),
+      values: all({ free: false, pro: true, max: true, ultra: true }),
     },
     {
       label: "Shared workspaces",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
     {
       label: "Invite members",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
     {
       label: "Roles & permissions",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
     {
       label: "Shared workspace knowledge",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
     {
       label: "Organization controls",
-      values: all({ free: false, pro: false, max: true }),
+      values: all({ free: false, pro: false, max: true, ultra: true }),
     },
   ];
 }

@@ -314,6 +314,7 @@ export async function applySignupPlanAndSpaces(opts: {
   shortName?: string;
   email: string;
   plan: BillingPlan;
+  selectedMinutes?: number;
   workspaceName?: string;
   workspaceKind?: WorkspaceKind;
 }) {
@@ -336,6 +337,7 @@ export async function applySignupPlanAndSpaces(opts: {
         shortName: opts.shortName,
         email: opts.email,
         plan: opts.plan,
+        selectedMinutes: opts.selectedMinutes,
         workspaceName: opts.workspaceName,
         workspaceKind: opts.workspaceKind,
       }),

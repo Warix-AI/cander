@@ -1,8 +1,10 @@
 import { APP_DOMAIN } from "@/lib/app-brand";
 import type { BillingPlan } from "@/lib/types";
 
-/** Self-serve plans shown in marketing/checkout. */
-export const BILLING_PLANS: BillingPlan[] = ["free", "pro", "max"];
+/** Self-serve plans (minutes purchasable via slider / marketing). */
+export const BILLING_PLANS = ["free", "pro", "max", "ultra"] as const;
+
+export type SelfServePlan = (typeof BILLING_PLANS)[number];
 
 /** All plans including Ultra + Enterprise (contracts / admin). */
 export const ALL_BILLING_PLANS: BillingPlan[] = [
