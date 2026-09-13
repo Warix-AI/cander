@@ -138,7 +138,7 @@ export async function createConnectLink(input: {
   callbackOrigin?: string | null;
 }): Promise<ComposioLinkSession> {
   if (!isOauthConnectorId(input.connectorId)) {
-    throw new Error(`Connector not available via Composio: ${input.connectorId}`);
+    throw new Error(`App not available via Composio: ${input.connectorId}`);
   }
   const callbackUrl = composioOAuthReturnUrl(
     input.connectorId,

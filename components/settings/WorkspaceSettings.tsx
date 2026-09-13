@@ -191,7 +191,7 @@ export function WorkspacesSettings({
           </SettingsGroup>
           {mobile ? (
             <SettingsFootnote>
-              Open a workspace to manage people, connectors, and knowledge.
+              Open a workspace to manage people, apps, and knowledge.
             </SettingsFootnote>
           ) : null}
         </SettingsSection>
@@ -677,8 +677,8 @@ function WorkspacePage({
 
       {entitlements.hasConnectorPolicies && canManage ? (
         <SettingsSection
-          title="Connector policies"
-          description="Turn a connector off for this workspace. Installed apps stay in the app; they just can't run here."
+          title="App policies"
+          description="Turn an app off for this workspace. Installed apps stay in the app; they just can't run here."
         >
           {mobile ? (
             <>

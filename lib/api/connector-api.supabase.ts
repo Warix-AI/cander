@@ -69,7 +69,7 @@ export function createSupabaseConnectorApi(
 
     async connect(ctx, connectorId) {
       if (!isOauthConnectorId(connectorId)) {
-        throw new Error("Connector not available.");
+        throw new Error("App not available.");
       }
       const existing = connectionsForConnectorLive(ctx.workspaceId, connectorId).filter(
         (row) => row.status === "pending" || row.status === "active",

@@ -226,7 +226,7 @@ export function createNativeHealth(): NativeHealth | undefined {
           start,
           end,
           "not_requested",
-          "Connect Apple Health in Connectors to query personal metrics.",
+          "Connect Apple Health in Apps to query personal metrics.",
         );
       }
       if (!readPref(HEALTH_AUTH_COMPLETED_KEY)) {
@@ -325,7 +325,7 @@ export function createNativeHealth(): NativeHealth | undefined {
         return {
           outcome: "not_requested" as const,
           workouts: [],
-          error: "Connect Apple Health in Connectors.",
+          error: "Connect Apple Health in Apps.",
         };
       }
       const plugin = getCapHealth();

@@ -49,7 +49,7 @@ export function authorizeToolExposure(
       reason: "not_connected",
       connectorId: tool.connectorId,
       skillId: toolId,
-      message: `Connect ${tool.connectorId} in Connectors first.`,
+      message: `Connect ${tool.connectorId} in Apps first.`,
     };
   }
 
@@ -59,7 +59,7 @@ export function authorizeToolExposure(
       reason: "not_allowed",
       connectorId: tool.connectorId,
       skillId: toolId,
-      message: "Connection does not match tool connector.",
+      message: "Connection does not match tool app.",
     };
   }
 
@@ -74,7 +74,7 @@ export function authorizeToolExposure(
       connectorId: tool.connectorId,
       skillId: toolId,
       enableAction: { connectorId: tool.connectorId, skillId: toolId },
-      message: `${tool.label} is disabled. Enable it in Connectors.`,
+      message: `${tool.label} is disabled. Enable it in Apps.`,
     };
   }
 

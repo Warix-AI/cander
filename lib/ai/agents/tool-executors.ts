@@ -188,7 +188,7 @@ export async function executeAgentBuilderTool(input: {
         name,
         ok: true,
         output:
-          "Skipped — agents do not own connector tools. Cander already has the user’s connectors; describe desired behavior in Instructions.",
+          "Skipped — agents do not own app actions. Cander already has the user’s apps; describe desired behavior in Instructions.",
       };
     }
 

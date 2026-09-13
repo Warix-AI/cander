@@ -8,12 +8,12 @@ Tagline: "${APP_TAGLINE}"
 Left sidebar
 - Explore — Research and browsing (internal id: research). Projects keep browser tabs on the right. Quick Search opens a temporary browser without saving a project.
 - Create — Apps, websites, automations, and images (internal id: studio). Build-kind projects still use internal id build. Image projects open the image playground on the right. Create via + on the dashboard.
-- Connectors — Browse the connector catalog (Gmail, Slack, calendar, etc.). Installs are coming soon.
+- Apps — Browse the app catalog (Gmail, Slack, calendar, etc.). Installs are coming soon.
 - Recents — Recent chats and projects.
 
-General menu (sidebar footer, above Connectors in the flyout)
+General menu (sidebar footer, above Apps in the flyout)
 - Appearance: System / Light / Dark
-- Connectors, Recents, Settings shortcuts
+- Apps, Recents, Settings shortcuts
 
 Chat and panels
 - In Explore or Create: Ask on the dashboard opens chat next to the space panel.
@@ -34,11 +34,11 @@ Working today
 - Assistant chat in Explore / Create (shared spaces default)
 - Project dashboards with card or list layout (preference is remembered)
 - Browser tabs in Create and Explore projects
-- Connectors catalog browse, Recents, pins, workspaces
+- Apps catalog browse, Recents, pins, workspaces
 - Appearance preferences
 
 Coming soon
-- Connector installs and OAuth
+- App installs and OAuth
 - Deeper Create video and audio tools`;
 
 /** True when the user is likely asking how to use the app. */

@@ -106,7 +106,7 @@ registerCanderTool({
   category: "comms",
   label: "Send mail",
   description:
-    "Send an email via the user's connected Gmail. Requires write access enabled in Connectors.",
+    "Send an email via the user's connected Gmail. Requires write access enabled in Apps.",
   risk: "write",
   confirmationPolicy: "when_ambiguous",
   defaultEnabled: true,
@@ -131,7 +131,7 @@ registerCanderTool({
   category: "comms",
   label: "Draft mail",
   description:
-    "Create a Gmail draft for the user to review. Requires draft mail enabled in Connectors.",
+    "Create a Gmail draft for the user to review. Requires draft mail enabled in Apps.",
   risk: "write",
   confirmationPolicy: "never",
   defaultEnabled: true,
@@ -157,7 +157,7 @@ registerCanderTool({
   category: "comms",
   label: "Reply in thread",
   description:
-    "Reply within an existing Gmail thread. Requires reply in thread enabled in Connectors.",
+    "Reply within an existing Gmail thread. Requires reply in thread enabled in Apps.",
   risk: "write",
   confirmationPolicy: "when_ambiguous",
   defaultEnabled: true,
@@ -291,7 +291,7 @@ registerCanderTool({
   capabilityFamily: "messaging",
   category: "comms",
   label: "Send Slack message",
-  description: "Post a message to a Slack channel. Requires send enabled in Connectors.",
+  description: "Post a message to a Slack channel. Requires send enabled in Apps.",
   risk: "write",
   confirmationPolicy: "when_ambiguous",
   defaultEnabled: true,

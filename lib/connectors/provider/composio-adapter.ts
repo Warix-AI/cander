@@ -22,7 +22,7 @@ export const composioProviderAdapter: ConnectorProviderAdapter = {
       return { ok: false, error: "Composio is not configured." };
     }
     if (!isOauthConnectorId(input.connectorId)) {
-      return { ok: false, error: "Connector not available." };
+      return { ok: false, error: "App not available." };
     }
     try {
       const userId = composioUserId(input.workspaceId, input.ownerId);

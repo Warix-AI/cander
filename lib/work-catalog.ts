@@ -22,7 +22,7 @@ export function workScopeOptions(): { id: WorkScope; label: string }[] {
     { id: "today", label: "Today" },
     { id: "apps", label: "Apps" },
     { id: "automations", label: "Automations" },
-    { id: "connectors", label: "Connectors" },
+    { id: "connectors", label: "Connected Apps" },
   ];
 }
 
@@ -52,7 +52,7 @@ export function workSectionTitle(scope: WorkScope) {
   if (scope === "today") return "Your day";
   if (scope === "apps") return "Apps in Work";
   if (scope === "automations") return "Automations";
-  return "Connectors";
+  return "Connected Apps";
 }
 
 export function workEmptyCopy(scope: WorkScope) {
@@ -65,7 +65,7 @@ export function workEmptyCopy(scope: WorkScope) {
   if (scope === "automations") {
     return "No automations running yet. Create one in Build to get started.";
   }
-  return "No connectors in Work yet. Connect Gmail, Slack, Calendar, or Drive.";
+  return "No connected apps in Work yet. Connect Gmail, Slack, Calendar, or Drive.";
 }
 
 /** Featured connectors shown in Work when none are attached yet. */

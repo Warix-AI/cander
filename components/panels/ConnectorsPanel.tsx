@@ -105,7 +105,7 @@ export function ConnectorsPanel() {
   return (
     <>
     <div className={SHELL_PANEL_BODY}>
-      <PanelChrome kicker="Connector" title={selected.name} />
+      <PanelChrome kicker="App" title={selected.name} />
       <div className="min-h-0 flex-1 overflow-hidden">
         <div className="flex h-full">
           <div className="w-[42%] min-w-[10rem] border-r border-border py-3">

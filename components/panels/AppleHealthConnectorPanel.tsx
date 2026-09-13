@@ -43,7 +43,7 @@ export function AppleHealthConnectorPanel() {
   if (!isHealthKitFlagEnabled()) {
     return (
       <div className={SHELL_PANEL_BODY}>
-        <PanelChrome kicker="Connector" title="Apple Health" />
+        <PanelChrome kicker="App" title="Apple Health" />
         <p className="px-4 text-[13px] text-muted-foreground">
           Apple Health is not enabled in this build.
         </p>

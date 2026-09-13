@@ -106,7 +106,7 @@ export function WorkConnectorsSettings({ compact = false }: { compact?: boolean 
               ))
             ) : (
               <p className="px-4 py-4 text-[13.5px] text-muted-foreground">
-                No connectors on Work yet. Add mail, calendar, or chat below.
+                No connected apps on Work yet. Add mail, calendar, or chat below.
               </p>
             )}
           </SettingsGroup>
@@ -151,7 +151,7 @@ export function WorkConnectorsSettings({ compact = false }: { compact?: boolean 
               ))
             ) : (
               <p className="px-4 py-4 text-[13.5px] text-muted-foreground">
-                Every installed connector is already attached.
+                Every connected app is already attached.
               </p>
             )}
           </SettingsGroup>
@@ -166,7 +166,7 @@ export function WorkConnectorsSettings({ compact = false }: { compact?: boolean 
         id="space-settings-title"
         className="text-[18px] font-semibold tracking-[-0.03em]"
       >
-        Connectors
+        Connected Apps
       </h2>
       <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-muted-foreground">
         Attach mail, calendar, chat, and CRM so Work can surface what needs you.
@@ -212,7 +212,7 @@ export function WorkConnectorsSettings({ compact = false }: { compact?: boolean 
             ))
           ) : (
             <p className="px-3.5 py-5 text-[13px] text-muted-foreground">
-              No connectors on Work yet. Add mail, calendar, or chat below.
+              No connected apps on Work yet. Add mail, calendar, or chat below.
             </p>
           )}
         </div>
@@ -260,7 +260,7 @@ export function WorkConnectorsSettings({ compact = false }: { compact?: boolean 
             ))
           ) : (
             <p className="col-span-full text-[13px] text-muted-foreground">
-              Every installed connector is already attached.
+              Every connected app is already attached.
             </p>
           )}
         </div>

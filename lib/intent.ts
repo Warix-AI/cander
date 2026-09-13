@@ -95,7 +95,7 @@ export function inferIntent(
       space: "connectors",
       connectorId: connector.id,
       projectId: mentioned?.id,
-      reply: `Connectors is on the right — ${connector.name} accounts, permissions, and actions.`,
+      reply: `Apps is on the right — ${connector.name} accounts, permissions, and actions.`,
     });
   }
 
@@ -106,7 +106,7 @@ export function inferIntent(
     return finish({
       space: "connectors",
       connectorId: connector.id,
-      reply: `Connectors is on the right${connector ? ` — ${connector.name}` : ""}.`,
+      reply: `Apps is on the right${connector ? ` — ${connector.name}` : ""}.`,
     });
   }
 

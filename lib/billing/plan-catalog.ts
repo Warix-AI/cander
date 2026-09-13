@@ -199,5 +199,5 @@ export function formatIncludedActiveAiMinutes(plan: BillingPlan): string {
   return formatPlanUsageLevel(plan);
 }
 
-export const LIMITLESS_CONTACT_EMAIL = "enterprise@thinkrecursion.ai";
+export const LIMITLESS_CONTACT_EMAIL = "matt@warix.co";
 export const LIMITLESS_CONTACT_HREF = `mailto:${LIMITLESS_CONTACT_EMAIL}`;

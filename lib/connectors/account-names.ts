@@ -65,7 +65,7 @@ export function validateUniqueConnectorDisplayName(opts: {
   ) {
     return {
       ok: false,
-      error: "That account name is already used for this connector.",
+      error: "That account name is already used for this app.",
     };
   }
   return normalized;

@@ -84,8 +84,8 @@ export function ProjectsBrowser({
       }
       return pack(
         "product",
-        "Connectors",
-        "No connectors yet. Open a connector to connect an account.",
+        "Apps",
+        "No apps connected yet. Open an app to connect an account.",
         openConnector,
         items,
         [...grouped.entries()].map(([name, groupItems]) => ({

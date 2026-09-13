@@ -67,7 +67,7 @@ export const pricingFaqs: { q: string; a: string }[] = [
   },
   {
     q: "Need something custom?",
-    a: "Limitless is request-only. Email enterprise@thinkrecursion.ai.",
+    a: "Limitless is request-only. Email matt@warix.co.",
   },
 ];
 

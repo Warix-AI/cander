@@ -177,8 +177,8 @@ export function connectorFocusSystemBlock(
     const toolHint = toolHintForFocus(current);
     return [
       "## ConnectorFocus (active on-screen item)",
-      "You cannot see the user's screen. You DO have connected-app MCP/tools for this connector while it is connected.",
-      "The user is viewing this item in the connector panel. Treat it as the subject of \"this document\", \"this spreadsheet\", \"this file\", \"this\", etc.",
+      "You cannot see the user's screen. You DO have connected-app MCP/tools for this app while it is connected.",
+      "The user is viewing this item in the app panel. Treat it as the subject of \"this document\", \"this spreadsheet\", \"this file\", \"this\", etc.",
       `- connectorId: ${current.connectorId}`,
       `- connector: ${current.connectorLabel}`,
       `- itemId: ${current.itemId}`,
@@ -196,11 +196,11 @@ export function connectorFocusSystemBlock(
   }
   return [
     "## ConnectorFocus (ambient — optional context)",
-    "You cannot see the user's screen. You DO have connected-app MCP/tools for this connector while it is connected.",
-    `The user is currently in connected app: connectorId=${current.connectorId}; label=${current.connectorLabel}; item=none (browsing connector list).`,
-    "This is NOT an explicit attachment. Prefer this connector's MCP/tools when answering about what they are looking at.",
+    "You cannot see the user's screen. You DO have connected-app MCP/tools for this app while it is connected.",
+    `The user is currently in connected app: connectorId=${current.connectorId}; label=${current.connectorLabel}; item=none (browsing app list).`,
+    "This is NOT an explicit attachment. Prefer this app's MCP/tools when answering about what they are looking at.",
     "If they ask about something in this app, search/open it with tools — never claim access isn't enabled or ask them to paste content.",
-    "Do not mention the connector unless the user's message clearly refers to this app or what they are viewing.",
+    "Do not mention the app unless the user's message clearly refers to this app or what they are viewing.",
     "If the message is unrelated general chat, ignore ConnectorFocus completely.",
   ].join("\n");
 }

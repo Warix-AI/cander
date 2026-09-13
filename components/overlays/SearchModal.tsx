@@ -169,7 +169,7 @@ export function SearchModal() {
     if (SHOW_CONNECTORS_NAV) {
       push({
         id: "nav-connectors",
-        title: "Connectors",
+        title: "Apps",
         meta: "Connect your apps",
         group: "Navigate",
         icon: Blocks,
@@ -238,7 +238,7 @@ export function SearchModal() {
         id: `conn-${connector.id}`,
         title: connector.name,
         meta: connector.category,
-        group: "Connectors",
+        group: "Apps",
         icon: Blocks,
         run: () => openConnector(connector.id),
       });
@@ -422,7 +422,7 @@ function Kbd({ children }: { children: string }) {
 function groupFallbackIcon(group: string): HitIcon {
   if (group === "Projects") return Hammer;
   if (group === "Sources" || group === "Files") return FileText;
-  if (group === "Connectors") return Blocks;
+  if (group === "Apps") return Blocks;
   if (group === "Chats" || group === "Work") return History;
   if (group === "Navigate") return Compass;
   if (group === "Settings") return Settings;

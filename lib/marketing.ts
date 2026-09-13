@@ -4,7 +4,7 @@ import { APP_NAME } from "@/lib/app-brand";
 export const SITE_URL = "https://thinkrecursion.ai";
 export const APP_HREF = "/";
 export const ENTERPRISE_MAILTO =
-  "mailto:enterprise@thinkrecursion.ai?subject=Enterprise%20request";
+  "mailto:matt@warix.co?subject=Enterprise%20request";
 export const RECURSION_URL = "https://thinkrecursion.ai";
 
 export type MarketingPage = {
@@ -82,9 +82,9 @@ export const marketingPages: Record<string, MarketingPage> = {
     },
   "/connectors": {
     path: "/connectors",
-    title: "Connectors — Gmail, Slack, GitHub & More",
+    title: "Apps — Gmail, Slack, GitHub & More",
     description:
-      "Works with what you already use. Featured connectors, categorized catalog, and policies on Moderate and above.",
+      "Works with what you already use. Featured apps, categorized catalog, and policies on Moderate and above.",
   },
   "/enterprise": {
     path: "/enterprise",
@@ -96,7 +96,7 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/security",
     title: "Security — Locations, Roles & Policies",
     description:
-      "How we isolate work: Cloud, Local, and On-device locations, workspace roles, connector policies, and audit.",
+      "How we isolate work: Cloud, Local, and On-device locations, workspace roles, app policies, and audit.",
   },
   "/docs": {
     path: "/docs",
@@ -158,7 +158,7 @@ export const footerGroups: {
       { href: "/research", title: "Explore" },
       { href: "/hosting", title: "Hosting" },
       { href: "/models", title: "Models" },
-      { href: "/connectors", title: "Connectors" },
+      { href: "/connectors", title: "Apps" },
       { href: "/pricing", title: "Pricing" },
     ],
   },

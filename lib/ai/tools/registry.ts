@@ -208,7 +208,7 @@ export function validateToolArguments(
 
 registerAiTool({
   name: "nav.open",
-  description: "Navigate to a Cander space, settings, Recents, Connectors, or New Chat.",
+  description: "Navigate to a Cander space, settings, Recents, Apps, or New Chat.",
   permission: { requireWorkspaceMember: true },
   domain: "navigation",
   enabled: true,
@@ -876,7 +876,7 @@ function registerAgentTools() {
     {
       name: "agent.tools.grant",
       description:
-        "Grant connector tools to this agent (connectionId + connectorId + toolIds). Write/send tools should be confirmed with the user first.",
+        "Grant app actions to this agent (connectionId + connectorId + toolIds). Write/send tools should be confirmed with the user first.",
       required: ["connectionId", "connectorId", "toolIds"],
       properties: {
         agentId: { type: "string" },
@@ -888,7 +888,7 @@ function registerAgentTools() {
     },
     {
       name: "agent.tools.revoke",
-      description: "Revoke connector tool permissions from this agent.",
+      description: "Revoke app action permissions from this agent.",
       required: ["connectionId", "connectorId", "toolIds"],
       properties: {
         agentId: { type: "string" },
@@ -954,7 +954,7 @@ function registerAgentTools() {
     {
       name: "agent.run",
       description:
-        "Wake the agent now so it talks to Cander using the user’s connectors.",
+        "Wake the agent now so it talks to Cander using the user’s apps.",
       properties: {
         agentId: { type: "string" },
         message: { type: "string" },
@@ -1160,7 +1160,7 @@ function registerGmailTools() {
   registerAiTool({
     name: "gmail.send",
     description:
-      "Send an email via the user's connected Gmail. Requires write access enabled in Connectors.",
+      "Send an email via the user's connected Gmail. Requires write access enabled in Apps.",
     permission: { requireWorkspaceMember: true },
     domain: "comms",
     enabled: true,
@@ -1194,7 +1194,7 @@ function registerGmailTools() {
   registerAiTool({
     name: "gmail.draft",
     description:
-      "Create a Gmail draft for the user to review. Requires draft mail enabled in Connectors.",
+      "Create a Gmail draft for the user to review. Requires draft mail enabled in Apps.",
     permission: { requireWorkspaceMember: true },
     domain: "comms",
     enabled: true,
@@ -1214,7 +1214,7 @@ function registerGmailTools() {
   registerAiTool({
     name: "gmail.reply",
     description:
-      "Reply within an existing Gmail thread. Requires reply in thread enabled in Connectors.",
+      "Reply within an existing Gmail thread. Requires reply in thread enabled in Apps.",
     permission: { requireWorkspaceMember: true },
     domain: "comms",
     enabled: true,
@@ -1275,7 +1275,7 @@ function registerSlackTools() {
   registerAiTool({
     name: "slack.send",
     description:
-      "Post a message to a Slack channel. Requires send enabled in Connectors.",
+      "Post a message to a Slack channel. Requires send enabled in Apps.",
     permission: { requireWorkspaceMember: true },
     domain: "comms",
     enabled: true,

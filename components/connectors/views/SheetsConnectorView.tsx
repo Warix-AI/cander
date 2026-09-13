@@ -705,7 +705,7 @@ export function SheetsConnectorView({
                 title={syncing ? "Loading Sheets…" : "Nothing here yet"}
                 body={
                   error
-                    ? "Connect Google Sheets in Connectors, then refresh."
+                    ? "Connect Google Sheets in Apps, then refresh."
                     : query.trim()
                       ? "No spreadsheets match this search."
                       : "Search or create a spreadsheet to get started."

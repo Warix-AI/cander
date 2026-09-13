@@ -565,7 +565,7 @@ export function DocsConnectorView({
                 title={syncing ? "Loading Docs…" : "Nothing here yet"}
                 body={
                   error
-                    ? "Connect Google Docs in Connectors, then refresh."
+                    ? "Connect Google Docs in Apps, then refresh."
                     : query.trim()
                       ? "No documents match this search."
                       : "Search or create a document to get started."

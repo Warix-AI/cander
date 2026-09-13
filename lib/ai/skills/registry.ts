@@ -34,7 +34,7 @@ registerAiSkill({
 
 registerAiSkill({
   id: "connector-focus",
-  description: "Attach a connector summary when chatting about integrations.",
+  description: "Attach an app summary when chatting about integrations.",
   contextKinds: ["connector"],
   enabled: false,
 });

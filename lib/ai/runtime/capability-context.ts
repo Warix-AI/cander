@@ -118,7 +118,7 @@ export function formatCapabilitySnapshotForPrompt(
     }
   }
   lines.push(
-    "Rules: never claim an external action succeeded unless a tool returned success. If a connector appears above with a skill on, use its tools — do not say access is missing or disabled. Only mention enabling a skill when that skill is listed off.",
+    "Rules: never claim an external action succeeded unless a tool returned success. If an app appears above with a skill on, use its tools — do not say access is missing or disabled. Only mention enabling a skill when that skill is listed off.",
   );
   return lines.join("\n");
 }

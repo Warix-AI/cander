@@ -1124,7 +1124,7 @@ export function DriveConnectorView({
                 title={syncing ? "Loading Drive…" : "Nothing here yet"}
                 body={
                   error
-                    ? "Connect Google Drive in Connectors, then refresh."
+                    ? "Connect Google Drive in Apps, then refresh."
                     : query.trim()
                       ? "No files match this search."
                       : typeFilter !== "all"

@@ -419,7 +419,7 @@ export function StripeConnectorView({
         setItems([]);
         setBalanceLines([]);
         setStatus(null);
-        setError("Connect Stripe in Connectors, then open this panel again.");
+        setError("Connect Stripe in Apps, then open this panel again.");
         return;
       }
 
@@ -1032,7 +1032,7 @@ export function StripeConnectorView({
                           ? `Nothing matched “${query.trim()}”.`
                           : isConnected
                             ? empty.body
-                            : "Connect Stripe in Connectors, then open this panel again."
+                            : "Connect Stripe in Apps, then open this panel again."
                     }
                     actionLabel="Refresh"
                     syncing={syncing}

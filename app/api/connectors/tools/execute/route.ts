@@ -68,7 +68,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, output: result.output });
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Could not execute connector tool.";
+      err instanceof Error ? err.message : "Could not execute app action.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

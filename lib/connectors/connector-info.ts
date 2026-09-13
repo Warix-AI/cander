@@ -16,7 +16,7 @@ export type ConnectorInfoMeta = {
 };
 
 const DEFAULT_NOTICE =
-  "When connected, Cander may use data from this app to answer your requests. The app's use of your data is subject to their terms and privacy policy. You can change skill permissions or disconnect anytime from this connector.";
+  "When connected, Cander may use data from this app to answer your requests. The app's use of your data is subject to their terms and privacy policy. You can change skill permissions or disconnect anytime from this app.";
 
 const CONNECTOR_INFO: Record<string, Partial<ConnectorInfoMeta>> = {
   gmail: {

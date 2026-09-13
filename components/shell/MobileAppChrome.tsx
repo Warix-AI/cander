@@ -553,9 +553,9 @@ export function MobileAppChrome({ className }: { className?: string }) {
             aria-selected={surface === "panel"}
             aria-label={
               inConnector
-                ? "Connector panel"
+                ? "App panel"
                 : inConnectorsSpace
-                  ? "Connectors"
+                  ? "Apps"
                   : panelTabLabel
             }
             onClick={() => setChatOrPanel("panel")}

@@ -4,7 +4,7 @@
 
 import type { ConnectorProviderAdapter } from "./types.ts";
 
-const NOT_CONFIGURED = "Connector provider is not configured.";
+const NOT_CONFIGURED = "App connection provider is not configured.";
 
 export const noopConnectorProvider: ConnectorProviderAdapter = {
   name: "noop",

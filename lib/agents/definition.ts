@@ -72,7 +72,7 @@ export function formatAgentDefinitionSummary(def: AgentDefinition): string {
     preview.length > 400 ? `${preview.slice(0, 400)}…` : preview || "(empty)";
   const scopeLine =
     def.scope.length === 0
-      ? "Scope: all user connectors"
+      ? "Scope: all connected apps"
       : `Scope: ${def.scope
           .map((s) => s.label || `${s.connectorId}:${s.connectionId}`)
           .join(", ")}`;

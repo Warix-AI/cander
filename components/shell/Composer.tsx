@@ -1850,10 +1850,10 @@ export function Composer({
             </div>
 
             <div>
-              <MenuSection title="Connectors" />
+              <MenuSection title="Apps" />
               {activeConnections.length === 0 ? (
                 <p className="px-3 py-1 text-[11.5px] text-muted-foreground">
-                  Connect an app in Connectors first.
+                  Connect an app first.
                 </p>
               ) : (
                 activeConnections.map((row) => {
@@ -1912,7 +1912,7 @@ export function Composer({
                 <div
                   data-composer-trigger-picker
                   role="listbox"
-                  aria-label="Choose connector"
+                  aria-label="Choose app"
                   className="fixed z-[80] min-w-[11rem] overflow-hidden rounded-xl border border-border/80 bg-popover p-1 shadow-lg"
                   style={{
                     left: Math.min(

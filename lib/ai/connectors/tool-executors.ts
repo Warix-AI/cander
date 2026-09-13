@@ -24,7 +24,7 @@ export async function executeConnectorToolClient(
     return {
       name: call.name,
       ok: false,
-      output: "No active workspace for connector tools.",
+      output: "No active workspace for app actions.",
     };
   }
 
@@ -42,7 +42,7 @@ export async function executeConnectorToolClient(
     };
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Connector tool execution failed.";
+      err instanceof Error ? err.message : "App action failed.";
     return {
       name: call.name,
       ok: false,

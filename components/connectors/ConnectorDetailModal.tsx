@@ -381,7 +381,7 @@ export function ConnectorDetailModal({
                 SHELL_G3_RADIUS,
               )}
             >
-              Connectors
+              Apps
             </button>
             <span className="text-muted-foreground/50" aria-hidden="true">
               /
@@ -513,7 +513,7 @@ export function ConnectorDetailModal({
                     trigger={({ toggle }) => (
                       <button
                         type="button"
-                        aria-label="Connector options"
+                        aria-label="App options"
                         onClick={toggle}
                         className={cn(
                           "inline-flex h-10 w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
@@ -833,7 +833,7 @@ export function ConnectorDetailModal({
       >
         {canManageServerConnection
           ? "Disconnect account?"
-          : "Uninstall connector?"}
+          : "Uninstall app?"}
       </p>
       <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
         {canManageServerConnection

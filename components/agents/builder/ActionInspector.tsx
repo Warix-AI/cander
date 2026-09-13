@@ -15,7 +15,7 @@ import { parseStepId, updateAction } from "./workflow-model";
 
 const CATEGORIES = [
   { value: "cander", label: "Cander" },
-  { value: "connector", label: "Connector" },
+  { value: "connector", label: "App" },
   { value: "agent", label: "Agent" },
   { value: "project", label: "Project" },
 ];
@@ -210,11 +210,11 @@ function ConnectorActionFields({
   return (
     <>
       <SelectField
-        label="Connector"
+        label="App"
         value={connectorId}
         disabled={busy}
         options={[
-          { value: "", label: "Choose connector" },
+          { value: "", label: "Choose app" },
           ...Array.from(new Set(connections.map((c) => c.connectorId))).map(
             (id) => ({
               value: id,

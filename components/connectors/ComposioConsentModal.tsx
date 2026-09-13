@@ -12,7 +12,7 @@ const MODAL_WIDTH = "w-[min(34rem,calc(100vw-2rem))]";
 const COMPOSIO_POINTS = [
   "Secure OAuth for apps like Google Drive, Gmail, and Slack",
   "Cander never stores your provider password",
-  "You can disconnect anytime from Connectors",
+  "You can disconnect anytime from Apps",
 ] as const;
 
 export function ComposioConsentModal({

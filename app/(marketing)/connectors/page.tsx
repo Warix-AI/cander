@@ -13,9 +13,9 @@ export default function ConnectorsPage() {
         <PageWidth>
           <SectionHeader
             as="h1"
-            kicker="Connectors"
+            kicker="Apps"
             title="Works with what you already use."
-            body="Featured first, then the catalog. Connector policies on Max and Ultra. This machine and Stash stay on your account."
+            body="Featured first, then the catalog. App policies on Max and Ultra. This machine and Stash stay on your account."
           />
           <div className="mt-10">
             <ConnectorCatalog />

@@ -25,7 +25,7 @@ export function RecentsView() {
   const scopeOptions = [
     { id: "all", label: "All" },
     { id: "new", label: "New" },
-    { id: "connectors", label: "Connectors" },
+    { id: "connectors", label: "Apps" },
     { id: "search", label: "Search" },
     { id: "image", label: "Image" },
     { id: "app", label: "App" },

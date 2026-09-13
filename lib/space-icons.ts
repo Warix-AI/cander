@@ -37,7 +37,7 @@ export const extraNavLabels: Record<
 > = {
   browser: "Browser",
   recents: "Recents",
-  connectors: "Connectors",
+  connectors: "Apps",
 };
 
 export function spaceIconTint(_id?: SpaceId | null) {

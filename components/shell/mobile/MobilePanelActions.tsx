@@ -208,7 +208,7 @@ export function MobilePanelActionsCluster({
       {!menuOpen ? (
         <button
           type="button"
-          aria-label={config.connector ? "Connector actions" : "Space actions"}
+          aria-label={config.connector ? "App actions" : "Space actions"}
           aria-expanded={false}
           onClick={() => setOpen(true)}
           className={mobileChromeButtonClass}

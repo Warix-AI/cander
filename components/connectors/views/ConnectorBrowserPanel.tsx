@@ -948,7 +948,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
           </div>
         ) : isConnectorTab ? (
           <div className="flex h-full items-center justify-center px-6 text-center text-[13px] text-muted-foreground">
-            Connector view coming soon for {title}.
+            App view coming soon for {title}.
           </div>
         ) : null}
         {!isConnectorTab ? (

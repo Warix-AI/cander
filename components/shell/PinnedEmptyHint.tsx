@@ -65,15 +65,15 @@ export function PinnedEmptyHint({
 
         <div className="space-y-4 px-5 py-4 text-[14px] leading-relaxed text-muted-foreground">
           <p>
-            This space holds shortcuts to connectors, projects, chats, and more
+            This space holds shortcuts to apps, projects, chats, and more
             you pin while working. Open anything often — Gmail, a search, an
             image project — and pin it so it lives here instead of hunting
             through Canvas each time.
           </p>
           <p>
             Look for the pin icon on project cards in Canvas, on chats, and in
-            connector views. Once pinned, items group into folders here
-            (Connectors, Images, Searches, Chats, and so on).
+            app views. Once pinned, items group into folders here
+            (Apps, Images, Searches, Chats, and so on).
           </p>
           <p>
             Pins are for speed: jump back to the same place, keep your sidebar

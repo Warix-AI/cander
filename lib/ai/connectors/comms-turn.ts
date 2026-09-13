@@ -107,13 +107,13 @@ function connectorToolFailureMessage(output: string): string | null {
     return "Gmail is connected in your workspace, but this server can’t call Composio yet. Add `COMPOSIO_API_KEY` and `COMPOSIO_GMAIL_AUTH_CONFIG_ID` to `.env.local` (see `.env.example`), restart the dev server, then ask again.";
   }
   if (/not enabled for this workspace/i.test(text)) {
-    return "Gmail isn’t enabled for this workspace. Open **Connectors** and enable Gmail.";
+    return "Gmail isn’t enabled for this workspace. Open **Apps** and enable Gmail.";
   }
-  if (/connect gmail in connectors/i.test(text)) {
-    return "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.";
+  if (/connect gmail in (connectors|apps)/i.test(text)) {
+    return "Gmail isn’t connected yet. Open **Apps**, connect Gmail, then ask again.";
   }
   if (/write access|sending email is disabled/i.test(text)) {
-    return "Sending email is turned off. Open **Connectors**, enable **Write access** for Gmail, then ask again.";
+    return "Sending email is turned off. Open **Apps**, enable **Write access** for Gmail, then ask again.";
   }
   return null;
 }
@@ -133,7 +133,7 @@ async function ensureGmailConnected(
       return {
         ok: false,
         message:
-          "Gmail isn’t connected yet. Open **Connectors**, connect Gmail, then ask again.",
+          "Gmail isn’t connected yet. Open **Apps**, connect Gmail, then ask again.",
       };
     }
     const enabledTools = enabledToolIds("gmail", gmail.toolPermissions);
@@ -141,7 +141,7 @@ async function ensureGmailConnected(
       return {
         ok: false,
         message:
-          "Gmail is connected but AI access is turned off. Open **Connectors** and enable read or write access.",
+          "Gmail is connected but AI access is turned off. Open **Apps** and enable read or write access.",
       };
     }
     return { ok: true, enabledTools };

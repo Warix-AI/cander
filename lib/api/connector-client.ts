@@ -22,7 +22,7 @@ export async function fetchConnectorCatalog(): Promise<ConnectorCatalogItem[]> {
   const response = await fetch("/api/connectors/catalog", { headers });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not load connector catalog.");
+    throw new Error(data.error ?? "Could not load app catalog.");
   }
   return data.catalog as ConnectorCatalogItem[];
 }
@@ -141,7 +141,7 @@ export async function disconnectConnectorConnection(input: {
     clearConnectorConnectionsCache();
   }
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not disconnect.");
+    throw new Error(data.error ?? "Could not disconnect app.");
   }
   return data.connection as ConnectorConnection;
 }
@@ -167,7 +167,7 @@ export async function executeConnectorToolRequest(input: {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not execute connector tool.");
+    throw new Error(data.error ?? "Could not execute app action.");
   }
   return { output: String(data.output ?? "") };
 }
@@ -267,7 +267,7 @@ export async function syncConnectorView(input: {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not sync connector.");
+    throw new Error(data.error ?? "Could not sync app.");
   }
   return {
     connectionId: String(data.connectionId),
@@ -362,7 +362,7 @@ export async function runConnectorViewOperation(input: {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not run connector operation.");
+    throw new Error(data.error ?? "Could not run app operation.");
   }
   return {
     connectionId: String(data.connectionId),

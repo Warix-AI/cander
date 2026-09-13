@@ -6,7 +6,7 @@ import type { PinKind } from "@/lib/types";
 export const PIN_KIND_ORDER: PinKind[] = ["connector", "project", "thread"];
 
 export const PIN_KIND_LABEL: Record<PinKind, string> = {
-  connector: "Connectors",
+  connector: "Apps",
   project: "Projects",
   thread: "Chats",
 };

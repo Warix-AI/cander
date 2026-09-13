@@ -5020,7 +5020,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         if (target.kind === "connectors") {
           openSpace("connectors");
-          return { ok: true, detail: "Opened Connectors." };
+          return { ok: true, detail: "Opened Apps." };
         }
         if (target.kind === "settings") {
           openSettings(
@@ -5800,7 +5800,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const openConnector = useCallback((id: string) => {
     const catalog = CONNECTOR_CATALOG.find((item) => item.id === id);
-    const title = catalog?.name ? `${catalog.name}` : "Connector";
+    const title = catalog?.name ? `${catalog.name}` : "App";
     const snapshot = getChatStoreSnapshot().threads;
     const { threads: next, id: nextId } = upsertPersistentConnectorThread(
       snapshot,
@@ -5848,7 +5848,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const resumeConnectorChat = useCallback(() => {
     if (!connectorId) return;
     const catalog = CONNECTOR_CATALOG.find((item) => item.id === connectorId);
-    const title = catalog?.name ? `${catalog.name}` : "Connector";
+    const title = catalog?.name ? `${catalog.name}` : "App";
     const snapshot = getChatStoreSnapshot().threads;
     const { threads: next, id: nextId } = upsertPersistentConnectorThread(
       snapshot,

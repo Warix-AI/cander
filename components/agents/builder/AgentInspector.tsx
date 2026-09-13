@@ -23,7 +23,7 @@ export function AgentInspector(_props: {
   return (
     <div className="px-3 py-4 text-[12.5px] text-muted-foreground">
       Agents no longer manage Connections or tool grants. Put behavior in
-      Instructions; Cander uses the workspace connectors at runtime.
+      Instructions; Cander uses the workspace apps at runtime.
     </div>
   );
 }

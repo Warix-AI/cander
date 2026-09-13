@@ -28,7 +28,7 @@ export function ConnectorCatalog() {
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search connectors"
+        placeholder="Search apps"
         className="w-full max-w-md rounded-[10px] border border-foreground/10 bg-background px-4 py-3 text-[14px]"
       />
 

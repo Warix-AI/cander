@@ -419,7 +419,7 @@ export function AppConnectorView({
 
   if (!def) {
     return (
-      <WorkspacePanelFrame error={`Unknown connector: ${connectorId}`}>
+      <WorkspacePanelFrame error={`Unknown app: ${connectorId}`}>
         <div />
       </WorkspacePanelFrame>
     );
@@ -512,7 +512,7 @@ export function AppConnectorView({
                         ? query.trim()
                           ? `No ${itemNoun} match “${query.trim()}”.`
                           : `Connected — refresh to load ${itemNoun}.`
-                        : `Connect ${name} in Connectors, then open this panel again.`
+                        : `Connect ${name} in Apps, then open this panel again.`
                 }
                 actionLabel="Refresh"
                 syncing={syncing}

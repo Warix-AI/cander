@@ -57,7 +57,7 @@ export function ConnectorsSettings() {
   return (
     <SettingsPage>
       <SettingsHeader
-        title="Connectors"
+        title="Apps"
         subtitle="Connections live on this workspace only. Switch workspaces in the rail to manage a different set."
         actions={
           <div className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-[12px]">
@@ -74,7 +74,7 @@ export function ConnectorsSettings() {
 
       <SettingsSection
         title="Apps"
-        description="Connect up to 3 accounts per connector in this workspace. Each account has its own Candor name."
+        description="Connect up to 3 accounts per app in this workspace. Each account has its own Candor name."
         className="mt-8"
       >
         <div className="space-y-3">

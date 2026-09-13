@@ -598,7 +598,7 @@ function OrganizationSettings({
               {[
                 ["Invite teammates", "Bring your team into shared workspaces."],
                 ["Manage access", "Choose which workspaces each user can see."],
-                ["Shared controls", "Keep connectors and workspace policies together."],
+                ["Shared controls", "Keep apps and workspace policies together."],
               ].map(([title, description]) => (
                 <div key={title} className="rounded-[14px] bg-muted/35 px-3.5 py-3">
                   <p className="text-[13px] font-medium">{title}</p>

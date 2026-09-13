@@ -118,7 +118,7 @@ export function AccountMenu() {
               className={flyoutIconClass}
               strokeWidth={2}
             />
-            Connectors
+            Apps
           </button>
           <UsageFlyoutRow
             onOpen={() => {

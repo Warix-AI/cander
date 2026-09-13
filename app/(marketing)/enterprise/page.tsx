@@ -29,7 +29,7 @@ export default function EnterprisePage() {
                 { title: "Residency", body: "Discuss where data and inference may live." },
                 { title: "SLA", body: "Uptime and support commitments for production teams." },
                 { title: "Private infrastructure", body: "Local and On-device alongside Cloud." },
-                { title: "Org controls", body: "Roles, audit, connector policies — Max and Ultra already start here." },
+                { title: "Org controls", body: "Roles, audit, app policies — Max and Ultra already start here." },
               ]}
             />
           </div>

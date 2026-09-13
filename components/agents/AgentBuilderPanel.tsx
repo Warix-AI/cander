@@ -631,7 +631,7 @@ function ScopeEditor({
 
       {!connections.length && !loadError ? (
         <p className="text-[12.5px] text-muted-foreground">
-          No active connections yet. Connect apps under Connectors, then return
+          No active connections yet. Connect apps under Apps, then return
           here.
         </p>
       ) : (
@@ -663,7 +663,7 @@ function ScopeEditor({
 
       <p className="text-[12px] text-muted-foreground">
         {picked.length === 0
-          ? "Current: all user connectors"
+          ? "Current: all connected apps"
           : `Current: ${picked.length} connection${picked.length === 1 ? "" : "s"}`}
       </p>
 

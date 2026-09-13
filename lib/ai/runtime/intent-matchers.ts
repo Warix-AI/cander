@@ -30,7 +30,7 @@ export function matchNavIntent(
     {
       re: /\b(go to|open|take me to|switch to|show)\b.*\bconnectors?\b/i,
       target: "connectors",
-      label: "Connectors",
+      label: "Apps",
     },
     {
       re: /\b(go to|open|take me to|switch to|show)\b.*\bsettings?\b/i,

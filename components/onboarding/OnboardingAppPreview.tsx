@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const PREVIEW_NAV = [
   { label: "Explore", dot: "bg-green-500", active: true },
   { label: "Create", dot: "bg-violet-500" },
-  { label: "Connectors" },
+  { label: "Apps" },
   { label: "Recents" },
 ] as const;
 

@@ -74,7 +74,7 @@ export function ConnectorSkillsToggles({
           className,
         )}
       >
-        Skills for this connector are coming soon.
+        Skills for this app are coming soon.
       </div>
     );
   }

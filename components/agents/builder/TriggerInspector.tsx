@@ -9,7 +9,7 @@ import { updateTrigger } from "./workflow-model";
 
 const SOURCES = [
   { value: "cander", label: "Cander" },
-  { value: "connector", label: "Connector" },
+  { value: "connector", label: "App" },
   { value: "schedule", label: "Schedule" },
   { value: "manual", label: "Manual" },
   { value: "webhook", label: "Webhook / API", disabled: true },
@@ -42,7 +42,7 @@ export function TriggerInspector({
     if (next === "connector") {
       commit({
         type: "connector",
-        label: "Choose a connector event…",
+        label: "Choose an app event…",
         config: { source: "connector", incomplete: true },
       });
       return;
@@ -156,7 +156,7 @@ function ConnectorTriggerFields({
   };
 
   const connectorOptions = [
-    { value: "", label: "Choose connector" },
+    { value: "", label: "Choose app" },
     ...Array.from(new Set(connections.map((c) => c.connectorId))).map((id) => ({
       value: id,
       label: humanizeConnectorId(id),
@@ -187,7 +187,7 @@ function ConnectorTriggerFields({
   return (
     <>
       <SelectField
-        label="Connector"
+        label="App"
         value={connectorId}
         disabled={busy}
         options={connectorOptions}
@@ -240,7 +240,7 @@ function ConnectorTriggerFields({
             const label =
               route.trigger.label && !route.trigger.label.includes("Choose")
                 ? route.trigger.label
-                : "Connector event";
+                : "App event";
             commit({
               type: "connector",
               label,

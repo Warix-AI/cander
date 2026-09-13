@@ -265,7 +265,7 @@ const PANEL_COPY: Record<
   },
   connectors: {
     title: "Apps you’ll use.",
-    body: "Mark what you care about. Real connections happen later in Connectors — nothing is installed yet.",
+    body: "Mark what you care about. Real connections happen later in Apps — nothing is installed yet.",
   },
   appearance: {
     title: "Make it feel like yours.",
@@ -2584,7 +2584,7 @@ function ConnectorsStep({
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
         Mark what you care about. Nothing is connected yet — you’ll authorize
-        apps later from Connectors.
+        apps later from Apps.
       </p>
       <div className="mt-8 grid gap-2">
         {options.map((item) => {

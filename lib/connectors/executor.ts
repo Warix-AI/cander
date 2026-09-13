@@ -74,7 +74,7 @@ export async function executeConnectorTool(
   const connectorId =
     toolDef?.connectorId ?? connectorIdFromToolId(input.tool);
   if (!connectorId || !toolDef) {
-    return { ok: false, status: 400, error: "Unsupported connector tool." };
+    return { ok: false, status: 400, error: "Unsupported app action." };
   }
 
   const toolCallId =
@@ -198,7 +198,7 @@ export async function executeConnectorTool(
       status: 403,
       error:
         toolDef.risk !== "read"
-          ? "This action is disabled. Enable it in Connectors."
+          ? "This action is disabled. Enable it in Apps."
           : "This action is not allowed.",
     };
   }
@@ -289,7 +289,7 @@ export async function executeConnectorTool(
     return { ok: true, output, result };
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Connector tool execution failed.";
+      err instanceof Error ? err.message : "App action failed.";
     const result = buildErrorResult({
       toolId: input.tool,
       toolCallId,

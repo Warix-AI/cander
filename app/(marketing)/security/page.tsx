@@ -29,8 +29,8 @@ export default function SecurityPage() {
                   body: "Owner, admin, and member. Billing stays with owners. Members work in assigned workspaces.",
                 },
                 {
-                  title: "Connector policies",
-                  body: "Max and Ultra can constrain which connectors a workspace may use.",
+                  title: "App policies",
+                  body: "Max and Ultra can constrain which apps a workspace may use.",
                 },
                 {
                   title: "Audit",

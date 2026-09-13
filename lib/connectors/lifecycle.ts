@@ -126,17 +126,17 @@ export async function initiateConnection(input: {
     .maybeSingle();
   if (catalogError) throw catalogError;
   if (!catalog?.enabled) {
-    return { ok: false, status: 404, error: "Connector not found." };
+    return { ok: false, status: 404, error: "App not found." };
   }
   if (catalog.coming_soon) {
     return {
       ok: false,
       status: 400,
-      error: "This connector is not ready to connect yet.",
+      error: "This app is not ready to connect yet.",
     };
   }
   if (!isOauthConnectorId(input.connectorId)) {
-    return { ok: false, status: 404, error: "Connector not found." };
+    return { ok: false, status: 404, error: "App not found." };
   }
 
   const { data: existingRows, error: existingError } = await input.client
@@ -249,7 +249,7 @@ export async function initiateConnection(input: {
       return {
         ok: false,
         status: 400,
-        error: "That account name is already used for this connector.",
+        error: "That account name is already used for this app.",
       };
     }
     throw insertError;
@@ -354,7 +354,7 @@ export async function renameConnection(input: {
       return {
         ok: false,
         status: 400,
-        error: "That account name is already used for this connector.",
+        error: "That account name is already used for this app.",
       };
     }
     throw updateError;

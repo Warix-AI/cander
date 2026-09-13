@@ -130,7 +130,7 @@ export async function resolveConnectionForTool(input: {
       ok: false,
       reason: "connector_disabled",
       status: 403,
-      error: `${input.connectorId} connector is not enabled for this workspace.`,
+      error: `${input.connectorId} app is not enabled for this workspace.`,
     };
   }
 
@@ -148,7 +148,7 @@ export async function resolveConnectionForTool(input: {
       ok: false,
       reason: "not_connected",
       status: 404,
-      error: `Connect ${input.connectorId} in Connectors before using this tool.`,
+      error: `Connect ${input.connectorId} in Apps before using this tool.`,
     };
   }
 

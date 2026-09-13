@@ -99,8 +99,8 @@ function detailForToolName(name: string): string {
     if (name === "agent.skill.update") return "Updating skill";
     if (name === "agent.skill.attach") return "Attaching skill";
     if (name === "agent.skill.remove") return "Removing skill";
-    if (name === "agent.tools.grant") return "Allowing connector tools";
-    if (name === "agent.tools.revoke") return "Revoking connector tools";
+    if (name === "agent.tools.grant") return "Allowing app actions";
+    if (name === "agent.tools.revoke") return "Revoking app actions";
     if (name === "agent.knowledge.attach") return "Attaching knowledge";
     if (name === "agent.knowledge.remove") return "Removing knowledge";
     if (name === "agent.trigger.set") return "Setting trigger";

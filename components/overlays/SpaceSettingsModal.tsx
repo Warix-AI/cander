@@ -58,7 +58,7 @@ export function SpaceSettingsModal() {
 
   const mobileTitle = useMemo(() => {
     if (tab === BACKGROUND_TAB) return "Background";
-    if (tab === "connectors" && settingsSpaceId === "work") return "Connectors";
+    if (tab === "connectors" && settingsSpaceId === "work") return "Connected Apps";
     return section?.label ?? config?.title ?? "Settings";
   }, [tab, section, settingsSpaceId, config]);
 

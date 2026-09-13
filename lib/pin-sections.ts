@@ -34,7 +34,7 @@ export const PIN_SECTION_ORDER: PinSectionId[] = [
 
 /** Agents section id kept for pin folder keys; label is Experts. */
 export const PIN_SECTION_LABEL: Record<PinSectionId, string> = {
-  connectors: "Connectors",
+  connectors: "Apps",
   agents: "Experts",
   websites: "Websites",
   apps: "Apps",

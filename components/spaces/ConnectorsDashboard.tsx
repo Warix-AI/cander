@@ -66,7 +66,7 @@ const SECTION_ORDER = [
 ] as const;
 
 const connectorScopeOptions = [
-  { id: "connectors", label: "Connectors" },
+  { id: "connectors", label: "Apps" },
   { id: "installed", label: "Installed" },
 ] as const;
 
@@ -306,7 +306,7 @@ export function ConnectorsDashboard() {
                     claimed.connection,
                   );
                   setInfo(
-                    `${appConnectorById(claimed.connectorId ?? id)?.name ?? "Connector"} connected.`,
+                    `${appConnectorById(claimed.connectorId ?? id)?.name ?? "App"} connected.`,
                   );
                   ensureConnectorPinned(claimed.connectorId ?? id);
                   if (claimed.connectorId) {
@@ -457,7 +457,7 @@ export function ConnectorsDashboard() {
       }
     } catch (err) {
       setInfo(
-        err instanceof Error ? err.message : "Could not disconnect connector.",
+        err instanceof Error ? err.message : "Could not disconnect app.",
       );
     } finally {
       setDisconnectingId(null);
@@ -511,7 +511,7 @@ export function ConnectorsDashboard() {
       connector: {
         title: detailName,
         back: {
-          label: "Connectors",
+          label: "Apps",
           onClick: () => setDetailConnectorId(null),
         },
         actions,
@@ -587,14 +587,14 @@ export function ConnectorsDashboard() {
       {!detailItem ? (
         <DashFrame
           banner={false}
-          title="Connectors"
+          title="Apps"
           subtitle="Connect apps to your workspace."
         >
         {workAttachFor ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
             <p className="text-[13px] leading-relaxed text-muted-foreground">
               <span className="font-medium text-foreground">Adding to Work.</span>{" "}
-              Install or open a connector — it attaches to Work and starts
+              Install or open an app — it attaches to Work and starts
               feeding Today, Inbox, and the rest.
             </p>
             <button
@@ -676,7 +676,7 @@ export function ConnectorsDashboard() {
             ) : (
               <button
                 type="button"
-                aria-label="Search connectors"
+                aria-label="Search apps"
                 onClick={() => setSearchOpen(true)}
                 className={cn(
                   "inline-flex h-10 w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
@@ -706,7 +706,7 @@ export function ConnectorsDashboard() {
                   setSearchOpen(false);
                 }
               }}
-              placeholder="Search connectors"
+              placeholder="Search apps"
               className={cn(
                 "h-10 w-full pr-9 pl-9 text-[13px] outline-none placeholder:text-muted-foreground focus:outline-none",
                 "bg-white/45 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:bg-white/[0.06] dark:shadow-[0_8px_24px_rgba(0,0,0,0.16)]",
@@ -732,7 +732,7 @@ export function ConnectorsDashboard() {
 
         {connectionsLoading && catalogView === "installed" ? (
           <p className="mt-10 text-[13px] text-muted-foreground">
-            Loading installed connectors…
+            Loading connected apps…
           </p>
         ) : sections.length ? (
           sections.map((section, index) => {
@@ -780,8 +780,8 @@ export function ConnectorsDashboard() {
         ) : (
           <p className="mt-10 text-[13px] text-muted-foreground">
             {catalogView === "installed"
-              ? "No connectors installed yet."
-              : "No connectors match that search."}
+              ? "No apps connected yet."
+              : "No apps match that search."}
           </p>
         )}
         </DashFrame>

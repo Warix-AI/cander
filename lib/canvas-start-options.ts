@@ -52,7 +52,7 @@ export function canvasStartOptions(): CanvasStartOption[] {
     {
       id: "agent",
       label: "Agent",
-      summary: "Automate work with connectors",
+      summary: "Automate work with apps",
       action: "create-project",
       icon: Bot,
       kind: "automation",

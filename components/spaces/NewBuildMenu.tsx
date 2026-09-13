@@ -16,7 +16,7 @@ export const BUILD_CREATE_OPTIONS: {
   {
     kind: "automation",
     label: "Agent",
-    summary: "Automate work with connectors",
+    summary: "Automate work with apps",
     title: "Buddy",
   },
   { kind: "app", label: "App", summary: "Interactive app or tool", disabled: true },
