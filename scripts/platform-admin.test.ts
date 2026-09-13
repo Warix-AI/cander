@@ -50,9 +50,9 @@ describe("pricing preview", () => {
         planId: "minimal",
         displayName: "Minimal",
         baseMonthlyPriceUsd: 0,
-        includedMinutes: 25,
-        minimumMinutes: 25,
-        maximumMinutes: 25,
+        includedMinutes: 20,
+        minimumMinutes: 20,
+        maximumMinutes: 20,
         minutesStep: 1,
         priceIncrementUsd: 1,
         pricingMode: "fixed",
@@ -72,10 +72,10 @@ describe("pricing preview", () => {
       {
         planId: "light",
         displayName: "Light",
-        baseMonthlyPriceUsd: 30,
-        includedMinutes: 100,
-        minimumMinutes: 100,
-        maximumMinutes: 200,
+        baseMonthlyPriceUsd: 15,
+        includedMinutes: 30,
+        minimumMinutes: 30,
+        maximumMinutes: 60,
         minutesStep: 10,
         priceIncrementUsd: 2,
         pricingMode: "adjustable",
@@ -85,18 +85,18 @@ describe("pricing preview", () => {
         sortOrder: 20,
         metadata: {},
       },
-      120,
+      60,
     );
-    assert.equal(price, 34);
+    assert.equal(price, 21);
   });
 });
 
 describe("plan minute defaults", () => {
   it("keeps minimal/light/moderate/heavy/limitless defaults", () => {
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal.includedMinutes, 25);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.light.includedMinutes, 100);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate.includedMinutes, 250);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy.includedMinutes, 500);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal.includedMinutes, 20);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.light.includedMinutes, 30);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate.includedMinutes, 100);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy.includedMinutes, 250);
     assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.limitless.maximumMinutes, null);
   });
 });

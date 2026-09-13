@@ -43,6 +43,22 @@ async function reconcileSupabaseUser(user: User) {
   persistOnboardingPending(true);
 }
 
+/** Re-fetch account plan/entitlements after returning from external billing (Safari). */
+async function refreshAccountIfVisible() {
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+    return;
+  }
+  const user = getSupabaseUserSnapshot();
+  if (!user || !isAuthEmailConfirmed(user)) return;
+  const complete = await hasCompletedOnboarding(user.id);
+  if (!complete) return;
+  try {
+    await hydrateMemberFromSupabase(user);
+  } catch (err) {
+    console.warn("[cander] member refresh on focus failed", err);
+  }
+}
+
 /** Keeps Supabase session in sync with the client auth store + member roster. */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hadUser = useRef(hasCachedSupabaseSession());
@@ -92,6 +108,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       reconcileIfNeeded(getSupabaseUserSnapshot());
     });
 
+    const onVisible = () => {
+      void refreshAccountIfVisible();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
     const existing = getSupabaseUserSnapshot();
     if (existing) {
       reconcileIfNeeded(existing);
@@ -102,6 +124,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       stopAuth();
       unsubUser();
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
     };
   }, []);
 

@@ -21,8 +21,11 @@ import { resolveInitiateExisting } from "./lifecycle-logic.ts";
 import {
   connectorAccountLimitMessage,
   canAddAnotherConnectorAccount,
+  MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR,
   validateUniqueConnectorDisplayName,
 } from "./account-names.ts";
+import { accountsPerAppLimit } from "@/lib/plan-entitlements";
+import { normalizePlan } from "@/lib/plans";
 import {
   catalogRowToPublic,
   connectionRowToPublic,
@@ -175,10 +178,26 @@ export async function initiateConnection(input: {
     }
   }
 
-  if (!canAddAnotherConnectorAccount(live.length)) {
+  let maxAccounts = MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR;
+  try {
+    const admin = createSupabaseAdminClient();
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("plan")
+      .eq("id", input.ownerId)
+      .maybeSingle();
+    const planLimit = accountsPerAppLimit(normalizePlan(profile?.plan));
+    maxAccounts = Number.isFinite(planLimit)
+      ? planLimit
+      : MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR;
+  } catch {
+    /* keep paid default when profile lookup fails */
+  }
+
+  if (!canAddAnotherConnectorAccount(live.length, maxAccounts)) {
     return {
       ok: false,
-      ...conflictError(connectorAccountLimitMessage()),
+      ...conflictError(connectorAccountLimitMessage(maxAccounts)),
     };
   }
 
@@ -223,7 +242,7 @@ export async function initiateConnection(input: {
     ) {
       return {
         ok: false,
-        ...conflictError(connectorAccountLimitMessage()),
+        ...conflictError(connectorAccountLimitMessage(maxAccounts)),
       };
     }
     if (insertError.code === "23505") {

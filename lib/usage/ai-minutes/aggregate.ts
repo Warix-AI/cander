@@ -10,7 +10,7 @@ import {
 } from "../account-period.ts";
 import { planUsagePolicy } from "../plan-config.ts";
 import {
-  formatMinutesDetail,
+  formatUsagePercentRemaining,
   formatRemainingMinutes,
   formatUsedMinutes,
 } from "./format.ts";
@@ -206,10 +206,7 @@ function toSnapshot(input: {
       ? formatRemainingMinutes(remaining)
       : formatUsedMinutes(used),
     detailLabel: input.fixedAllowance
-      ? formatMinutesDetail({
-          usedMinutes: used,
-          includedMinutes: included,
-        })
-      : `${formatUsedMinutes(used)} Active AI Minutes used`,
+      ? formatUsagePercentRemaining(percentUsed)
+      : "Custom AI usage",
   };
 }

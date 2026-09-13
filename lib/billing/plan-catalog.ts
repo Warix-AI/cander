@@ -12,8 +12,13 @@ export type PlanCatalogEntry = {
   name: string;
   /** Monthly USD; null = custom (Limitless) */
   monthlyPriceUsd: number | null;
-  /** Included Active AI Minutes / month; null = custom/unlimited display */
+  /**
+   * Included Active AI Minutes / month for metering.
+   * Prefer `usageLevelLabel` in customer UI — do not lead with raw minutes.
+   */
   includedActiveAiMinutes: number | null;
+  /** Relative AI usage level for plan cards / comparison */
+  usageLevelLabel: string;
   /** Self-serve checkout vs contact sales */
   selfServe: boolean;
   ctaLabel: string;
@@ -45,21 +50,25 @@ export const PLAN_CATALOG: Record<BillingPlan, PlanCatalogEntry> = {
     id: "minimal",
     name: "Minimal",
     monthlyPriceUsd: 0,
-    includedActiveAiMinutes: 25,
+    includedActiveAiMinutes: 20,
+    usageLevelLabel: "Light AI usage",
     selfServe: true,
     ctaLabel: "Start Free",
-    blurb: "Get started with Cander — Home, Build, Studio, and Connectors.",
+    blurb:
+      "Personal use — unlimited apps, 1 account per app. No organizations or shared workspaces.",
     polarProductId: null,
     polarPriceId: null,
   },
   light: {
     id: "light",
     name: "Light",
-    monthlyPriceUsd: 30,
-    includedActiveAiMinutes: 100,
+    monthlyPriceUsd: 15,
+    includedActiveAiMinutes: 30,
+    usageLevelLabel: "Everyday AI usage",
     selfServe: true,
     ctaLabel: "Choose Light",
-    blurb: "More Active AI Minutes for everyday work.",
+    blurb:
+      "Full Cander — organizations, shared workspaces, and multiple accounts per app.",
     popular: true,
     polarProductId: null,
     polarPriceId: null,
@@ -67,22 +76,24 @@ export const PLAN_CATALOG: Record<BillingPlan, PlanCatalogEntry> = {
   moderate: {
     id: "moderate",
     name: "Moderate",
-    monthlyPriceUsd: 75,
-    includedActiveAiMinutes: 250,
+    monthlyPriceUsd: 50,
+    includedActiveAiMinutes: 100,
+    usageLevelLabel: "Higher AI usage",
     selfServe: true,
     ctaLabel: "Choose Moderate",
-    blurb: "Higher capacity plus shared workspaces and org controls.",
+    blurb: "Full Cander with more included AI usage for regular work.",
     polarProductId: null,
     polarPriceId: null,
   },
   heavy: {
     id: "heavy",
     name: "Heavy",
-    monthlyPriceUsd: 150,
-    includedActiveAiMinutes: 500,
+    monthlyPriceUsd: 125,
+    includedActiveAiMinutes: 250,
+    usageLevelLabel: "Highest self-serve AI usage",
     selfServe: true,
     ctaLabel: "Choose Heavy",
-    blurb: "Maximum self-serve Active AI Minutes for heavy workloads.",
+    blurb: "Full Cander with the most included AI usage on self-serve.",
     polarProductId: null,
     polarPriceId: null,
   },
@@ -91,9 +102,11 @@ export const PLAN_CATALOG: Record<BillingPlan, PlanCatalogEntry> = {
     name: "Limitless",
     monthlyPriceUsd: null,
     includedActiveAiMinutes: null,
+    usageLevelLabel: "Custom AI usage",
     selfServe: false,
     ctaLabel: "Contact us",
-    blurb: "Custom AI usage, negotiated pricing, and enterprise support.",
+    blurb:
+      "Custom pricing and AI usage for larger organizations.",
     polarProductId: null,
     polarPriceId: null,
   },
@@ -171,10 +184,19 @@ export function formatPlanPrice(plan: BillingPlan): string {
   return `$${price}/month`;
 }
 
+/** Relative AI usage label for plan cards (not raw minutes). */
+export function formatPlanUsageLevel(plan: BillingPlan): string {
+  return getPlan(plan).usageLevelLabel;
+}
+
+/**
+ * @deprecated Prefer formatPlanUsageLevel for customer UI.
+ * Kept for admin / metering diagnostics.
+ */
 export function formatIncludedActiveAiMinutes(plan: BillingPlan): string {
   const mins = includedActiveAiMinutesForPlan(plan);
   if (mins == null) return "Custom AI usage";
-  return `${mins} Active AI Minutes / month`;
+  return formatPlanUsageLevel(plan);
 }
 
 export const LIMITLESS_CONTACT_EMAIL = "enterprise@thinkrecursion.ai";

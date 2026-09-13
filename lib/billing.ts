@@ -18,9 +18,9 @@ export const ALL_PLANS = BILLING_PLANS;
 /** Seat cost hints for org mix (display); Limitless is custom. */
 export const courierSeat: Record<BillingPlan, number> = {
   minimal: 0,
-  light: 30,
-  moderate: 75,
-  heavy: 150,
+  light: 15,
+  moderate: 50,
+  heavy: 125,
   limitless: 0,
 };
 
@@ -51,19 +51,15 @@ export const comparisonRows = planComparisonRows();
 export const pricingFaqs: { q: string; a: string }[] = [
   {
     q: "Is every plan the same app?",
-    a: "Yes. Minimal through Heavy (and Limitless) all use the same Cander application — Work, Build, Studio, Connectors, and more. Plans change your monthly Active AI Minutes and collaboration features.",
-  },
-  {
-    q: "What are Active AI Minutes?",
-    a: "Active AI Minutes measure how long Cander’s AI is actively working for you each month. Each plan includes a monthly allowance that resets with your billing period.",
+    a: "Yes. Minimal through Heavy (and Limitless) all use the same Cander application. Minimal has personal-use limits; every paid plan unlocks the full product — plans then differ mainly by included AI usage.",
   },
   {
     q: "What changes between plans?",
-    a: "Monthly Active AI Minutes, voice, memory, workspace count, and — on Moderate and above — shared workspaces, invites, roles, and organization controls.",
+    a: "Minimal is feature-limited (1 account per app, no organizations or shared workspaces). Light, Moderate, and Heavy are full Cander — they differ by included AI usage. Limitless is custom scale.",
   },
   {
-    q: "Can I use personal and business workspaces on any plan?",
-    a: "Workspaces are on Light and above. Minimal uses the app without a workspace switcher. Moderate and above add shared workspaces, invites, and organization controls.",
+    q: "Can I use organizations on Light?",
+    a: "Yes. Organizations, shared workspaces, and multiple accounts per app are included on every paid plan.",
   },
   {
     q: "How do I upgrade on iPhone?",

@@ -17,7 +17,7 @@ export default function PricingPage() {
             as="h1"
             kicker="One AI"
             title="Pricing"
-            body="Minimal through Heavy — fixed monthly Active AI Minutes. Limitless is custom."
+            body="Minimal is free. Paid plans unlock full Cander — they differ by AI usage. Limitless is custom."
             center
           />
           <div className="mt-10">

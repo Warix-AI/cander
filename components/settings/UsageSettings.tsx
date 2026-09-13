@@ -7,7 +7,7 @@ import {
   SettingsPage,
   SettingsSection,
 } from "@/components/settings/SettingsChrome";
-import { formatMinutesRemainingLine } from "@/lib/usage/ai-minutes/format";
+import { formatUsagePercentRemaining } from "@/lib/usage/ai-minutes/format";
 import { USAGE_METER_TONES } from "@/lib/usage-meters";
 import { useUsageSnapshot } from "@/lib/use-usage-status";
 import { cn } from "@/lib/utils";
@@ -18,23 +18,18 @@ export function UsageSettings() {
   const minutes = snapshot?.aiMinutes;
   const planLabel = snapshot?.planLabel ?? billingPlan;
 
-  const percent = minutes?.percentUsed ?? 0;
-  const showMeter =
-    Boolean(minutes) &&
-    !(
-      String(billingPlan) === "limitless" &&
-      minutes?.detailLabel?.includes("used") &&
-      !minutes.detailLabel.includes("/")
-    );
-  const headline = !loaded
+  const percentUsed = minutes?.percentUsed ?? 0;
+  const isLimitlessUnmetered =
+    String(billingPlan) === "limitless" &&
+    minutes?.detailLabel === "Custom AI usage";
+  const showMeter = Boolean(minutes) && !isLimitlessUnmetered;
+  const remainingLabel = !loaded
     ? "Loading…"
-    : minutes
-      ? minutes.detailLabel
-      : "No AI usage yet";
-  const remainingLine =
-    minutes && minutes.detailLabel.includes("/")
-      ? formatMinutesRemainingLine(minutes.remainingMinutes)
-      : null;
+    : minutes && !isLimitlessUnmetered
+      ? formatUsagePercentRemaining(percentUsed)
+      : minutes
+        ? "Custom AI usage"
+        : "No AI usage yet";
 
   return (
     <SettingsPage>
@@ -46,41 +41,36 @@ export function UsageSettings() {
             <div className="flex items-baseline justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[13.5px] font-medium tracking-[-0.01em]">
-                  Active AI Minutes
+                  AI Usage
                 </p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
                   {planLabel} plan · this billing period
                 </p>
               </div>
               <p className="shrink-0 tabular-nums text-[12.5px] text-foreground/50 dark:text-zinc-400">
-                {headline}
+                {remainingLabel}
               </p>
             </div>
             {showMeter ? (
-            <div
-              className={cn(
-                "mt-2.5 h-2 overflow-hidden rounded-full",
-                USAGE_METER_TONES.chat.track,
-              )}
-              role="meter"
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Active AI Minutes usage"
-            >
               <div
                 className={cn(
-                  "h-full rounded-full transition-[width] duration-500",
-                  USAGE_METER_TONES.chat.bar,
+                  "mt-2.5 h-2 overflow-hidden rounded-full",
+                  USAGE_METER_TONES.chat.track,
                 )}
-                style={{ width: `${percent}%` }}
-              />
-            </div>
-            ) : null}
-            {remainingLine ? (
-              <p className="mt-2 text-[12px] text-muted-foreground">
-                {remainingLine}
-              </p>
+                role="meter"
+                aria-valuenow={percentUsed}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="AI usage"
+              >
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-[width] duration-500",
+                    USAGE_METER_TONES.chat.bar,
+                  )}
+                  style={{ width: `${percentUsed}%` }}
+                />
+              </div>
             ) : null}
             {snapshot?.notices?.[0] ? (
               <p className="mt-2 text-[12px] text-muted-foreground">

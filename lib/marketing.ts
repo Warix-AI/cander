@@ -24,7 +24,7 @@ export const marketingPages: Record<string, MarketingPage> = {
     path: "/pricing",
     title: "Pricing — Active AI Minutes plans",
     description:
-      "Minimal (Free, 25 minutes), Light $30, Moderate $75, Heavy $150, Limitless custom. Same Cander app — pick monthly Active AI Minutes.",
+      "Minimal (Free), Light $15, Moderate $50, Heavy $125, Limitless custom. Paid plans unlock full Cander; they differ by included AI usage.",
   },
   "/spaces": {
     path: "/spaces",

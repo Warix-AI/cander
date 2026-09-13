@@ -698,10 +698,10 @@ export async function buildUsageStatusSnapshot(input: {
       ? ["Your plan includes generous fair-use limits for normal work."]
       : []),
     ...(aiMinutes?.status === "approaching"
-      ? ["You're approaching this month's Active AI Minutes allowance."]
+      ? ["You're approaching this month's AI usage allowance."]
       : []),
     ...(aiMinutes?.status === "exhausted"
-      ? ["You've used all of this month's Active AI Minutes."]
+      ? ["You've used all of this month's AI usage."]
       : []),
     ...(accountSpend?.status === "approaching" && !aiMinutes
       ? ["You're approaching this month's account usage budget."]

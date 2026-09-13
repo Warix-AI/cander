@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
-import { normalizePlan, isTeamPlan } from "@/lib/plans";
+import { normalizePlan, isTeamPlan, isPaidPlan } from "@/lib/plans";
+import { resolveOnboardingFinishPlan } from "@/lib/billing/resolve-onboarding-plan";
 import type { BillingPlan, WorkspaceKind } from "@/lib/types";
 
 const NAV_SPACES = ["work", "build", "research", "studio"] as const;
@@ -62,20 +63,36 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .maybeSingle();
 
-    let plan = normalizePlan(
-      existingProfile?.plan ?? body.plan,
-    );
+    const existingPlanRaw = existingProfile?.plan ?? null;
+    const requestedPlan = body.plan ?? null;
+    let plan = resolveOnboardingFinishPlan({
+      existingPlan: existingPlanRaw,
+      requestedPlan,
+    });
     let purchasedMinutes =
       existingProfile?.purchased_ai_minutes != null
         ? Number(existingProfile.purchased_ai_minutes)
         : null;
 
-    if (body.plan) {
+    // Only run checkout simulation when applying a self-serve plan that does not
+    // downgrade an existing paid account.
+    const shouldApplySubscription =
+      Boolean(requestedPlan) &&
+      !(
+        existingPlanRaw &&
+        isPaidPlan(normalizePlan(existingPlanRaw)) &&
+        requestedPlan != null &&
+        !isPaidPlan(normalizePlan(requestedPlan))
+      ) &&
+      requestedPlan != null &&
+      plan === normalizePlan(requestedPlan);
+
+    if (shouldApplySubscription && requestedPlan) {
       const { createSubscription } = await import("@/lib/billing/subscriptions");
       try {
         const sub = await createSubscription({
           accountId: user.id,
-          plan: body.plan,
+          plan: requestedPlan,
         });
         plan = sub.plan;
         purchasedMinutes = sub.purchasedMinutes;
@@ -90,8 +107,11 @@ export async function POST(request: Request) {
           })
           .eq("id", user.id);
       } catch {
-        // Limitless / invalid self-serve — keep normalized body.plan without checkout.
-        plan = normalizePlan(body.plan);
+        // Limitless / invalid self-serve — keep resolved plan without checkout.
+        plan = resolveOnboardingFinishPlan({
+          existingPlan: existingPlanRaw,
+          requestedPlan,
+        });
       }
     }
 
@@ -113,14 +133,22 @@ export async function POST(request: Request) {
       short_name: shortName,
       role: "Owner",
       onboarding_completed_at: new Date().toISOString(),
-      plan,
     };
+    // Only write plan when we intentionally resolved one — never blank paid tiers.
+    profilePatch.plan = plan;
     if (purchasedMinutes != null && Number.isFinite(purchasedMinutes)) {
       profilePatch.purchased_ai_minutes = purchasedMinutes;
     }
-    if (plan === "minimal") {
+    // Do not force subscription_status to "none" when preserving a paid plan.
+    if (!isPaidPlan(plan)) {
       profilePatch.subscription_status = "none";
-    } else {
+    } else if (
+      !(
+        existingPlanRaw &&
+        isPaidPlan(normalizePlan(existingPlanRaw)) &&
+        plan === normalizePlan(existingPlanRaw)
+      )
+    ) {
       profilePatch.subscription_status = "active";
     }
 

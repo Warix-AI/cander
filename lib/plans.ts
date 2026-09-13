@@ -31,10 +31,9 @@ export function isPaidPlan(plan: BillingPlan) {
   return p !== "minimal";
 }
 
-/** Team / org features — Moderate and above. */
+/** Team / org features — Light and above (all paid plans). */
 export function isTeamPlan(plan: BillingPlan) {
-  const p = normalizePlan(plan);
-  return p === "moderate" || p === "heavy" || p === "limitless";
+  return isPaidPlan(plan);
 }
 
 export function isEnterprisePlan(plan: BillingPlan) {

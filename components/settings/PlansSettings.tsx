@@ -10,8 +10,8 @@ import {
 } from "@/components/settings/SettingsChrome";
 import { planLabel } from "@/lib/billing";
 import {
-  formatIncludedActiveAiMinutes,
   formatPlanPrice,
+  formatPlanUsageLevel,
 } from "@/lib/billing/plan-catalog";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isPaidPlan, webAppPlansSettingsUrl } from "@/lib/plans";
@@ -85,6 +85,21 @@ export function PlansSettings() {
   useEffect(() => {
     void loadBilling();
   }, []);
+
+  useEffect(() => {
+    if (!nativeShell) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadBilling();
+      // Entitlements refresh via AuthProvider hydrate on focus.
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [nativeShell]);
 
   const periodLabel = formatPeriodEnd(
     billing?.periodEnd ?? actor.subscriptionPeriodEnd,
@@ -164,7 +179,7 @@ export function PlansSettings() {
         </h3>
         <p className="mt-1 text-[13px] text-muted-foreground">
           {formatPlanPrice(entitlements.plan)} ·{" "}
-          {formatIncludedActiveAiMinutes(entitlements.plan)}
+          {formatPlanUsageLevel(entitlements.plan)}
         </p>
         {paidPlan && periodLabel ? (
           <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">

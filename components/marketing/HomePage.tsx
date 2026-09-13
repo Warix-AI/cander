@@ -62,7 +62,7 @@ export function HomePage() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <SectionHeader
               title="Plans and pricing"
-              body="Minimal to Limitless — monthly Active AI Minutes."
+              body="Minimal to Limitless — paid plans unlock full Cander."
             />
             <Cta href="/pricing" variant="secondary">
               Compare plans

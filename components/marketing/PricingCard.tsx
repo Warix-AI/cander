@@ -3,7 +3,7 @@
 import { Check, X } from "lucide-react";
 import { PricingPlanCta } from "@/components/marketing/PricingPlanCta";
 import { courierPlans, money } from "@/lib/billing";
-import { formatIncludedActiveAiMinutes } from "@/lib/billing/plan-catalog";
+import { formatPlanUsageLevel } from "@/lib/billing/plan-catalog";
 import { cn } from "@/lib/utils";
 
 export function PricingCard({
@@ -41,7 +41,7 @@ export function PricingCard({
         ) : null}
       </p>
       <p className="mt-2 text-[13px] text-muted-foreground">
-        {formatIncludedActiveAiMinutes(plan.id)}
+        {formatPlanUsageLevel(plan.id)}
       </p>
       {plan.popular ? (
         <p className="mt-2 text-[12px] font-medium text-muted-foreground">

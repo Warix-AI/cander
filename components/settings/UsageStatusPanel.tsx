@@ -64,13 +64,13 @@ export function UsageStatusPanel() {
   return (
     <SettingsSection
       title="Usage"
-      description="AI minutes used this billing period. Active AI time only — idle time does not count."
+      description="AI usage this billing period. Progress shows how much of your plan allowance remains."
     >
       <SettingsGroup>
         <SettingsRow label="Current plan" description={usage?.planLabel ?? planLabel(plan)} />
         {usage?.aiMinutes ? (
           <SettingsRow
-            label="AI minutes"
+            label="AI Usage"
             description={usage.aiMinutes.detailLabel}
           />
         ) : null}

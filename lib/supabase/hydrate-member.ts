@@ -320,7 +320,6 @@ export async function applySignupPlanAndSpaces(opts: {
   workspaceKind?: WorkspaceKind;
 }) {
   const supabase = createSupabaseBrowserClient();
-  const teamPlan = isTeamPlan(opts.plan);
 
   // Prefer server finish (service role) so missing client GRANTs cannot block Enter.
   const {
@@ -347,10 +346,11 @@ export async function applySignupPlanAndSpaces(opts: {
       const ids: string[] = Array.isArray(data.workspaceIds)
         ? data.workspaceIds.map(String)
         : [];
+      const resolvedPlan = normalizePlan(data.plan ?? opts.plan);
       finalizeLocalMember(
-        opts,
+        { ...opts, plan: resolvedPlan },
         ids.length ? ids : [`ws-${opts.userId.replace(/-/g, "")}`],
-        teamPlan,
+        isTeamPlan(resolvedPlan),
       );
       return;
     }
@@ -369,7 +369,7 @@ export async function applySignupPlanAndSpaces(opts: {
       finalizeLocalMember(
         opts,
         [`ws-${opts.userId.replace(/-/g, "")}`],
-        teamPlan,
+        isTeamPlan(opts.plan),
       );
       return;
     }

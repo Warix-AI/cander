@@ -71,12 +71,26 @@ export function validateUniqueConnectorDisplayName(opts: {
   return normalized;
 }
 
-export function canAddAnotherConnectorAccount(liveCount: number): boolean {
-  return liveCount < MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR;
+export function canAddAnotherConnectorAccount(
+  liveCount: number,
+  maxAccounts: number = MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR,
+): boolean {
+  const cap = Number.isFinite(maxAccounts)
+    ? Math.max(1, Math.floor(maxAccounts))
+    : MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR;
+  return liveCount < cap;
 }
 
-export function connectorAccountLimitMessage(): string {
-  return `You can connect up to ${MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR} accounts for this connector.`;
+export function connectorAccountLimitMessage(
+  maxAccounts: number = MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR,
+): string {
+  const cap = Number.isFinite(maxAccounts)
+    ? Math.max(1, Math.floor(maxAccounts))
+    : MAX_CONNECTOR_ACCOUNTS_PER_CONNECTOR;
+  if (cap <= 1) {
+    return "Minimal includes 1 account per app. Upgrade to connect more.";
+  }
+  return `You can connect up to ${cap} accounts for this app.`;
 }
 
 /** Default backfill label for migrated singles — treat as unnamed in the UI. */

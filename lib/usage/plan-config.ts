@@ -80,57 +80,8 @@ function minimalFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
 }
 
 function lightFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
-  const generous = (overrides: Partial<FeatureUsageLimit>) =>
-    feature({
-      enabled: true,
-      monthlyUnits: null,
-      rateLimits: { perMinute: 30, perHour: 300, perDay: 2000 },
-      concurrentJobs: 3,
-      softThrottleAtPercent: 95,
-      costWeightMicrosPerUnit: 100,
-      ...overrides,
-    });
-  return {
-    ai_chat: generous({ rateLimits: { perMinute: 40, perHour: 400, perDay: 4000 } }),
-    knowledge_index: generous({
-      monthlyUnits: 500,
-      rateLimits: { perDay: 200 },
-      concurrentJobs: 2,
-    }),
-    knowledge_search: generous({ rateLimits: { perMinute: 20, perHour: 200 } }),
-    web_research: generous({ rateLimits: { perMinute: 10, perHour: 120, perDay: 500 } }),
-    review_analysis: generous({ rateLimits: { perDay: 200 } }),
-    scheduled_reports: generous({ monthlyUnits: 60, rateLimits: { perDay: 20 }, concurrentJobs: 2 }),
-    image_generation: generous({
-      rateLimits: { perDay: 100, perHour: 20 },
-      concurrentJobs: 2,
-      costWeightMicrosPerUnit: 5000,
-    }),
-    audio_realtime: generous({
-      monthlyUnits: 600,
-      rateLimits: { perDay: 120 },
-      concurrentJobs: 1,
-      costWeightMicrosPerUnit: 800,
-    }),
-    coding_agent: feature({ enabled: false, monthlyUnits: 0, concurrentJobs: 0 }),
-    sandbox_runtime: generous({
-      rateLimits: { perDay: 400, perHour: 40 },
-      concurrentJobs: 2,
-      costWeightMicrosPerUnit: 2000,
-    }),
-    sandbox_build: generous({
-      rateLimits: { perDay: 120, perHour: 20 },
-      concurrentJobs: 2,
-      costWeightMicrosPerUnit: 3000,
-    }),
-    sandbox_deploy: generous({
-      monthlyUnits: 40,
-      rateLimits: { perDay: 20 },
-      concurrentJobs: 1,
-      costWeightMicrosPerUnit: 4000,
-    }),
-    video_generation: feature({ enabled: false, monthlyUnits: 0, concurrentJobs: 0 }),
-  };
+  // Paid plans share the full feature set; they differ by AI minutes / budget only.
+  return moderateFeatures();
 }
 
 function moderateFeatures(): Record<UsageFeatureCategory, FeatureUsageLimit> {
@@ -199,9 +150,9 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     userDailyExpensiveActionCeilingMicros: 200_000,
     billAmountMicros: 0,
     usableBudgetMicros: 1_000_000, // $1 usable (internal)
-    includedMinutes: 25,
-    minimumMinutes: 25,
-    maximumMinutes: 25,
+    includedMinutes: 20,
+    minimumMinutes: 20,
+    maximumMinutes: 20,
     usageLimitBehavior: "hard",
   },
   light: {
@@ -209,14 +160,14 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     label: "Light",
     marketingUnlimited: true,
     features: lightFeatures(),
-    workspaceDailyCostCeilingMicros: 22_000_000,
-    workspaceMonthlyCostCeilingMicros: 220_000_000,
-    userDailyExpensiveActionCeilingMicros: 7_000_000,
-    billAmountMicros: 30_000_000, // $30
-    usableBudgetMicros: 22_000_000, // $22 usable (internal)
-    includedMinutes: 100,
-    minimumMinutes: 100,
-    maximumMinutes: 100,
+    workspaceDailyCostCeilingMicros: 11_000_000,
+    workspaceMonthlyCostCeilingMicros: 110_000_000,
+    userDailyExpensiveActionCeilingMicros: 4_000_000,
+    billAmountMicros: 15_000_000, // $15
+    usableBudgetMicros: 11_000_000, // $11 usable (internal)
+    includedMinutes: 30,
+    minimumMinutes: 30,
+    maximumMinutes: 30,
     usageLimitBehavior: "hard",
   },
   moderate: {
@@ -224,14 +175,14 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     label: "Moderate",
     marketingUnlimited: true,
     features: moderateFeatures(),
-    workspaceDailyCostCeilingMicros: 55_000_000,
-    workspaceMonthlyCostCeilingMicros: 550_000_000,
-    userDailyExpensiveActionCeilingMicros: 18_000_000,
-    billAmountMicros: 75_000_000, // $75
-    usableBudgetMicros: 55_000_000, // $55 usable (internal)
-    includedMinutes: 250,
-    minimumMinutes: 250,
-    maximumMinutes: 250,
+    workspaceDailyCostCeilingMicros: 37_000_000,
+    workspaceMonthlyCostCeilingMicros: 370_000_000,
+    userDailyExpensiveActionCeilingMicros: 12_000_000,
+    billAmountMicros: 50_000_000, // $50
+    usableBudgetMicros: 37_000_000, // $37 usable (internal)
+    includedMinutes: 100,
+    minimumMinutes: 100,
+    maximumMinutes: 100,
     usageLimitBehavior: "hard",
   },
   heavy: {
@@ -239,14 +190,14 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     label: "Heavy",
     marketingUnlimited: true,
     features: moderateFeatures(),
-    workspaceDailyCostCeilingMicros: 110_000_000,
-    workspaceMonthlyCostCeilingMicros: 1_100_000_000,
-    userDailyExpensiveActionCeilingMicros: 35_000_000,
-    billAmountMicros: 150_000_000, // $150
-    usableBudgetMicros: 110_000_000, // $110 usable (internal)
-    includedMinutes: 500,
-    minimumMinutes: 500,
-    maximumMinutes: 500,
+    workspaceDailyCostCeilingMicros: 92_000_000,
+    workspaceMonthlyCostCeilingMicros: 920_000_000,
+    userDailyExpensiveActionCeilingMicros: 30_000_000,
+    billAmountMicros: 125_000_000, // $125
+    usableBudgetMicros: 92_000_000, // $92 usable (internal)
+    includedMinutes: 250,
+    minimumMinutes: 250,
+    maximumMinutes: 250,
     usageLimitBehavior: "hard",
   },
   limitless: {
@@ -260,7 +211,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     billAmountMicros: 0, // custom contract
     usableBudgetMicros: 250_000_000, // $250 default internal (overridable)
     includedMinutes: 1000,
-    minimumMinutes: 501,
+    minimumMinutes: 251,
     maximumMinutes: null,
     usageLimitBehavior: "hard",
   },

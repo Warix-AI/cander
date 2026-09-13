@@ -37,9 +37,9 @@ export function clearOnboardingCheckpoint() {
 }
 
 export function resumeStepForPlan(plan: BillingPlan) {
-  if (plan === "moderate" || plan === "heavy" || plan === "limitless") {
+  if (plan === "light" || plan === "moderate" || plan === "heavy") {
     return "max-intent";
   }
-  if (plan === "light") return "workspace";
+  if (plan === "limitless") return "max-intent";
   return "connectors";
 }

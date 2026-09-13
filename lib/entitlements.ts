@@ -127,7 +127,7 @@ export function entitlementsFor(actor: Member): Entitlements {
     inOrg &&
     seatActive &&
     !showOrgAdmin &&
-    (plan === "light" || isTeamPlan(plan));
+    isTeamPlan(plan);
   const orgActive =
     inOrg && !actor.orgSetupDeferred && isTeamPlan(plan) && seatActive;
   const canActivateOrganization =

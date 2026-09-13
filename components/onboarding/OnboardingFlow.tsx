@@ -51,12 +51,16 @@ import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/Veri
 import {
   LIMITLESS_CONTACT_HREF,
   PLAN_CATALOG_LIST,
-  formatIncludedActiveAiMinutes,
   formatPlanPrice,
+  formatPlanUsageLevel,
   isSelfServePlan,
 } from "@/lib/billing/plan-catalog";
+import {
+  requestedPlanForNativeFinish,
+  resolveOnboardingFinishPlan,
+} from "@/lib/billing/resolve-onboarding-plan";
 import { planLabel } from "@/lib/billing";
-import { isTeamPlan } from "@/lib/plans";
+import { isTeamPlan, normalizePlan } from "@/lib/plans";
 
 function digitsOnly(raw: string, length = SIGNUP_OTP_LENGTH) {
   return raw.replace(/\D/g, "").slice(0, length);
@@ -140,7 +144,7 @@ function createStepsFor(
   return steps;
 }
 
-/** After email verify: web picks a plan; Cap/iOS starts Minimal (no in-app purchase). */
+/** After email verify: web may pick a plan; native skips checkout UI only. */
 function stepAfterEmailVerified(nativeShell: boolean): Step {
   if (nativeShell) {
     return SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance";
@@ -184,33 +188,33 @@ function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
 
 const PLAN_PANEL_BULLETS: Record<BillingPlan, string[]> = {
   minimal: [
-    "25 Active AI Minutes / month",
-    "Home, Build, Studio, and Connectors",
-    "Persistent memory included",
-    "Upgrade anytime for more capacity",
+    "Free · light AI usage",
+    "Unlimited apps · 1 account per app",
+    "Personal use — no organizations",
+    "Upgrade anytime for full Cander",
   ],
   light: [
-    "100 Active AI Minutes / month",
-    "Voice, advanced memory, knowledge bases",
-    "Up to three visible workspaces",
-    "Built for everyday work",
+    "$15/month · everyday AI usage",
+    "Full Cander product access",
+    "Organizations & shared workspaces",
+    "Multiple accounts per app",
   ],
   moderate: [
-    "250 Active AI Minutes / month",
-    "Shared workspaces and member invites",
-    "Roles, permissions, and org controls",
-    "Built for teams",
+    "$50/month · higher AI usage",
+    "Full Cander product access",
+    "Organizations & shared workspaces",
+    "Same features as Light — more AI",
   ],
   heavy: [
-    "500 Active AI Minutes / month",
-    "Maximum self-serve AI capacity",
-    "Shared workspaces and org controls",
-    "Built for heavy workloads",
+    "$125/month · highest self-serve AI",
+    "Full Cander product access",
+    "Organizations & shared workspaces",
+    "Same features as Light — more AI",
   ],
   limitless: [
-    "Custom Active AI Minutes",
-    "Negotiated pricing and support",
-    "Organization controls",
+    "Custom pricing & AI usage",
+    "Full Cander product access",
+    "Built for larger organizations",
     "Contact us to get started",
   ],
 };
@@ -245,7 +249,7 @@ const PANEL_COPY: Record<
   },
   plan: {
     title: "Choose a plan.",
-    body: "Each plan includes monthly Active AI Minutes. Pick the fit for how you work.",
+    body: "Minimal is personal. Paid plans unlock full Cander — they differ by AI usage.",
   },
   "max-intent": {
     title: "How will you use this plan?",
@@ -281,7 +285,7 @@ const MOBILE_PANEL_LINE: Record<Step, string> = {
   create: "Create an account, then finish setup.",
   verify: "Enter the code we sent to your email.",
   profile: "Choose a name Cander should use for you.",
-  plan: "Choose a plan with Active AI Minutes.",
+  plan: "Minimal is free; paid unlocks full Cander.",
   "max-intent": "Personal use or set up an organization?",
   "org-setup": "Set up your organization and invite teammates.",
   workspace: "Name the workspace you'll land in.",
@@ -328,9 +332,7 @@ function OnboardingShell({
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
-  const [plan, setPlan] = useState<BillingPlan | null>(
-    nativeShell ? "minimal" : null,
-  );
+  const [plan, setPlan] = useState<BillingPlan | null>(null);
   const [maxIntent, setMaxIntent] = useState<MaxIntent | null>(null);
   const [orgName, setOrgName] = useState("");
   const [orgInvites, setOrgInvites] = useState<OrgInviteDraft[]>([]);
@@ -368,6 +370,7 @@ function OnboardingShell({
         persistOnboardingPending(true);
         clearPendingSignupEmail();
         setPassedVerify(true);
+        if (user.id) await syncPlanFromProfile(user.id);
         setStep(stepAfterEmailVerified(nativeShell));
         setError("");
         if (user.email) setEmail(user.email);
@@ -416,6 +419,7 @@ function OnboardingShell({
         if (step === "verify") {
           const entered = await tryEnterExistingAccount().catch(() => false);
           if (cancelled || entered) return;
+          if (user?.id) await syncPlanFromProfile(user.id);
           setStep(stepAfterEmailVerified(nativeShell));
         }
         return;
@@ -734,9 +738,51 @@ function OnboardingShell({
     }
   };
 
+  const syncPlanFromProfile = async (userId: string) => {
+    if (!isSupabaseConfigured()) return;
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("plan")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profile?.plan != null) {
+        setPlan(normalizePlan(profile.plan));
+      }
+    } catch {
+      // non-fatal — finish path re-reads profiles.plan
+    }
+  };
+
   const finishLocalAccount = async () => {
     // Connectors step only records interest — real OAuth installs happen later.
-    const signupPlan = nativeShell ? "minimal" : (plan ?? "minimal");
+    // Plan comes from account state + optional web selection — never from platform alone.
+    let existingPlan: BillingPlan | null = null;
+    if (isSupabaseConfigured()) {
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user: sessionUser },
+      } = await supabase.auth.getUser();
+      if (sessionUser) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("plan")
+          .eq("id", sessionUser.id)
+          .maybeSingle();
+        if (profile?.plan != null) {
+          existingPlan = normalizePlan(profile.plan);
+        }
+      }
+    }
+
+    const requestedPlan = nativeShell
+      ? requestedPlanForNativeFinish(existingPlan)
+      : (plan ?? "minimal");
+    const signupPlan = resolveOnboardingFinishPlan({
+      existingPlan,
+      requestedPlan,
+    });
     const isOrgNow = isTeamPlan(signupPlan) && maxIntent === "org-now";
     const workspaceKind = isOrgNow ? "business" : "personal";
     const resolvedName = name.trim();
@@ -961,6 +1007,7 @@ function OnboardingShell({
           }
           persistOnboardingPending(true);
           setPassedVerify(true);
+          if (signInResult.user?.id) await syncPlanFromProfile(signInResult.user.id);
           setStep(stepAfterEmailVerified(nativeShell));
           return;
         } catch (err) {
@@ -993,6 +1040,7 @@ function OnboardingShell({
       if (result.session && isAuthEmailConfirmed(result.session.user)) {
         clearPendingSignupEmail();
         setPassedVerify(true);
+        if (result.session.user.id) await syncPlanFromProfile(result.session.user.id);
         setStep(stepAfterEmailVerified(nativeShell));
         return;
       }
@@ -1021,6 +1069,7 @@ function OnboardingShell({
           }
           persistOnboardingPending(true);
           setPassedVerify(true);
+          if (signInResult.user?.id) await syncPlanFromProfile(signInResult.user.id);
           setStep(stepAfterEmailVerified(nativeShell));
           return;
         } catch (signInErr) {
@@ -1076,6 +1125,9 @@ function OnboardingShell({
       clearPendingSignupEmail();
       setPassedVerify(true);
       setVerifyCode("");
+      const entered = await tryEnterExistingAccount().catch(() => false);
+      if (entered) return;
+      if (result.user?.id) await syncPlanFromProfile(result.user.id);
       setStep(stepAfterEmailVerified(nativeShell));
     } catch (err) {
       setError(
@@ -1151,6 +1203,7 @@ function OnboardingShell({
         if (entered) return;
         persistOnboardingPending(true);
         setPassedVerify(true);
+        if (result.user?.id) await syncPlanFromProfile(result.user.id);
         setStep(stepAfterEmailVerified(nativeShell));
       } catch (err) {
         const message =
@@ -2139,8 +2192,8 @@ function PlanStep({
         Choose a plan
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Pick monthly Active AI Minutes that match how you work. You can change
-        plans later.
+        Minimal is for personal use. Paid plans unlock the full product and
+        differ by AI usage.
       </p>
       <div className="mt-8 space-y-2.5">
         {PLAN_CATALOG_LIST.map((entry) => {
@@ -2169,7 +2222,12 @@ function PlanStep({
                 </span>
               </div>
               <span className="text-[12.5px] leading-relaxed text-muted-foreground">
-                {formatIncludedActiveAiMinutes(entry.id)}
+                {formatPlanUsageLevel(entry.id)}
+                {entry.id === "minimal"
+                  ? " · 1 account per app"
+                  : entry.id === "limitless"
+                    ? ""
+                    : " · full Cander"}
               </span>
               <span className="mt-1 text-[12px] font-medium text-foreground/80">
                 {busy && active ? "Saving…" : entry.ctaLabel}

@@ -7,8 +7,10 @@ export type AiCapacity = "standard" | "expanded" | "maximum";
 export type PlanCapabilities = {
   aiCapacity: AiCapacity;
   voice: boolean;
-  /** 1, 3, or Infinity — never shown in pricing cells. */
+  /** 1 or Infinity — never shown as raw numbers in pricing cells. */
   workspaceLimit: number;
+  /** Max connected accounts per app; Infinity = paid multi-account cap in connectors. */
+  accountsPerApp: number;
   persistentMemory: boolean;
   advancedMemory: boolean;
   knowledgeBases: boolean;
@@ -19,11 +21,27 @@ export type PlanCapabilities = {
   organizationControls: boolean;
 };
 
+/** Full product access shared by every paid plan (Light+). */
+const PAID_FULL_CAPABILITIES: Omit<PlanCapabilities, "aiCapacity"> = {
+  voice: true,
+  workspaceLimit: Infinity,
+  accountsPerApp: Infinity,
+  persistentMemory: true,
+  advancedMemory: true,
+  knowledgeBases: true,
+  sharedWorkspaces: true,
+  inviteMembers: true,
+  rolesAndPermissions: true,
+  sharedWorkspaceKnowledge: true,
+  organizationControls: true,
+};
+
 const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
   minimal: {
     aiCapacity: "standard",
     voice: false,
     workspaceLimit: 1,
+    accountsPerApp: 1,
     persistentMemory: true,
     advancedMemory: false,
     knowledgeBases: false,
@@ -35,55 +53,19 @@ const PLAN_CAPABILITIES: Record<BillingPlan, PlanCapabilities> = {
   },
   light: {
     aiCapacity: "expanded",
-    voice: true,
-    workspaceLimit: 3,
-    persistentMemory: true,
-    advancedMemory: true,
-    knowledgeBases: true,
-    sharedWorkspaces: false,
-    inviteMembers: false,
-    rolesAndPermissions: false,
-    sharedWorkspaceKnowledge: false,
-    organizationControls: false,
+    ...PAID_FULL_CAPABILITIES,
   },
   moderate: {
     aiCapacity: "maximum",
-    voice: true,
-    workspaceLimit: Infinity,
-    persistentMemory: true,
-    advancedMemory: true,
-    knowledgeBases: true,
-    sharedWorkspaces: true,
-    inviteMembers: true,
-    rolesAndPermissions: true,
-    sharedWorkspaceKnowledge: true,
-    organizationControls: true,
+    ...PAID_FULL_CAPABILITIES,
   },
   heavy: {
     aiCapacity: "maximum",
-    voice: true,
-    workspaceLimit: Infinity,
-    persistentMemory: true,
-    advancedMemory: true,
-    knowledgeBases: true,
-    sharedWorkspaces: true,
-    inviteMembers: true,
-    rolesAndPermissions: true,
-    sharedWorkspaceKnowledge: true,
-    organizationControls: true,
+    ...PAID_FULL_CAPABILITIES,
   },
   limitless: {
     aiCapacity: "maximum",
-    voice: true,
-    workspaceLimit: Infinity,
-    persistentMemory: true,
-    advancedMemory: true,
-    knowledgeBases: true,
-    sharedWorkspaces: true,
-    inviteMembers: true,
-    rolesAndPermissions: true,
-    sharedWorkspaceKnowledge: true,
-    organizationControls: true,
+    ...PAID_FULL_CAPABILITIES,
   },
 };
 
@@ -106,6 +88,10 @@ export function hasVoice(plan: BillingPlan) {
 
 export function workspaceLimit(plan: BillingPlan) {
   return capabilitiesFor(plan).workspaceLimit;
+}
+
+export function accountsPerAppLimit(plan: BillingPlan): number {
+  return capabilitiesFor(plan).accountsPerApp;
 }
 
 export function hasMultipleWorkspaces(plan: BillingPlan) {
@@ -152,7 +138,7 @@ export function planComparisonRows(): {
   const all = (values: Record<SelfServeCompare, boolean>) => values;
   return [
     {
-      label: "Active AI Minutes included",
+      label: "Included AI usage",
       values: all({
         minimal: true,
         light: true,
@@ -161,29 +147,15 @@ export function planComparisonRows(): {
       }),
     },
     {
-      label: "Expanded AI capacity",
+      label: "Unlimited apps",
+      values: all({ minimal: true, light: true, moderate: true, heavy: true }),
+    },
+    {
+      label: "Multiple accounts per app",
       values: all({
         minimal: false,
         light: true,
         moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Maximum AI capacity",
-      values: all({
-        minimal: false,
-        light: false,
-        moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Highest self-serve capacity",
-      values: all({
-        minimal: false,
-        light: false,
-        moderate: false,
         heavy: true,
       }),
     },
@@ -204,7 +176,7 @@ export function planComparisonRows(): {
       values: all({ minimal: true, light: true, moderate: true, heavy: true }),
     },
     {
-      label: "Connectors",
+      label: "Apps",
       values: all({ minimal: true, light: true, moderate: true, heavy: true }),
     },
     {
@@ -225,7 +197,7 @@ export function planComparisonRows(): {
       }),
     },
     {
-      label: "Multiple workspaces",
+      label: "Shared workspaces",
       values: all({
         minimal: false,
         light: true,
@@ -234,10 +206,28 @@ export function planComparisonRows(): {
       }),
     },
     {
-      label: "Unlimited workspaces",
+      label: "Organizations",
       values: all({
         minimal: false,
-        light: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
+    },
+    {
+      label: "Invite members",
+      values: all({
+        minimal: false,
+        light: true,
+        moderate: true,
+        heavy: true,
+      }),
+    },
+    {
+      label: "Roles & permissions",
+      values: all({
+        minimal: false,
+        light: true,
         moderate: true,
         heavy: true,
       }),
@@ -269,51 +259,6 @@ export function planComparisonRows(): {
       values: all({
         minimal: false,
         light: true,
-        moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Shared workspaces",
-      values: all({
-        minimal: false,
-        light: false,
-        moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Invite members",
-      values: all({
-        minimal: false,
-        light: false,
-        moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Roles & permissions",
-      values: all({
-        minimal: false,
-        light: false,
-        moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Shared workspace knowledge",
-      values: all({
-        minimal: false,
-        light: false,
-        moderate: true,
-        heavy: true,
-      }),
-    },
-    {
-      label: "Organization controls",
-      values: all({
-        minimal: false,
-        light: false,
         moderate: true,
         heavy: true,
       }),
