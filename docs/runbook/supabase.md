@@ -212,7 +212,7 @@ If Connectors / spaces are missing after sign-in: hard-refresh once after `007` 
 ## Auth checklist
 
 - [ ] Sign up / sign in (email + password)
-- [ ] **Email verify (OTP):** Create account → Enter your code → paste 8-digit code → continue onboarding
+- [ ] **Email verify (OTP):** Create account → Enter your code → paste 6-digit code → continue onboarding
 - [ ] Email verify via **link** also works (`/auth/callback`) and resumes onboarding
 - [ ] Log out (Settings or account menu) clears Supabase session
 - [ ] Delete account requires `SUPABASE_SERVICE_ROLE_KEY` on the server (`/api/account/delete`)
@@ -228,7 +228,7 @@ In Supabase → **Authentication → Email Templates → Confirm signup**, use a
 
 ```html
 <h2>Your Cander code</h2>
-<p>Enter this 8-digit code in the app to confirm your email:</p>
+<p>Enter this 6-digit code in the app to confirm your email:</p>
 <p style="font-size:28px;letter-spacing:4px;font-weight:700">{{ .Token }}</p>
 <p>This code expires shortly. You don’t need to open a link.</p>
 ```
@@ -237,9 +237,9 @@ Subject suggestion: `{{ .Token }} is your Cander code`
 
 Enable **Confirm email** under Authentication → Providers → Email.
 
-OTP length is set under **Authentication → Providers → Email** (hosted projects
-often use **8**). The app expects **8** digits (`SIGNUP_OTP_LENGTH`). If you
-change the dashboard length, update `VerifyCodeInput` to match.
+OTP length is set under **Authentication → Providers → Email**. Set it to **6**
+so it matches the app (`SIGNUP_OTP_LENGTH`). If you change the dashboard length,
+update `VerifyCodeInput` to match.
 
 Without `{{ .Token }}` in the template, users only get a link (OTP field will
 fail until the template is updated). Link confirm via `/auth/callback` remains

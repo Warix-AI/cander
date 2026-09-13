@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import type { User } from "@supabase/supabase-js";
 import { isSupabaseConfigured } from "@/lib/data-backend";
+import { isAuthEmailConfirmed } from "@/lib/auth/email-confirmed";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
 import { hasCompletedOnboarding } from "@/lib/onboarding-recovery";
 import { persistOnboardingPending, persistSignedOut } from "@/lib/session";
@@ -19,6 +20,12 @@ import {
 } from "@/lib/session-ready";
 
 async function reconcileSupabaseUser(user: User) {
+  // Keep unconfirmed signups in onboarding until email_confirmed_at is set.
+  if (!isAuthEmailConfirmed(user)) {
+    persistOnboardingPending(true);
+    return;
+  }
+
   const complete = await hasCompletedOnboarding(user.id);
   if (complete) {
     persistOnboardingPending(false);

@@ -36,12 +36,22 @@ import {
   captureAcquisitionContext,
   reportAuthEvent,
 } from "@/lib/auth/acquisition";
+import {
+  clearPendingSignupEmail,
+  isAuthEmailConfirmed,
+  persistPendingSignupEmail,
+  readPendingSignupEmail,
+} from "@/lib/auth/email-confirmed";
 import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
 import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
 import { AppearanceControls } from "@/components/settings/AppearanceControls";
 import { HostingModePicker } from "@/components/settings/HostingModePicker";
 import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
 import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/VerifyCodeInput";
+
+function digitsOnly(raw: string, length = SIGNUP_OTP_LENGTH) {
+  return raw.replace(/\D/g, "").slice(0, length);
+}
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
 import { resetAppearance, setColorMode } from "@/lib/appearance";
 import type { AccountPresetId, BillingPlan, Member } from "@/lib/types";
@@ -142,9 +152,13 @@ const SHOW_ONBOARDING_CONNECTORS = false;
 function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
   if (typeof window !== "undefined") {
     const auth = new URLSearchParams(window.location.search).get("auth");
-    if (auth === "verified") return "profile";
+    // Link callback — start on verify; layout effect advances only after Auth confirms.
+    if (auth === "verified") return "verify";
   }
-  if (initialSignedIn || getOnboardingPendingSnapshot()) return "profile";
+  // Mid-signup refresh must NOT skip email verify. Pending alone is not enough.
+  if (initialSignedIn || getOnboardingPendingSnapshot() || readPendingSignupEmail()) {
+    return "verify";
+  }
   return "welcome";
 }
 
@@ -314,7 +328,7 @@ function OnboardingShell({
   const [step, setStep] = useState<Step>(() =>
     resolveInitialOnboardingStep(initialSignedIn),
   );
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(() => readPendingSignupEmail());
   const [password, setPassword] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [name, setName] = useState("");
@@ -330,7 +344,8 @@ function OnboardingShell({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState("");
-  const [passedVerify, setPassedVerify] = useState(initialSignedIn);
+  // Never assume verify is done from a refresh — prove it via OTP / confirmed session.
+  const [passedVerify, setPassedVerify] = useState(false);
   const orgDraftHydrated = useRef(false);
 
   // Onboarding always opens in light — ignore prior session / system dark.
@@ -344,27 +359,33 @@ function OnboardingShell({
 
     void completeEmailVerificationFromUrl().then(async (result) => {
       if (result === "verified") {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user || (usingSupabase && !isAuthEmailConfirmed(user))) {
+          setPassedVerify(false);
+          setStep("verify");
+          setError("Confirm your email with the code we sent before continuing.");
+          return;
+        }
         const entered = await tryEnterExistingAccount().catch(() => false);
         if (entered) return;
         persistOnboardingPending(true);
+        clearPendingSignupEmail();
         setPassedVerify(true);
         setStep("profile");
         setError("");
-        const supabase = createSupabaseBrowserClient();
-        void supabase.auth.getUser().then(({ data }) => {
-          const user = data.user;
-          if (!user) return;
-          if (user.email) setEmail(user.email);
-          const metaName = user.user_metadata?.name;
-          if (typeof metaName === "string" && metaName.trim()) {
-            setName(metaName.trim());
-            setShortName((current) =>
-              current.trim()
-                ? current
-                : metaName.trim().split(/\s+/)[0] || "You",
-            );
-          }
-        });
+        if (user.email) setEmail(user.email);
+        const metaName = user.user_metadata?.name;
+        if (typeof metaName === "string" && metaName.trim()) {
+          setName(metaName.trim());
+          setShortName((current) =>
+            current.trim()
+              ? current
+              : metaName.trim().split(/\s+/)[0] || "You",
+          );
+        }
         return;
       }
       if (result === "error") {
@@ -372,9 +393,69 @@ function OnboardingShell({
         setStep("sign-in");
       }
     });
-  }, []);
+  }, [usingSupabase]);
 
-  // Resume mid-onboarding after refresh / email link — fill name + email from session.
+  // Hard gate: never allow post-verify steps without a confirmed email.
+  useEffect(() => {
+    if (!usingSupabase) {
+      setPassedVerify(true);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const pendingEmail = readPendingSignupEmail();
+      if (pendingEmail && !email.trim()) setEmail(pendingEmail);
+
+      const supabase = createSupabaseBrowserClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (cancelled) return;
+
+      if (user?.email) setEmail(user.email);
+      const confirmed = isAuthEmailConfirmed(user);
+
+      if (confirmed) {
+        clearPendingSignupEmail();
+        setPassedVerify(true);
+        // Refresh after confirming elsewhere — leave the code screen.
+        if (step === "verify") {
+          const entered = await tryEnterExistingAccount().catch(() => false);
+          if (cancelled || entered) return;
+          setStep("profile");
+        }
+        return;
+      }
+
+      setPassedVerify(false);
+      const postVerify: Step[] = [
+        "profile",
+        "plan",
+        "max-intent",
+        "org-setup",
+        "workspace",
+        "connectors",
+        "appearance",
+        "hosting",
+      ];
+      // Only yank forward steps — allow create/sign-in so they can fix email.
+      if (!postVerify.includes(step)) return;
+      setStep("verify");
+      if (!info) {
+        setInfo(
+          pendingEmail || email
+            ? `Enter the code we sent to ${(pendingEmail || email).trim()} to continue.`
+            : "Confirm your email with the code we sent before continuing.",
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Re-run when step advances past verify so a refresh mid-flow is pulled back.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on auth + step family
+  }, [usingSupabase, initialSignedIn, step]);
+
   useEffect(() => {
     captureAcquisitionContext();
     reportAuthEvent({ eventType: "visit", metadata: { surface: "onboarding" } });
@@ -423,7 +504,7 @@ function OnboardingShell({
     const params = new URLSearchParams(window.location.search);
     if (params.get("onboarding") !== "resume") return;
 
-    const restore = (cp: OnboardingCheckpoint) => {
+    const restore = (cp: OnboardingCheckpoint, emailConfirmed: boolean) => {
       if (cp.plan) setPlan(cp.plan);
       if (cp.maxIntent) setMaxIntent(cp.maxIntent);
       if (cp.orgName) setOrgName(cp.orgName);
@@ -435,34 +516,55 @@ function OnboardingShell({
       if (cp.name) setName(cp.name);
       if (cp.email) setEmail(cp.email);
       if (cp.selectedConnectors) setSelectedConnectors(cp.selectedConnectors);
+      // Never resume past verify without a confirmed email.
+      if (!emailConfirmed && usingSupabase) {
+        setPassedVerify(false);
+        setStep("verify");
+        return;
+      }
       setStep(resumeStepForPlan(cp.plan) as Step);
     };
 
-    const local = getOnboardingCheckpointSnapshot();
-    if (local?.plan) restore(local);
-
     void (async () => {
-      if (!isSupabaseConfigured()) return;
-      const supabase = createSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_checkpoint, plan, subscription_status")
-        .eq("id", user.id)
-        .maybeSingle();
-      const cp = profile?.onboarding_checkpoint as OnboardingCheckpoint | null;
-      if (cp?.plan) restore(cp);
-      else if (profile?.plan && profile.plan !== "free") {
-        setPlan(profile.plan as BillingPlan);
-        setStep(resumeStepForPlan(profile.plan as BillingPlan) as Step);
+      let emailConfirmed = !usingSupabase;
+      if (isSupabaseConfigured()) {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        emailConfirmed = isAuthEmailConfirmed(user);
+        if (user?.email) setEmail(user.email);
+
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("onboarding_checkpoint, plan, subscription_status")
+            .eq("id", user.id)
+            .maybeSingle();
+          const cp = profile?.onboarding_checkpoint as OnboardingCheckpoint | null;
+          if (cp?.plan) {
+            restore(cp, emailConfirmed);
+            return;
+          }
+          if (profile?.plan && profile.plan !== "free") {
+            setPlan(profile.plan as BillingPlan);
+            if (!emailConfirmed && usingSupabase) {
+              setPassedVerify(false);
+              setStep("verify");
+            } else {
+              setStep(resumeStepForPlan(profile.plan as BillingPlan) as Step);
+            }
+            return;
+          }
+        }
       }
+
+      const local = getOnboardingCheckpointSnapshot();
+      if (local?.plan) restore(local, emailConfirmed);
     })();
 
     window.history.replaceState({}, "", window.location.pathname);
-  }, []);
+  }, [usingSupabase]);
 
   const buildCheckpoint = (): OnboardingCheckpoint => ({
     step,
@@ -651,6 +753,13 @@ function OnboardingShell({
       if (!user) {
         throw new Error("Signed up, but no session yet. Try Sign in.");
       }
+      if (!isAuthEmailConfirmed(user)) {
+        setPassedVerify(false);
+        setStep("verify");
+        throw new Error(
+          "Confirm your email with the code we sent before finishing setup.",
+        );
+      }
       await applySignupPlanAndSpaces({
         userId: user.id,
         name,
@@ -836,6 +945,14 @@ function OnboardingShell({
             });
             return;
           }
+          if (!isAuthEmailConfirmed(signInResult.user)) {
+            persistPendingSignupEmail(email);
+            persistOnboardingPending(true);
+            setPassedVerify(false);
+            setInfo("We sent a code to your email. Enter it below to continue.");
+            setStep("verify");
+            return;
+          }
           persistOnboardingPending(true);
           setPassedVerify(true);
           setStep("profile");
@@ -844,6 +961,7 @@ function OnboardingShell({
           const message =
             err instanceof Error ? err.message : "Could not sign in.";
           if (/confirm|not confirmed|verif/i.test(message)) {
+            persistPendingSignupEmail(email);
             setInfo("We sent a code to your email. Enter it below to continue.");
             setStep("verify");
             return;
@@ -865,17 +983,19 @@ function OnboardingShell({
         },
       });
 
-      // Confirm-email off returns a session — skip OTP and continue onboarding.
-      if (result.session) {
+      // Session only counts if Auth has confirmed the email — otherwise OTP.
+      if (result.session && isAuthEmailConfirmed(result.session.user)) {
+        clearPendingSignupEmail();
         setPassedVerify(true);
         setStep("profile");
         return;
       }
 
       // Confirm-email on — stay in-app and enter the code from email.
+      persistPendingSignupEmail(email);
       setPassedVerify(false);
       setStep("verify");
-      setInfo(`We sent a ${SIGNUP_OTP_LENGTH}-digit code to ${email.trim()}. Paste it below — no need to leave this screen.`);
+      setInfo(`We sent an ${SIGNUP_OTP_LENGTH}-digit code to ${email.trim()}. Paste it below — no need to leave this screen.`);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not create account.";
@@ -885,6 +1005,14 @@ function OnboardingShell({
           if (signInResult.user) syncSupabaseAuthUser(signInResult.user);
           const entered = await tryEnterExistingAccount();
           if (entered) return;
+          if (!isAuthEmailConfirmed(signInResult.user)) {
+            persistPendingSignupEmail(email);
+            persistOnboardingPending(true);
+            setPassedVerify(false);
+            setInfo("Confirm your email with the code we sent, then continue.");
+            setStep("verify");
+            return;
+          }
           persistOnboardingPending(true);
           setPassedVerify(true);
           setStep("profile");
@@ -893,6 +1021,7 @@ function OnboardingShell({
           const signInMessage =
             signInErr instanceof Error ? signInErr.message : message;
           if (/confirm|not confirmed|verif/i.test(signInMessage)) {
+            persistPendingSignupEmail(email);
             setInfo("Confirm your email with the code we sent, then continue.");
             setStep("verify");
             return;
@@ -910,29 +1039,36 @@ function OnboardingShell({
     }
   };
 
-  const confirmVerify = async () => {
+  const confirmVerify = async (codeOverride?: string) => {
     if (!isSupabaseConfigured()) {
       setError("This session is not connected to the account service.");
       return;
     }
-    const code = verifyCode.replace(/\s/g, "");
+    const code = digitsOnly(codeOverride ?? verifyCode, SIGNUP_OTP_LENGTH);
     if (code.length < SIGNUP_OTP_LENGTH) {
       setError(`Enter the ${SIGNUP_OTP_LENGTH}-digit code from your email.`);
       return;
     }
+    if (busy) return;
     setBusy(true);
     setError("");
     setInfo("");
-      try {
-        const result = await verifySignupOtp(email, code);
-        if (result.user) syncSupabaseAuthUser(result.user);
-        reportAuthEvent({
-          eventType: "email_verified",
-          email,
-          profileId: result.user?.id,
-          metadata: { method: "otp" },
-        });
-        setPassedVerify(true);
+    setVerifyCode(code);
+    try {
+      const result = await verifySignupOtp(email, code);
+      if (result.user) syncSupabaseAuthUser(result.user);
+      if (!isAuthEmailConfirmed(result.user)) {
+        setError("That code didn’t confirm your email. Try again or resend.");
+        return;
+      }
+      reportAuthEvent({
+        eventType: "email_verified",
+        email,
+        profileId: result.user?.id,
+        metadata: { method: "otp" },
+      });
+      clearPendingSignupEmail();
+      setPassedVerify(true);
       setVerifyCode("");
       setStep("profile");
     } catch (err) {
@@ -959,6 +1095,7 @@ function OnboardingShell({
     setError("");
     setInfo("");
     try {
+      persistPendingSignupEmail(email);
       await resendSignupEmail(email);
       setInfo(`New code sent to ${email.trim()}.`);
     } catch (err) {
@@ -966,6 +1103,7 @@ function OnboardingShell({
       try {
         if (password.length >= 8) {
           await signUpWithPassword({ email, password, name });
+          persistPendingSignupEmail(email);
           setInfo(`We sent a code to ${email.trim()}.`);
         } else {
           throw err;
@@ -995,6 +1133,14 @@ function OnboardingShell({
           email,
           profileId: result.user?.id,
         });
+        if (!isAuthEmailConfirmed(result.user)) {
+          persistPendingSignupEmail(email);
+          persistOnboardingPending(true);
+          setPassedVerify(false);
+          setInfo("We sent a code to your email. Enter it below to continue.");
+          setStep("verify");
+          return;
+        }
         const entered = await tryEnterExistingAccount();
         if (entered) return;
         persistOnboardingPending(true);
@@ -1004,6 +1150,7 @@ function OnboardingShell({
         const message =
           err instanceof Error ? err.message : "Sign in failed.";
         if (/confirm|not confirmed|verif/i.test(message)) {
+          persistPendingSignupEmail(email);
           persistOnboardingPending(true);
           setInfo("We sent a code to your email. Enter it below to continue.");
           setStep("verify");
@@ -1079,6 +1226,11 @@ function OnboardingShell({
       return;
     }
     if (step === "profile") {
+      if (usingSupabase && !passedVerify) {
+        setStep("verify");
+        setError("Confirm your email with the code we sent before continuing.");
+        return;
+      }
       if (!shortName.trim()) {
         setError("Add a short name.");
         return;
@@ -1351,7 +1503,7 @@ function OnboardingShell({
                   setVerifyCode(value);
                   setError("");
                 }}
-                onSubmit={() => void confirmVerify()}
+                onSubmit={(code) => void confirmVerify(code)}
                 onResend={() => void resendVerify()}
               />
             ) : null}
@@ -1900,7 +2052,7 @@ function VerifyStep({
   busy: boolean;
   onEmail: (value: string) => void;
   onCode: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (code?: string) => void;
   onResend: () => void;
 }) {
   return (
@@ -1909,7 +2061,7 @@ function VerifyStep({
         Enter your code
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        We emailed a {SIGNUP_OTP_LENGTH}-digit code to{" "}
+        We emailed an {SIGNUP_OTP_LENGTH}-digit code to{" "}
         <span className="font-medium text-foreground">{email.trim() || "your inbox"}</span>.
         Paste it here to stay in the app — no link required. Wrong address?
         Update the email and resend.
@@ -1918,7 +2070,7 @@ function VerifyStep({
         className="mt-8 space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit();
+          onSubmit(code);
         }}
       >
         <Field label="Email">
@@ -1936,7 +2088,7 @@ function VerifyStep({
             disabled={busy}
             autoFocus
             onChange={onCode}
-            onComplete={() => onSubmit()}
+            onComplete={(value) => onSubmit(value)}
           />
         </Field>
         {error ? (

@@ -2,6 +2,7 @@
 
 import { clearOnboardingCheckpoint } from "@/lib/onboarding-checkpoint";
 import { clearLocalAuthState } from "@/lib/auth/sign-out";
+import { isAuthEmailConfirmed } from "@/lib/auth/email-confirmed";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hydrateMemberFromSupabase } from "@/lib/supabase/hydrate-member";
 import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
@@ -51,6 +52,12 @@ export async function tryEnterExistingAccount(): Promise<boolean> {
   if (!user) return false;
 
   syncSupabaseAuthUser(user);
+
+  // Unconfirmed emails must finish OTP / link verify before entering the app.
+  if (!isAuthEmailConfirmed(user)) {
+    persistOnboardingPending(true);
+    return false;
+  }
 
   const complete = await hasCompletedOnboarding(user.id);
   if (!complete) {

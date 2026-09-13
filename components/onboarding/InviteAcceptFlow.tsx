@@ -75,16 +75,18 @@ export function InviteAcceptFlow({ token }: { token: string }) {
     router.replace("/");
   };
 
-  const submit = async () => {
+  const submit = async (codeOverride?: string) => {
     if (!preview) return;
     if (mode === "verify") {
-      const code = verifyCode.replace(/\s/g, "");
+      const code = (codeOverride ?? verifyCode).replace(/\D/g, "").slice(0, SIGNUP_OTP_LENGTH);
       if (code.length < SIGNUP_OTP_LENGTH) {
         setError(`Enter the ${SIGNUP_OTP_LENGTH}-digit code from your email.`);
         return;
       }
+      if (busy) return;
       setBusy(true);
       setError("");
+      setVerifyCode(code);
       try {
         await verifySignupOtp(preview.email, code);
         await finishAccept();
@@ -233,8 +235,11 @@ export function InviteAcceptFlow({ token }: { token: string }) {
             value={verifyCode}
             disabled={busy}
             autoFocus
-            onChange={setVerifyCode}
-            onComplete={() => void submit()}
+            onChange={(value) => {
+              setVerifyCode(value);
+              setError("");
+            }}
+            onComplete={(value) => void submit(value)}
           />
         )}
         {error ? (
