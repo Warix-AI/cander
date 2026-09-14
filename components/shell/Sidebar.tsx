@@ -831,7 +831,7 @@ function PinnedRow({
           inUse && "font-medium",
         )}
       >
-        <span data-pin-leading className="inline-flex shrink-0">
+        <span data-pin-leading className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible">
           {leading ?? (
             <MessageSquare
               className="h-4 w-4 shrink-0 text-muted-foreground"

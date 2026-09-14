@@ -201,7 +201,7 @@ export function PinsSheet({
                     inUse && "font-medium",
                   )}
                 >
-                  <span data-pin-leading className="inline-flex shrink-0">
+                  <span data-pin-leading className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible">
                     <PinPreviewThumb item={item} />
                   </span>
                   <span className="min-w-0 flex-1 truncate text-left">

@@ -5,7 +5,9 @@ import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import type { PinnedItem } from "@/lib/use-pinned-items";
 import { cn } from "@/lib/utils";
 
-/** Leading mark for a pinned row — connector brand, or live cover / gradient / wash. */
+const CHAT_ORB_SRC = "/cander-orb.png?v=16";
+
+/** Leading mark for a pinned row — connector brand, chat orb, or project cover. */
 export function PinPreviewThumb({
   item,
   className,
@@ -18,6 +20,21 @@ export function PinPreviewThumb({
 }) {
   if (item.kind === "connector") {
     return <ConnectorMark id={item.icon ?? "connector"} size="nav" />;
+  }
+
+  if (item.kind === "thread") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={CHAT_ORB_SRC}
+        alt=""
+        draggable={false}
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 rounded-full object-cover object-center",
+          className,
+        )}
+      />
+    );
   }
 
   return (

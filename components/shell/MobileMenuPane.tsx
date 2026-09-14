@@ -189,7 +189,7 @@ function MenuMain({
           <CanderWordmark className="h-5" />
         </div>
 
-        <div className="flex min-h-[calc(100%-4.5rem)] flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+        <div className="flex min-h-[calc(100%-4.5rem)] flex-col px-3 pb-[calc(env(safe-area-inset-bottom,0px)+2.75rem)] pt-2">
           <div className="flex flex-col gap-[0.1rem]">
             <button
               type="button"
@@ -220,7 +220,7 @@ function MenuMain({
             <PinsSheet onSelect={onSelectPin} hideHeading />
           </div>
 
-          <div className="mt-auto pt-3">
+          <div className="mt-auto pt-3 pb-1">
             <button
               type="button"
               onClick={() => onOpenScreen("general")}
