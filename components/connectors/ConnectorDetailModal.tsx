@@ -124,6 +124,7 @@ export function ConnectorDetailModal({
   onSetPin,
   onPromptSelect,
   renameRequestNonce = 0,
+  connectRequestNonce = 0,
 }: {
   open: boolean;
   onClose: () => void;
@@ -150,6 +151,8 @@ export function ConnectorDetailModal({
   onPromptSelect: (text: string) => void;
   /** Bumped by parent (e.g. mobile header) to open rename. */
   renameRequestNonce?: number;
+  /** Bumped by parent (e.g. sidebar More → +) to open Connect / Add Account. */
+  connectRequestNonce?: number;
 }) {
   const mobile = useMobileShell();
   const liveAccounts = useMemo(
@@ -315,6 +318,25 @@ export function ConnectorDetailModal({
     openNamePrompt("rename");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- renameRequestNonce
   }, [renameRequestNonce]);
+
+  // Sidebar More → +: open existing Connect / Add Account name prompt.
+  useEffect(() => {
+    if (!connectRequestNonce || !open || blocked || oauthPending) return;
+    if (canManageServerConnection) {
+      if (liveAccounts.some((row) => row.status === "active")) {
+        if (canAddAccount) openNamePrompt("add");
+        // Already connected and at account cap — leave detail open; existing UI handles limits.
+        return;
+      }
+      openNamePrompt("connect");
+      return;
+    }
+    // Non-OAuth install path: trigger install via footer Connect / Install.
+    if (!liveAccounts.length && !localInstallOnly) {
+      void onConnect({ displayName: "Account" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connectRequestNonce
+  }, [connectRequestNonce]);
 
   const submitNamePrompt = async () => {
     if (!namePrompt) return;

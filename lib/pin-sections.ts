@@ -110,3 +110,22 @@ export function groupPinnedItemsBySection<T extends PinSectionItem>(
   }
   return out;
 }
+
+/**
+ * Ensure the Apps (connectors) pin folder exists so More discovery can render
+ * even when the user has no connected/pinned apps yet.
+ */
+export function ensureAppsPinSection<T extends PinSectionItem>(
+  groups: { id: PinSectionId; items: T[] }[],
+): { id: PinSectionId; items: T[] }[] {
+  if (groups.some((group) => group.id === "connectors")) return groups;
+  const empty = { id: "connectors" as const, items: [] as T[] };
+  const orderIndex = new Map(
+    PIN_SECTION_ORDER.map((id, index) => [id, index] as const),
+  );
+  const next = [...groups, empty];
+  next.sort(
+    (a, b) => (orderIndex.get(a.id) ?? 99) - (orderIndex.get(b.id) ?? 99),
+  );
+  return next;
+}

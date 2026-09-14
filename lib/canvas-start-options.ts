@@ -1,9 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  AppWindow,
   Bot,
   Image as ImageIcon,
-  Layout,
   Search,
 } from "lucide-react";
 import type { ProjectKind } from "@/lib/space-entities";
@@ -52,33 +50,12 @@ export function canvasStartOptions(): CanvasStartOption[] {
     {
       id: "agent",
       label: "Agent",
-      summary: "Automate work with apps",
+      summary: "Coming soon",
       action: "create-project",
       icon: Bot,
       kind: "automation",
       space: "build",
       title: "Buddy",
-    },
-    {
-      id: "app",
-      label: "App",
-      summary: "Interactive app or tool",
-      action: "create-project",
-      icon: AppWindow,
-      kind: "app",
-      space: "build",
-      title: "New App",
-      disabled: true,
-    },
-    {
-      id: "website",
-      label: "Website",
-      summary: "Marketing site or landing page",
-      action: "create-project",
-      icon: Layout,
-      kind: "site",
-      space: "build",
-      title: "New Website",
       disabled: true,
     },
   ];

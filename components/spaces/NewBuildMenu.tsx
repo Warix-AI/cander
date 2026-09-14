@@ -16,11 +16,10 @@ export const BUILD_CREATE_OPTIONS: {
   {
     kind: "automation",
     label: "Agent",
-    summary: "Automate work with apps",
+    summary: "Coming soon",
     title: "Buddy",
+    disabled: true,
   },
-  { kind: "app", label: "App", summary: "Interactive app or tool", disabled: true },
-  { kind: "site", label: "Website", summary: "Marketing site or landing page", disabled: true },
 ];
 
 type NewBuildMenuProps = {

@@ -35,12 +35,13 @@ const SPACE_VISUAL: Record<
   build: {
     gradient:
       "linear-gradient(270deg, oklch(0.55 0.19 262) 0%, oklch(0.64 0.16 256) 18%, oklch(0.74 0.1 255 / 0.7) 38%, oklch(0.86 0.05 255 / 0.32) 58%, oklch(0.94 0.02 255 / 0.1) 74%, transparent 92%)",
-    words: ["App", "Site", "Preview"],
+    words: ["Search", "Image", "Agent"],
+    comingSoonWords: ["Agent"],
   },
   studio: {
     gradient:
       "linear-gradient(270deg, oklch(0.62 0.16 270) 0%, oklch(0.7 0.14 255) 18%, oklch(0.82 0.08 245 / 0.68) 38%, oklch(0.92 0.04 245 / 0.3) 58%, oklch(0.96 0.02 245 / 0.1) 74%, transparent 92%)",
-    words: ["Image", "App", "Website", "Video"],
+    words: ["Search", "Image", "Video"],
     comingSoonWords: ["Video"],
   },
   work: {
@@ -243,14 +244,12 @@ export function SpaceEmptyCard({
 export const SPACE_EMPTY_COPY = {
   studio: {
     title: "Start on Canvas",
-    description:
-      "Search, make an image, app, or website — all from Canvas.",
+    description: "Search or make an image — all from Canvas.",
     actionLabel: "New project",
   },
   build: {
     title: "Start on Canvas",
-    description:
-      "Search, make an image, app, or website — all from Canvas.",
+    description: "Search or make an image — all from Canvas.",
     actionLabel: "New project",
   },
   research: {

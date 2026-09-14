@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
+import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { PinSectionFolder } from "@/components/shell/PinSectionFolder";
 import { PinnedEmptyHint } from "@/components/shell/PinnedEmptyHint";
@@ -16,10 +17,16 @@ import {
   usePinSectionCollapse,
 } from "@/lib/pin-display-prefs";
 import {
+  ensureAppsPinSection,
   groupPinnedItemsBySection,
   PIN_SECTION_ICONS,
   PIN_SECTION_LABEL,
 } from "@/lib/pin-sections";
+import {
+  getAppsMoreOpenServerSnapshot,
+  getAppsMoreOpenSnapshot,
+  subscribeAppsMoreOpen,
+} from "@/lib/apps-more-prefs";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
 import {
   skipMobilePagerTransitionOnce,
@@ -42,18 +49,26 @@ export function PinsSheet({
     openThread,
     openProject,
     openConnector,
+    openConnectorConnect,
     newChat,
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
   const { isCollapsed, toggle: togglePinSection, open: openPinSection } =
     usePinSectionCollapse();
+  const appsMoreOpen = useSyncExternalStore(
+    subscribeAppsMoreOpen,
+    getAppsMoreOpenSnapshot,
+    getAppsMoreOpenServerSnapshot,
+  );
 
   const pinGroups = useMemo(
     () =>
-      groupPinnedItemsBySection(pinnedItems, {
-        visibleKinds: pinPrefs.visible,
-      }),
+      ensureAppsPinSection(
+        groupPinnedItemsBySection(pinnedItems, {
+          visibleKinds: pinPrefs.visible,
+        }),
+      ),
     [pinnedItems, pinPrefs],
   );
 
@@ -70,6 +85,11 @@ export function PinsSheet({
     }
     // A pin represents the item itself, so open it at its destination panel.
     // The chat remains immediately available with the normal left swipe.
+    onSelect({ landOnPanel: true });
+  };
+
+  const connectFromMore = (id: string) => {
+    openConnectorConnect(id);
     onSelect({ landOnPanel: true });
   };
 
@@ -148,9 +168,9 @@ export function PinsSheet({
               }
             }}
             activeKey={treeActiveKey}
-            deps={group.items
+            deps={`${group.items
               .map((item) => `${item.kind}:${item.id}`)
-              .join(",")}
+              .join(",")}|more:${group.id === "connectors" ? appsMoreOpen : false}`}
             headerClassName={cn(
               mobileMenuRowClass,
               sectionActive && mobileMenuRowActiveClass,
@@ -190,6 +210,13 @@ export function PinsSheet({
                 </button>
               );
             })}
+            {group.id === "connectors" ? (
+              <AppsMoreSection
+                listedIds={group.items.map((item) => item.id)}
+                onConnect={connectFromMore}
+                rowClassName={cn(mobileMenuRowClass, "pl-1.5")}
+              />
+            ) : null}
           </PinSectionFolder>
         );
       })}

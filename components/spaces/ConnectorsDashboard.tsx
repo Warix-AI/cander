@@ -48,6 +48,11 @@ import {
 } from "@/lib/api/connector-client";
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
+import {
+  getConnectorConnectIntentServerSnapshot,
+  getConnectorConnectIntentSnapshot,
+  subscribeConnectorConnectIntent,
+} from "@/lib/connector-connect-intent";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import {
   appConnectorById,
@@ -109,10 +114,16 @@ export function ConnectorsDashboard() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const [detailRenameNonce, setDetailRenameNonce] = useState(0);
+  const [detailConnectNonce, setDetailConnectNonce] = useState(0);
   const [connectionsLoading, setConnectionsLoading] = useState(
     () => getDataBackend() !== "local",
   );
   const searchRef = useRef<HTMLInputElement>(null);
+  const connectIntent = useSyncExternalStore(
+    subscribeConnectorConnectIntent,
+    getConnectorConnectIntentSnapshot,
+    getConnectorConnectIntentServerSnapshot,
+  );
 
   const ensureConnectorPinned = (id: string) => {
     if (!pinTier("connector", id)) {
@@ -403,6 +414,19 @@ export function ConnectorsDashboard() {
     setDetailConnectorId(id);
     void refreshConnections();
   };
+
+  const handledConnectNonceRef = useRef(0);
+
+  // Sidebar More → +: open this app's detail in Connect / Add Account state.
+  useEffect(() => {
+    if (!connectIntent?.connectorId) return;
+    if (handledConnectNonceRef.current === connectIntent.nonce) return;
+    handledConnectNonceRef.current = connectIntent.nonce;
+    setDetailConnectorId(connectIntent.connectorId);
+    setDetailConnectNonce(connectIntent.nonce);
+    void refreshConnections();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intent nonce drives requests
+  }, [connectIntent?.nonce, connectIntent?.connectorId]);
 
   const selectConnector = (id: string) => {
     // The General catalog opens its own connector detail. Pinned connector
@@ -836,6 +860,7 @@ export function ConnectorsDashboard() {
         }}
         onSetPin={() => setPin("connector", detailItem.id, "primary")}
         renameRequestNonce={detailRenameNonce}
+        connectRequestNonce={detailConnectNonce}
         onPromptSelect={(text) => {
           setComposerPendingInput({ text, source: "quick-ask" });
           newChat();

@@ -15,6 +15,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { AccountMenu } from "@/components/shell/AccountMenu";
+import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { PinControl } from "@/components/shell/PinControl";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import {
@@ -42,10 +43,16 @@ import {
   usePinSectionCollapse,
 } from "@/lib/pin-display-prefs";
 import {
+  ensureAppsPinSection,
   groupPinnedItemsBySection,
   PIN_SECTION_ICONS,
   PIN_SECTION_LABEL,
 } from "@/lib/pin-sections";
+import {
+  getAppsMoreOpenServerSnapshot,
+  getAppsMoreOpenSnapshot,
+  subscribeAppsMoreOpen,
+} from "@/lib/apps-more-prefs";
 import { spaceIconTint } from "@/lib/space-icons";
 import { type SidebarNavId, isExtraNavId, isComingSoonNav, navSpaceMatches } from "@/lib/spaces";
 import {
@@ -96,6 +103,7 @@ export function Sidebar() {
     openThread,
     openProject,
     openConnector,
+    openConnectorConnect,
     openOverlay,
     connectorId,
     entitlements,
@@ -116,6 +124,11 @@ export function Sidebar() {
   const { prefs: pinPrefs } = usePinDisplayPrefs();
   const { isCollapsed, toggle: togglePinSection, open: openPinSection, closeAll: closePinSections } =
     usePinSectionCollapse();
+  const appsMoreOpen = useSyncExternalStore(
+    subscribeAppsMoreOpen,
+    getAppsMoreOpenSnapshot,
+    getAppsMoreOpenServerSnapshot,
+  );
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
     getWorkspaceCatalogSnapshot,
@@ -263,9 +276,11 @@ export function Sidebar() {
 
   const pinGroups = useMemo(
     () =>
-      groupPinnedItemsBySection(pinnedItems, {
-        visibleKinds: pinPrefs.visible,
-      }),
+      ensureAppsPinSection(
+        groupPinnedItemsBySection(pinnedItems, {
+          visibleKinds: pinPrefs.visible,
+        }),
+      ),
     [pinnedItems, pinPrefs],
   );
 
@@ -588,9 +603,9 @@ export function Sidebar() {
                             }
                           }}
                           activeKey={treeActiveKey}
-                          deps={group.items
+                          deps={`${group.items
                             .map((item) => `${item.kind}:${item.id}`)
-                            .join(",")}
+                            .join(",")}|more:${group.id === "connectors" ? appsMoreOpen : false}`}
                           headerClassName={pinSectionHeaderClass(sectionActive)}
                           iconClassName="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                         >
@@ -608,6 +623,12 @@ export function Sidebar() {
                             </button>
                           ) : null}
                           {group.items.map((item) => renderPinnedRow(item))}
+                          {group.id === "connectors" ? (
+                            <AppsMoreSection
+                              listedIds={group.items.map((item) => item.id)}
+                              onConnect={(id) => openConnectorConnect(id)}
+                            />
+                          ) : null}
                         </PinSectionFolder>
                       );
                     })}

@@ -47,6 +47,7 @@ import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import { connectionsForConnectorLive } from "@/lib/connector-connections-store";
+import { requestConnectorConnect } from "@/lib/connector-connect-intent";
 import { isUiConnectedStatus } from "@/lib/connectors/authz";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
@@ -511,6 +512,11 @@ type AppContextValue = {
   openShared: () => void;
   openSettings: (tab?: SettingsTab, opts?: { hub?: boolean }) => void;
   openConnector: (id: string) => void;
+  /**
+   * Open the Apps catalog detail for this app and start Connect / Add Account
+   * (existing modal flow — no parallel connection system).
+   */
+  openConnectorConnect: (id: string) => void;
   /** Re-select the persistent one-chat-per-connector thread. */
   resumeConnectorChat: () => void;
   /** Re-select the observe-only Cander ↔ Expert runtime thread. */
@@ -5844,6 +5850,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [pushTarget, workspaceId, setThreads]);
 
+  /**
+   * Sidebar More → +: land on this app's existing Connect / Add Account UI
+   * in the Apps catalog (ConnectorDetailModal), not a parallel flow.
+   */
+  const openConnectorConnect = useCallback(
+    (id: string) => {
+      const connectorId = id.trim();
+      if (!connectorId) return;
+      requestConnectorConnect(connectorId);
+      openSpace("connectors");
+      setMobileSurface("panel");
+    },
+    [openSpace],
+  );
+
   /** Re-bind the one chat for the open connector (Chat|Panel toggle / remount). */
   const resumeConnectorChat = useCallback(() => {
     if (!connectorId) return;
@@ -6175,6 +6196,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openShared,
       openSettings,
       openConnector,
+      openConnectorConnect,
       resumeConnectorChat,
       resumeAgentRuntimeChat,
       openJob,
@@ -6338,6 +6360,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openShared,
       openSettings,
       openConnector,
+      openConnectorConnect,
       resumeConnectorChat,
       resumeAgentRuntimeChat,
       openJob,
