@@ -15,6 +15,41 @@ const glassShell = cn(
   CONNECTOR_CONTROL_RADIUS,
 );
 
+/** Account photo when set; otherwise the product mark. */
+export function ConnectorAccountIcon({
+  connectorIcon,
+  iconUrl,
+  label,
+  className,
+}: {
+  connectorIcon: string;
+  iconUrl?: string | null;
+  label: string;
+  className?: string;
+}) {
+  if (iconUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={iconUrl}
+        alt=""
+        draggable={false}
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 rounded-full object-cover",
+          className,
+        )}
+      />
+    );
+  }
+  return (
+    <ConnectorMark
+      id={connectorIcon}
+      size="nav"
+      className={cn("shrink-0 opacity-80", className)}
+    />
+  );
+}
+
 /**
  * Account selector — only shown once at least one account exists.
  * Empty/connect CTA lives in the detail header actions (filter slot).
@@ -72,10 +107,10 @@ export function ConnectorAccountBar({
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <ConnectorMark
-                  id={connectorIcon}
-                  size="nav"
-                  className="shrink-0 opacity-80"
+                <ConnectorAccountIcon
+                  connectorIcon={connectorIcon}
+                  iconUrl={account.iconUrl}
+                  label={label}
                 />
                 <span className="min-w-0 truncate">{label}</span>
               </button>

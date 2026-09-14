@@ -47,7 +47,8 @@ import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import { connectionsForConnectorLive } from "@/lib/connector-connections-store";
-import { requestConnectorConnect } from "@/lib/connector-connect-intent";
+import { resolveActiveConnectorAccount } from "@/lib/connector-active-account";
+import { requestConnectorConnect, requestConnectorsCatalog } from "@/lib/connector-connect-intent";
 import { isUiConnectedStatus } from "@/lib/connectors/authz";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
 import { resolveChatImageUrl } from "@/lib/chat-attachment-image-url";
@@ -2153,8 +2154,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           thread?.connectorId ||
           null;
         if (cid) {
-          const active = connectionsForConnectorLive(workspaceId, cid).find(
-            (row) => isUiConnectedStatus(row.status),
+          const active = resolveActiveConnectorAccount(
+            workspaceId,
+            cid,
+            connectionsForConnectorLive(workspaceId, cid),
+            isUiConnectedStatus,
           );
           if (active) {
             selectedConnectionId = active.id;
@@ -4247,9 +4251,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const chatActive = Boolean(threadId) || drafting;
 
-    // Connectors catalog is the nav destination — if a connector detail is open,
-    // always leave it and show the connectors screen (don't early-return on chat).
+    // Connectors catalog is the nav destination — if a connector detail/chat is open,
+    // always leave it and show the Apps catalog (don't early-return on chat).
     if (dest === "connectors" && connectorId) {
+      requestConnectorsCatalog();
       setView("space");
       setSpaceId("connectors");
       setConnectorId(null);

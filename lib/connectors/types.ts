@@ -17,6 +17,11 @@ export type ConnectorConnection = {
   /** Candor-only label (1–10 chars). Not a provider identity. */
   displayName: string;
   /**
+   * Optional Candor-only account photo URL (storage). Shown next to the
+   * account name in account chips/headers — not the product app mark.
+   */
+  iconUrl: string | null;
+  /**
    * True when the authenticated viewer owns this row.
    * Shared connections from other members are false.
    */

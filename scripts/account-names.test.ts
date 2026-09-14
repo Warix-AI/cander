@@ -41,7 +41,7 @@ test("account limit is three", () => {
   assert.equal(canAddAnotherConnectorAccount(3), false);
 });
 
-test("default Account label shows as Rename in nav", async () => {
+test("default Account label shows as Edit in nav", async () => {
   const {
     connectorAccountNavLabel,
     connectorAccountNeedsRename,
@@ -50,7 +50,7 @@ test("default Account label shows as Rename in nav", async () => {
   assert.equal(connectorAccountNeedsRename("Account"), true);
   assert.equal(connectorAccountNeedsRename("  "), true);
   assert.equal(connectorAccountNeedsRename("Team"), false);
-  assert.equal(connectorAccountNavLabel("Account"), "Rename");
+  assert.equal(connectorAccountNavLabel("Account"), "Edit");
   assert.equal(connectorAccountNavLabel("Team"), "Team");
   assert.equal(connectorAccountTabLabel("Personal", "Gmail"), "Personal");
   assert.equal(connectorAccountTabLabel("Account", "Gmail"), "Gmail");

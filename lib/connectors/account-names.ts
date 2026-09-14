@@ -103,11 +103,11 @@ export function connectorAccountNeedsRename(
   return !name || name.toLowerCase() === CONNECTOR_DEFAULT_DISPLAY_NAME.toLowerCase();
 }
 
-/** Nav tab label — unnamed / default accounts show “Rename”. */
+/** Nav tab label — unnamed / default accounts show “Edit”. */
 export function connectorAccountNavLabel(
   displayName: string | null | undefined,
 ): string {
-  if (connectorAccountNeedsRename(displayName)) return "Rename";
+  if (connectorAccountNeedsRename(displayName)) return "Edit";
   return String(displayName).trim();
 }
 

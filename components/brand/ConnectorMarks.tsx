@@ -108,6 +108,7 @@ const BRAND_ICON_SRC: Record<string, string> = {
   salesforce: "/connectors/salesforce.png",
   linear: "/connectors/linear.png",
   jira: "/connectors/jira.png",
+  praise: "/connectors/praise.png",
 };
 
 function BrandAssetMark({
@@ -783,5 +784,6 @@ const marks: Record<
   teams: makeBrandMark("teams", "Microsoft Teams"),
   salesforce: makeBrandMark("salesforce", "Salesforce"),
   shopify: makeBrandMark("shopify", "Shopify"),
+  praise: makeBrandMark("praise", "Praise"),
   handshake: HandshakeMark,
 };

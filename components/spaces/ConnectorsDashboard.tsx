@@ -49,6 +49,7 @@ import {
 import { ConnectorDetailModal } from "@/components/connectors/ConnectorDetailModal";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import {
+  clearConnectorConnectIntent,
   getConnectorConnectIntentServerSnapshot,
   getConnectorConnectIntentSnapshot,
   getConnectorsCatalogIntentServerSnapshot,
@@ -56,6 +57,10 @@ import {
   subscribeConnectorConnectIntent,
   subscribeConnectorsCatalogIntent,
 } from "@/lib/connector-connect-intent";
+import {
+  isConnectorComingSoon,
+  isExclusiveConnector,
+} from "@/lib/connectors/exclusive";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import {
   appConnectorById,
@@ -66,6 +71,7 @@ import { setComposerPendingInput } from "@/lib/composer-seed";
 import { getDataBackend } from "@/lib/data-backend";
 
 const SECTION_ORDER = [
+  "Exclusive",
   "Featured",
   "Communication",
   "Productivity",
@@ -74,11 +80,12 @@ const SECTION_ORDER = [
 ] as const;
 
 const connectorScopeOptions = [
-  { id: "connectors", label: "Apps" },
+  { id: "connectors", label: "All" },
+  { id: "exclusive", label: "Exclusive" },
   { id: "installed", label: "Installed" },
 ] as const;
 
-type ConnectorsView = "connectors" | "installed";
+type ConnectorsView = "connectors" | "exclusive" | "installed";
 
 export function ConnectorsDashboard() {
   const {
@@ -277,11 +284,8 @@ export function ConnectorsDashboard() {
 
   const connectConnector = async (id: string) => {
     if (blockedIds.includes(id)) return;
-    const pendingOauth = appConnectorById(id)?.oauthReady === false;
-    if (pendingOauth) {
-      setInfo(
-        `${appConnectorById(id)?.name ?? id} needs a custom Composio OAuth app before Connect works.`,
-      );
+    const app = apps.find((entry) => entry.id === id);
+    if (app && isConnectorComingSoon(app)) {
       openConnectorDetail(id);
       return;
     }
@@ -425,12 +429,15 @@ export function ConnectorsDashboard() {
   const handledConnectNonceRef = useRef(0);
   const handledCatalogNonceRef = useRef(0);
 
-  // Sidebar More → +: open this app's detail screen (no auto name prompt).
+  // Sidebar More / connect intent: open this app's detail once, then clear so
+  // revisiting Apps does not auto-reopen from a stale session intent.
   useEffect(() => {
     if (!connectIntent?.connectorId) return;
     if (handledConnectNonceRef.current === connectIntent.nonce) return;
     handledConnectNonceRef.current = connectIntent.nonce;
-    setDetailConnectorId(connectIntent.connectorId);
+    const id = connectIntent.connectorId;
+    clearConnectorConnectIntent();
+    setDetailConnectorId(id);
     void refreshConnections();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intent nonce drives requests
   }, [connectIntent?.nonce, connectIntent?.connectorId]);
@@ -440,6 +447,7 @@ export function ConnectorsDashboard() {
     if (!catalogIntent?.nonce) return;
     if (handledCatalogNonceRef.current === catalogIntent.nonce) return;
     handledCatalogNonceRef.current = catalogIntent.nonce;
+    clearConnectorConnectIntent();
     setDetailConnectorId(null);
   }, [catalogIntent?.nonce]);
 
@@ -530,7 +538,7 @@ export function ConnectorsDashboard() {
       detailConnected && isOauthConnectorId(detailId);
     if (canRename) {
       actions.push({
-        label: "Rename",
+        label: "Edit",
         icon: Pencil,
         onClick: () => setDetailRenameNonce((n) => n + 1),
       });
@@ -574,10 +582,18 @@ export function ConnectorsDashboard() {
   const installed = apps.filter(
     (item) => item.accountInstalled && !blockedIds.includes(item.id),
   );
+  const exclusive = apps.filter(
+    (item) => isExclusiveConnector(item) && !blockedIds.includes(item.id),
+  );
 
   const needle = query.trim().toLowerCase();
   const directory = useMemo(() => {
-    const pool = catalogView === "installed" ? installed : apps;
+    const pool =
+      catalogView === "installed"
+        ? installed
+        : catalogView === "exclusive"
+          ? exclusive
+          : apps;
     return pool.filter((item) => {
       if (blockedIds.includes(item.id)) return false;
       if (!needle) return true;
@@ -587,12 +603,17 @@ export function ConnectorsDashboard() {
         item.category.toLowerCase().includes(needle)
       );
     });
-  }, [apps, blockedIds, installed, needle, catalogView]);
+  }, [apps, blockedIds, exclusive, installed, needle, catalogView]);
 
   const sections = useMemo(() => {
     if (catalogView === "installed") {
       return directory.length
         ? [{ title: "Installed", items: directory }]
+        : [];
+    }
+    if (catalogView === "exclusive") {
+      return directory.length
+        ? [{ title: "Exclusive", items: directory }]
         : [];
     }
     const featured = directory.filter((item) => item.featured);
@@ -627,7 +648,13 @@ export function ConnectorsDashboard() {
         <DashFrame
           banner={false}
           title="Apps"
-          subtitle="Connect apps to your workspace."
+          subtitle={
+            catalogView === "exclusive"
+              ? "Connect exclusive apps to your workspace."
+              : catalogView === "installed"
+                ? "Installed apps in your workspace."
+                : "Connect apps to your workspace."
+          }
         >
         {workAttachFor ? (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-border bg-muted/50 px-4 py-3">
@@ -820,7 +847,9 @@ export function ConnectorsDashboard() {
           <p className="mt-10 text-[13px] text-muted-foreground">
             {catalogView === "installed"
               ? "No apps connected yet."
-              : "No apps match that search."}
+              : catalogView === "exclusive"
+                ? "No exclusive apps yet."
+                : "No apps match that search."}
           </p>
         )}
         </DashFrame>
@@ -853,17 +882,18 @@ export function ConnectorsDashboard() {
             connectionId || undefined,
           );
         }}
-        onRename={async (connectionId, displayName) => {
+        onRename={async (connectionId, displayName, iconUrl) => {
           try {
             const updated = await renameConnectorConnection({
               workspaceId,
               connectionId,
               displayName,
+              iconUrl,
             });
             patchConnectorConnectionForWorkspace(workspaceId, updated);
           } catch (err) {
             setInfo(
-              err instanceof Error ? err.message : "Could not rename account.",
+              err instanceof Error ? err.message : "Could not update account.",
             );
           }
         }}
@@ -917,7 +947,7 @@ function DirectoryItem({
     !hasCurrentPending &&
     item.accountConnections?.some((row) => row.status === "active");
   const isOauth = isOauthConnectorId(item.id);
-  const oauthPending = appConnectorById(item.id)?.oauthReady === false;
+  const comingSoon = isConnectorComingSoon(item);
 
   const statusLabel = item.pending
     ? "Connecting"
@@ -925,7 +955,7 @@ function DirectoryItem({
       ? "Connected"
       : connectedElsewhere
         ? "Connected in another workspace"
-      : oauthPending
+      : comingSoon
         ? "Coming soon"
         : !isOauth && item.installed
           ? "Installed"
@@ -976,7 +1006,7 @@ function DirectoryItem({
           <p className="mt-0.5 truncate text-[12px] leading-snug text-muted-foreground">
             {item.pending
               ? "Authorization in progress — finish connecting to activate."
-              : oauthPending
+              : comingSoon && !isExclusiveConnector(item)
                 ? "Custom OAuth setup required before Connect works."
                 : item.description}
           </p>
@@ -985,7 +1015,7 @@ function DirectoryItem({
       <div className="flex shrink-0 items-center self-center">
         {isConnected ||
         item.pending ||
-        oauthPending ||
+        comingSoon ||
         (!isOauth && item.installed) ? null : (
           <button
             type="button"

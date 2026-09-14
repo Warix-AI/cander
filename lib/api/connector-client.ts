@@ -74,6 +74,8 @@ export async function renameConnectorConnection(input: {
   workspaceId: string;
   connectionId: string;
   displayName: string;
+  /** undefined = unchanged; null = clear; string = set. */
+  iconUrl?: string | null;
 }): Promise<ConnectorConnection> {
   const headers = await authHeaders();
   const response = await fetch(
@@ -84,12 +86,13 @@ export async function renameConnectorConnection(input: {
       body: JSON.stringify({
         workspaceId: input.workspaceId,
         displayName: input.displayName,
+        iconUrl: input.iconUrl,
       }),
     },
   );
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error ?? "Could not rename account.");
+    throw new Error(data.error ?? "Could not update account.");
   }
   return data.connection as ConnectorConnection;
 }

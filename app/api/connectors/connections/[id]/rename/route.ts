@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
 
-  let body: { workspaceId?: string; displayName?: string };
+  let body: { workspaceId?: string; displayName?: string; iconUrl?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -50,6 +50,7 @@ export async function PATCH(request: Request, { params }: Params) {
       ownerId: ctx.user.id,
       connectionId: connectionId.trim(),
       displayName: body.displayName ?? "",
+      iconUrl: body.iconUrl,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });
@@ -57,7 +58,7 @@ export async function PATCH(request: Request, { params }: Params) {
     return NextResponse.json({ ok: true, connection: result.connection });
   } catch (err) {
     const message =
-      err instanceof Error ? err.message : "Could not rename connection.";
+      err instanceof Error ? err.message : "Could not update account.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

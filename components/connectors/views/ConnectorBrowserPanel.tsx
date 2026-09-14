@@ -56,6 +56,12 @@ import {
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
 import {
+  getConnectorActiveAccountServerSnapshot,
+  getConnectorActiveAccountSnapshot,
+  resolveActiveConnectorAccount,
+  subscribeConnectorActiveAccount,
+} from "@/lib/connector-active-account";
+import {
   setConnectorBrowseFocus,
 } from "@/lib/connector-focus";
 import {
@@ -113,10 +119,18 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     getConnectorConnectionsSnapshot,
     getConnectorConnectionsServerSnapshot,
   );
+  useSyncExternalStore(
+    subscribeConnectorActiveAccount,
+    getConnectorActiveAccountSnapshot,
+    getConnectorActiveAccountServerSnapshot,
+  );
   const activeAccount =
-    connectionsForConnectorLive(workspaceId, connectorId).find((row) =>
-      isUiConnectedStatus(row.status),
-    ) ?? null;
+    resolveActiveConnectorAccount(
+      workspaceId,
+      connectorId,
+      connectionsForConnectorLive(workspaceId, connectorId),
+      isUiConnectedStatus,
+    );
   const title = connectorAccountTabLabel(
     activeAccount?.displayName,
     connectorTitle,
@@ -425,6 +439,9 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
               active={tab.id === active.id}
               onSelect={() => selectTab(tab.id)}
               onClose={() => closeTab(tab.id)}
+              accountIconUrl={
+                tab.kind === "connector" ? activeAccount?.iconUrl : null
+              }
             />
           ))}
           <BrowserChromeTooltip label="New tab">
@@ -978,11 +995,14 @@ function ConnectorTabButton({
   active,
   onSelect,
   onClose,
+  accountIconUrl,
 }: {
   tab: ConnectorBrowserTab;
   active: boolean;
   onSelect: () => void;
   onClose: () => void;
+  /** Custom account photo when the pinned connector tab shows an account name. */
+  accountIconUrl?: string | null;
 }) {
   const canClose = !tab.pinned && tab.kind !== "connector";
   return (
@@ -1000,7 +1020,17 @@ function ConnectorTabButton({
         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
       >
         {tab.kind === "connector" && tab.connectorId ? (
-          <ConnectorMark id={tab.connectorId} size="xs" className="!h-3.5 !w-3.5" />
+          accountIconUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={accountIconUrl}
+              alt=""
+              draggable={false}
+              className="h-3.5 w-3.5 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <ConnectorMark id={tab.connectorId} size="xs" className="!h-3.5 !w-3.5" />
+          )
         ) : (
           <FaviconImage
             url={tab.url}

@@ -796,6 +796,16 @@ function conn(
 
 export const connectors: Connector[] = [
   conn({
+    id: "praise",
+    name: "Praise",
+    category: "Exclusive",
+    description: "Reputation management platform",
+    icon: "praise",
+    exclusive: true,
+    connectable: false,
+    actions: ["Reputation", "Reviews", "Mentions"],
+  }),
+  conn({
     id: "gmail",
     name: "Gmail",
     category: "Communication",

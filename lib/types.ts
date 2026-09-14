@@ -565,6 +565,15 @@ export type Connector = {
   icon: string;
   installed: boolean;
   featured?: boolean;
+  /**
+   * Built only for Cander (Exclusive catalog). Not a third-party OAuth app.
+   */
+  exclusive?: boolean;
+  /**
+   * When false, catalog/detail show Coming soon and Connect/Install is disabled.
+   * Defaults to true when omitted.
+   */
+  connectable?: boolean;
   scope: ConnectorScope;
   accounts: ConnectorAccount[];
   actions: string[];

@@ -1,10 +1,31 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type TouchEventHandler } from "react";
-import { Blocks, ChevronLeft, Ellipsis, ExternalLink, Globe, Hammer, Image as ImageIcon, PanelsTopLeft, Plus, Search, Share, SquarePen, Trash2 } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type TouchEventHandler,
+} from "react";
+import {
+  Blocks,
+  ChevronDown,
+  ChevronLeft,
+  Ellipsis,
+  ExternalLink,
+  Globe,
+  Hammer,
+  Image as ImageIcon,
+  PanelsTopLeft,
+  Plus,
+  Search,
+  Share,
+  SquarePen,
+  Trash2,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
-import { ConnectorMark } from "@/components/brand/ConnectorMarks";
+import { ConnectorAccountIcon } from "@/components/connectors/ConnectorAccountBar";
 import {
   MobileBottomSheet,
   MobileHeaderActionsPopover,
@@ -46,6 +67,20 @@ import {
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
 import {
+  connectionsForConnectorLive,
+  getConnectorConnectionsServerSnapshot,
+  getConnectorConnectionsSnapshot,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
+import {
+  getConnectorActiveAccountServerSnapshot,
+  getConnectorActiveAccountSnapshot,
+  resolveActiveConnectorAccount,
+  setActiveConnectorAccountId,
+  subscribeConnectorActiveAccount,
+} from "@/lib/connector-active-account";
+import { isUiConnectedStatus } from "@/lib/connectors/authz";
+import {
   MOBILE_GLASS_SEGMENT,
   MOBILE_GLASS_SEGMENT_ACTIVE,
   mobileChromeButtonClass,
@@ -84,6 +119,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     jobId,
     skillId,
     entitlements,
+    workspaceId,
     mobileSurface,
     mobileContentSurface,
     setMobileSurface,
@@ -116,8 +152,20 @@ export function MobileAppChrome({ className }: { className?: string }) {
     getWorkspaceCatalogSnapshot,
     getWorkspaceCatalogServerSnapshot,
   );
+  useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsSnapshot,
+    getConnectorConnectionsServerSnapshot,
+  );
+  useSyncExternalStore(
+    subscribeConnectorActiveAccount,
+    getConnectorActiveAccountSnapshot,
+    getConnectorActiveAccountServerSnapshot,
+  );
   const [actionsOpen, setActionsOpen] = useState(false);
   const [panelMenuOpen, setPanelMenuOpen] = useState(false);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
+  const accountSwitcherRef = useRef<HTMLDivElement>(null);
   const headerMenuOpen = actionsOpen || panelMenuOpen;
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -150,6 +198,23 @@ export function MobileAppChrome({ className }: { className?: string }) {
     (PRIMARY_NAV_SPACES as readonly string[]).includes(navSpaceId as string);
   const inConnector = spaceId === "connectors" && Boolean(connectorId);
   const inConnectorsSpace = spaceId === "connectors";
+  const connectorAccounts =
+    inConnector && connectorId
+      ? connectionsForConnectorLive(workspaceId, connectorId).filter((row) =>
+          isUiConnectedStatus(row.status),
+        )
+      : [];
+  const activeConnectorAccount =
+    inConnector && connectorId
+      ? resolveActiveConnectorAccount(
+          workspaceId,
+          connectorId,
+          connectionsForConnectorLive(workspaceId, connectorId),
+          isUiConnectedStatus,
+        )
+      : null;
+  const canSwitchConnectorAccounts =
+    inConnector && Boolean(connectorId) && connectorAccounts.length > 0;
   const isWorkItemBrowser = isWorkItemBrowserProjectId(projectId);
   const entityOpen =
     (Boolean(projectId) && !isWorkItemBrowser) || inConnector;
@@ -459,6 +524,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
   };
 
   const openProjectActions = () => {
+    setAccountSwitcherOpen(false);
     setActionsOpen(true);
     try {
       getNativeCapabilities().haptics.impact("select");
@@ -467,10 +533,94 @@ export function MobileAppChrome({ className }: { className?: string }) {
     }
   };
 
+  const openConnectorAccountSwitcher = () => {
+    setPanelMenuOpen(false);
+    setActionsOpen(false);
+    setAccountSwitcherOpen(true);
+    try {
+      getNativeCapabilities().haptics.impact("select");
+    } catch {
+      /* never block */
+    }
+  };
+
+  useEffect(() => {
+    if (!accountSwitcherOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const node = event.target as Node | null;
+      if (node && accountSwitcherRef.current?.contains(node)) return;
+      setAccountSwitcherOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [accountSwitcherOpen]);
+
+  useEffect(() => {
+    if (!canSwitchConnectorAccounts) setAccountSwitcherOpen(false);
+  }, [canSwitchConnectorAccounts, connectorId]);
+
+  const connectorAccountSwitcher = canSwitchConnectorAccounts &&
+    accountSwitcherOpen &&
+    connectorId ? (
+    <div
+      ref={accountSwitcherRef}
+      role="listbox"
+      aria-label="Switch account"
+      className={cn(
+        "flex w-full min-w-0 max-w-full items-center gap-0.5 overflow-x-auto rounded-full p-1",
+        MOBILE_GLASS_SEGMENT,
+      )}
+    >
+      {connectorAccounts.map((account) => {
+        const active = account.id === activeConnectorAccount?.id;
+        const label =
+          String(account.displayName ?? "").trim() || "Account";
+        return (
+          <button
+            key={account.id}
+            type="button"
+            role="option"
+            aria-selected={active}
+            title={label}
+            onClick={() => {
+              setActiveConnectorAccountId(
+                workspaceId,
+                connectorId,
+                account.id,
+              );
+              setAccountSwitcherOpen(false);
+              try {
+                getNativeCapabilities().haptics.impact("select");
+              } catch {
+                /* never block */
+              }
+            }}
+            className={cn(
+              "inline-flex h-9 max-w-[9rem] shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium tracking-[-0.01em] transition-colors",
+              active
+                ? MOBILE_GLASS_SEGMENT_ACTIVE
+                : "text-muted-foreground",
+            )}
+          >
+            <ConnectorAccountIcon
+              connectorIcon={connectorId}
+              iconUrl={account.iconUrl}
+              label={label}
+              className="!h-4 !w-4"
+            />
+            <span className="min-w-0 truncate">{label}</span>
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
   const centerChrome =
-    !headerMenuOpen &&
-    !onMenuMain &&
-    (inChromeSub || showProjectTools || showSpaceToggle) ? (
+    connectorAccountSwitcher
+      ? connectorAccountSwitcher
+      : !headerMenuOpen &&
+          !onMenuMain &&
+          (inChromeSub || showProjectTools || showSpaceToggle) ? (
       inChromeSub ? (
         <p className="truncate text-center text-[15px] font-medium tracking-[-0.01em]">
           {subTitle}
@@ -547,37 +697,63 @@ export function MobileAppChrome({ className }: { className?: string }) {
           >
             Chat
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={surface === "panel"}
-            aria-label={
-              inConnector
-                ? "App panel"
-                : inConnectorsSpace
-                  ? "Apps"
-                  : panelTabLabel
-            }
-            onClick={() => setChatOrPanel("panel")}
+          <div
             className={cn(
-              "inline-flex min-w-11 items-center justify-center rounded-full px-4 py-2 text-[14px] font-medium tracking-[-0.01em] transition-colors",
+              "inline-flex items-center rounded-full transition-colors",
               surface === "panel"
                 ? MOBILE_GLASS_SEGMENT_ACTIVE
                 : "text-muted-foreground",
             )}
           >
-            {inConnector && connectorId ? (
-              <ConnectorMark
-                id={connectorId}
-                size="nav"
-                className="!h-4 !w-4"
-              />
-            ) : inConnectorsSpace ? (
-              <Blocks className="h-4 w-4" strokeWidth={1.8} />
-            ) : (
-              <span className="max-w-[9rem] truncate">{panelTabLabel}</span>
-            )}
-          </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={surface === "panel"}
+              aria-label={
+                inConnector
+                  ? "App panel"
+                  : inConnectorsSpace
+                    ? "Apps"
+                    : panelTabLabel
+              }
+              onClick={() => setChatOrPanel("panel")}
+              className={cn(
+                "inline-flex min-w-11 items-center justify-center rounded-full py-2 text-[14px] font-medium tracking-[-0.01em]",
+                canSwitchConnectorAccounts ? "pl-3 pr-1" : "px-4",
+              )}
+            >
+              {inConnector && connectorId ? (
+                <ConnectorAccountIcon
+                  connectorIcon={connectorId}
+                  iconUrl={activeConnectorAccount?.iconUrl}
+                  label={
+                    String(activeConnectorAccount?.displayName ?? "").trim() ||
+                    "Account"
+                  }
+                  className="!h-4 !w-4"
+                />
+              ) : inConnectorsSpace ? (
+                <Blocks className="h-4 w-4" strokeWidth={1.8} />
+              ) : (
+                <span className="max-w-[9rem] truncate">{panelTabLabel}</span>
+              )}
+            </button>
+            {canSwitchConnectorAccounts ? (
+              <button
+                type="button"
+                aria-label="Switch account"
+                aria-expanded={accountSwitcherOpen}
+                aria-haspopup="listbox"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openConnectorAccountSwitcher();
+                }}
+                className="inline-flex items-center justify-center rounded-full py-2 pl-0.5 pr-2.5"
+              >
+                <ChevronDown className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null
     ) : null;
@@ -596,7 +772,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
           className,
         )}
       >
-        <div className="grid h-12 grid-cols-[1fr_auto_1fr] items-center px-3">
+        <div
+          className={cn(
+            "grid h-12 items-center px-3",
+            accountSwitcherOpen && canSwitchConnectorAccounts
+              ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+              : "grid-cols-[1fr_auto_1fr]",
+          )}
+        >
           <div
             className={cn(
               "relative z-10 justify-self-start",
@@ -625,7 +808,14 @@ export function MobileAppChrome({ className }: { className?: string }) {
             </button>
           </div>
 
-          <div className="relative z-0 flex min-w-0 max-w-full justify-center justify-self-center px-2">
+          <div
+            className={cn(
+              "relative z-0 flex min-w-0 max-w-full justify-self-center px-2",
+              accountSwitcherOpen && canSwitchConnectorAccounts
+                ? "w-full justify-stretch"
+                : "justify-center",
+            )}
+          >
             {centerChrome}
           </div>
 
@@ -654,9 +844,13 @@ export function MobileAppChrome({ className }: { className?: string }) {
               </button>
             ) : showPanelActions && panelActions ? (
               <MobilePanelActionsCluster
+                key={accountSwitcherOpen ? "account-switcher" : "panel-actions"}
                 config={panelActions}
                 onCompose={handlePanelCompose}
-                onOpenChange={setPanelMenuOpen}
+                onOpenChange={(open) => {
+                  if (open) setAccountSwitcherOpen(false);
+                  setPanelMenuOpen(open);
+                }}
               />
             ) : hideNewChat ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />

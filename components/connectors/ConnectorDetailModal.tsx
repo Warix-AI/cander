@@ -1,26 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Settings2, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, ImagePlus, Settings2, X } from "lucide-react";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
-import { ConnectorAccountBar, connectorAccountChipShell } from "@/components/connectors/ConnectorAccountBar";
+import { ConnectorAccountBar, ConnectorAccountIcon, connectorAccountChipShell } from "@/components/connectors/ConnectorAccountBar";
 import { ConnectorInfoSection } from "@/components/connectors/ConnectorInfoSection";
 import { ConnectorSkillsToggles } from "@/components/connectors/ConnectorSkillsToggles";
 import { ConnectorWorkspaceShareToggle } from "@/components/connectors/ConnectorWorkspaceShareToggle";
 import { Modal } from "@/components/ui/Modal";
 import { Dropdown } from "@/components/ui/Controls";
+import { useApp } from "@/components/app/AppProvider";
 import {
   CONNECTOR_DISPLAY_NAME_MAX,
   canAddAnotherConnectorAccount,
   connectorAccountNeedsRename,
   validateUniqueConnectorDisplayName,
 } from "@/lib/connectors/account-names";
+import {
+  removeConnectorAccountIconFiles,
+  uploadConnectorAccountIcon,
+} from "@/lib/connector-account-icon";
 import { toolsForConnector } from "@/lib/connectors/tool-catalog";
 import type { ConnectorConnection } from "@/lib/connectors/types";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import type { Connector, PinTier } from "@/lib/types";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
-import { appConnectorById } from "@/lib/connectors/apps/definitions";
+import { isConnectorComingSoon } from "@/lib/connectors/exclusive";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
@@ -30,6 +35,10 @@ type ConnectorPrompt = {
 };
 
 const CONNECTOR_PROMPTS: Record<string, ConnectorPrompt[]> = {
+  praise: [
+    { text: "Summarize my reputation." },
+    { text: "Find recent reviews and mentions." },
+  ],
   gmail: [
     { text: "Find unread mail." },
     { text: "Reply to the latest email." },
@@ -144,7 +153,11 @@ export function ConnectorDetailModal({
     forceNew?: boolean;
   }) => Promise<ConnectorConnection | void>;
   onDisconnect: (connectionId: string) => Promise<void>;
-  onRename: (connectionId: string, displayName: string) => Promise<void>;
+  onRename: (
+    connectionId: string,
+    displayName: string,
+    iconUrl?: string | null,
+  ) => Promise<void>;
   onConnectionsRefresh: () => void;
   onSkillPermissionsUpdated: (connection: ConnectorConnection) => void;
   onSetPin: () => void;
@@ -154,6 +167,7 @@ export function ConnectorDetailModal({
   /** Bumped by parent (e.g. sidebar More → +) to open Connect / Add Account. */
   connectRequestNonce?: number;
 }) {
+  const { actor } = useApp();
   const mobile = useMobileShell();
   const liveAccounts = useMemo(
     () =>
@@ -169,7 +183,12 @@ export function ConnectorDetailModal({
     mode: "connect" | "add" | "rename";
     value: string;
     error: string | null;
+    /** Edit mode only: preview URL (remote or object URL). */
+    iconPreview: string | null;
+    /** Edit mode: null = unchanged, string = new file pending upload, "clear" = remove. */
+    iconAction: null | File | "clear";
   }>(null);
+  const iconFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
@@ -195,17 +214,17 @@ export function ConnectorDetailModal({
   const skills = toolsForConnector(item.id);
   const prompts = promptsForConnector(item);
   const canManageServerConnection = isOauthConnectorId(item.id);
-  const oauthPending = appConnectorById(item.id)?.oauthReady === false;
+  const comingSoon = isConnectorComingSoon(item);
   const localInstallOnly =
     !canManageServerConnection &&
-    !oauthPending &&
+    !comingSoon &&
     Boolean(item.installed) &&
     !liveAccounts.length;
   const canDisconnectOrUninstall =
     Boolean(selectedConnection) || localInstallOnly;
   const canAddAccount =
     canManageServerConnection &&
-    !oauthPending &&
+    !comingSoon &&
     !blocked &&
     canAddAnotherConnectorAccount(liveAccounts.length);
 
@@ -215,7 +234,7 @@ export function ConnectorDetailModal({
       ? "Connected"
       : pendingConnection
         ? "Connecting"
-        : oauthPending
+        : comingSoon
           ? "Coming soon"
           : localInstallOnly
             ? "Installed"
@@ -231,7 +250,7 @@ export function ConnectorDetailModal({
 
   const primaryLabel = blocked
     ? "Unavailable"
-    : oauthPending
+    : comingSoon
       ? "Coming soon"
       : workAttach
         ? "Add to Work"
@@ -241,7 +260,7 @@ export function ConnectorDetailModal({
             ? "Connect"
             : "Install";
 
-  const showAccountBar = canManageServerConnection && !oauthPending && !blocked;
+  const showAccountBar = canManageServerConnection && !comingSoon && !blocked;
   const showAccountNav = showAccountBar && liveAccounts.length > 0;
   const showHeaderConnect = showAccountBar && liveAccounts.length === 0;
   /** No accounts yet: title + Connect share one row just above the gradient. */
@@ -249,7 +268,7 @@ export function ConnectorDetailModal({
   const menuHasItems =
     Boolean(selectedConnection && canManageServerConnection) ||
     canDisconnectOrUninstall ||
-    (!canDisconnectOrUninstall && !showAccountBar);
+    (!canDisconnectOrUninstall && !showAccountBar && !comingSoon);
   const showActionsMenu =
     !blocked && !(dedicated && mobile) && menuHasItems;
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -268,7 +287,7 @@ export function ConnectorDetailModal({
   // Continue connecting / Work attach / non-OAuth connect only.
   const showConnectFooter =
     !blocked &&
-    !oauthPending &&
+    !comingSoon &&
     (Boolean(workAttach) ||
       Boolean(pendingConnection && !liveAccounts.some((r) => r.status === "active")) ||
       (!liveAccounts.length && !localInstallOnly && !canManageServerConnection));
@@ -280,6 +299,7 @@ export function ConnectorDetailModal({
     status: "pending",
     connectionMode: "personal",
     displayName: "Account",
+    iconUrl: null,
     ownedByViewer: true,
     failureDetail: null,
     toolPermissions: Object.fromEntries(
@@ -311,6 +331,8 @@ export function ConnectorDetailModal({
       mode,
       value: raw,
       error: null,
+      iconPreview: mode === "rename" ? (target?.iconUrl ?? null) : null,
+      iconAction: null,
     });
   };
 
@@ -323,7 +345,7 @@ export function ConnectorDetailModal({
 
   // Sidebar More → +: open existing Connect / Add Account name prompt.
   useEffect(() => {
-    if (!connectRequestNonce || !open || blocked || oauthPending) return;
+    if (!connectRequestNonce || !open || blocked || comingSoon) return;
     if (canManageServerConnection) {
       if (liveAccounts.some((row) => row.status === "active")) {
         if (canAddAccount) openNamePrompt("add");
@@ -356,9 +378,34 @@ export function ConnectorDetailModal({
       return;
     }
     const mode = namePrompt.mode;
+    const iconAction = namePrompt.iconAction;
     setNamePrompt(null);
     if (mode === "rename" && selectedConnection) {
-      await onRename(selectedConnection.id, check.value);
+      let nextIcon: string | null | undefined = undefined;
+      try {
+        if (iconAction === "clear") {
+          await removeConnectorAccountIconFiles({
+            ownerId: actor.id,
+            connectionId: selectedConnection.id,
+          });
+          nextIcon = null;
+        } else if (iconAction instanceof File) {
+          nextIcon = await uploadConnectorAccountIcon({
+            ownerId: actor.id,
+            connectionId: selectedConnection.id,
+            file: iconAction,
+          });
+        }
+        await onRename(selectedConnection.id, check.value, nextIcon);
+      } catch (err) {
+        setNamePrompt({
+          mode,
+          value: check.value,
+          error: err instanceof Error ? err.message : "Could not save account.",
+          iconPreview: selectedConnection.iconUrl,
+          iconAction: null,
+        });
+      }
       return;
     }
     // + always starts a fresh OAuth account (external/new tab), never
@@ -611,7 +658,7 @@ export function ConnectorDetailModal({
                                   SHELL_G3_RADIUS,
                                 )}
                               >
-                                Rename
+                                Edit
                               </button>
                             ) : null}
                             {!canDisconnectOrUninstall && !showAccountBar ? (
@@ -818,17 +865,98 @@ export function ConnectorDetailModal({
             className="text-[15px] font-semibold tracking-[-0.02em]"
           >
             {namePrompt.mode === "rename"
-              ? "Rename account"
+              ? "Edit account"
               : namePrompt.mode === "add"
                 ? "Name this account"
                 : "Name your account"}
           </p>
           <p className="mt-1.5 text-[13px] leading-snug text-muted-foreground">
-            Short label (1–{CONNECTOR_DISPLAY_NAME_MAX} chars). Doesn't change
-            the provider login.
+            {namePrompt.mode === "rename"
+              ? "Update the label and optional photo shown with this account."
+              : `Short label (1–${CONNECTOR_DISPLAY_NAME_MAX} chars). Doesn't change the provider login.`}
           </p>
+          {namePrompt.mode === "rename" ? (
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                type="button"
+                aria-label="Change account photo"
+                onClick={() => iconFileRef.current?.click()}
+                className={cn(
+                  "relative inline-flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden border border-border bg-muted/40 transition-colors hover:bg-muted",
+                  SHELL_G3_RADIUS,
+                )}
+              >
+                {namePrompt.iconPreview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={namePrompt.iconPreview}
+                    alt=""
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
+                ) : (
+                  <ConnectorAccountIcon
+                    connectorIcon={item.icon}
+                    iconUrl={null}
+                    label={item.name}
+                    className="!h-6 !w-6"
+                  />
+                )}
+                <span className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/45 py-0.5 text-white">
+                  <ImagePlus className="h-3 w-3" strokeWidth={2} />
+                </span>
+              </button>
+              <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => iconFileRef.current?.click()}
+                  className="text-[13px] font-medium text-foreground hover:underline"
+                >
+                  {namePrompt.iconPreview ? "Replace photo" : "Add photo"}
+                </button>
+                {namePrompt.iconPreview ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNamePrompt({
+                        ...namePrompt,
+                        iconPreview: null,
+                        iconAction: "clear",
+                        error: null,
+                      })
+                    }
+                    className="mt-1 block text-[12px] text-muted-foreground hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                ) : (
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    Shown next to the account name.
+                  </p>
+                )}
+              </div>
+              <input
+                ref={iconFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file || !namePrompt) return;
+                  const preview = URL.createObjectURL(file);
+                  setNamePrompt({
+                    ...namePrompt,
+                    iconPreview: preview,
+                    iconAction: file,
+                    error: null,
+                  });
+                }}
+              />
+            </div>
+          ) : null}
           <input
-            autoFocus
+            autoFocus={namePrompt.mode !== "rename"}
             value={namePrompt.value}
             maxLength={CONNECTOR_DISPLAY_NAME_MAX}
             autoComplete="off"

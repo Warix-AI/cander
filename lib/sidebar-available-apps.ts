@@ -5,8 +5,7 @@
  */
 
 import { connectors } from "@/lib/data";
-import { appConnectorById } from "@/lib/connectors/apps/definitions";
-import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
+import { isConnectorComingSoon } from "@/lib/connectors/exclusive";
 import { connectedConnectorIdsLive } from "@/lib/connector-connections-store";
 
 /** Short labels matching sidebar pin titles. */
@@ -45,14 +44,7 @@ export function listSidebarAvailableApps(opts: {
     .filter((item) => item.scope === "public")
     .filter((item) => !listed.has(item.id))
     .filter((item) => !connected.has(item.id))
-    .filter((item) => {
-      // OAuth apps that are not ready yet are not connectable from +.
-      if (isOauthConnectorId(item.id)) {
-        const def = appConnectorById(item.id);
-        if (def && def.oauthReady === false) return false;
-      }
-      return true;
-    })
+    .filter((item) => !isConnectorComingSoon(item))
     .map((item) => ({
       id: item.id,
       name: sidebarAppTitle(item.id, item.name),

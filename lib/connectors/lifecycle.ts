@@ -296,6 +296,12 @@ export async function renameConnection(input: {
   ownerId: string;
   connectionId: string;
   displayName: string;
+  /**
+   * undefined = leave icon unchanged;
+   * null = clear icon;
+   * string = set managed storage URL.
+   */
+  iconUrl?: string | null;
 }): Promise<
   | { ok: true; connection: ConnectorConnection }
   | { ok: false; status: number; error: string }
@@ -339,10 +345,45 @@ export async function renameConnection(input: {
     return { ok: false, status: 400, error: nameCheck.error };
   }
 
+  let nextIconUrl: string | null | undefined = undefined;
+  if (input.iconUrl !== undefined) {
+    if (input.iconUrl === null || input.iconUrl === "") {
+      nextIconUrl = null;
+    } else {
+      const storageOrigin =
+        process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") ?? "";
+      if (storageOrigin) {
+        const { isManagedConnectorAccountIconUrl } = await import(
+          "@/lib/security/storage-url"
+        );
+        if (
+          !isManagedConnectorAccountIconUrl({
+            iconUrl: input.iconUrl,
+            ownerId: input.ownerId,
+            connectionId: row.id,
+            storageOrigin,
+          })
+        ) {
+          return { ok: false, status: 400, error: "Invalid account icon." };
+        }
+      }
+      // Keep cache-bust query so replaces refresh everywhere.
+      nextIconUrl = input.iconUrl;
+    }
+  }
+
   const now = new Date().toISOString();
+  const patch: Record<string, unknown> = {
+    display_name: nameCheck.value,
+    updated_at: now,
+  };
+  if (nextIconUrl !== undefined) {
+    patch.icon_url = nextIconUrl;
+  }
+
   const { data: updated, error: updateError } = await input.client
     .from("connector_connections")
-    .update({ display_name: nameCheck.value, updated_at: now })
+    .update(patch)
     .eq("id", row.id)
     .eq("owner_id", input.ownerId)
     .eq("workspace_id", input.workspaceId)

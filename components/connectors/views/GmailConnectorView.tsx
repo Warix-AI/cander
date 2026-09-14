@@ -37,6 +37,11 @@ import {
   setConnectorFocus,
 } from "@/lib/connector-focus";
 import {
+  getActiveConnectorAccountId,
+  setActiveConnectorAccountId,
+  subscribeConnectorActiveAccount,
+} from "@/lib/connector-active-account";
+import {
   peekViewCache,
   patchViewCache,
   viewCacheKey,
@@ -216,9 +221,13 @@ export function GmailConnectorView({
 
   const loadList = useCallback(async () => {
     setError(null);
+    const preferred =
+      getActiveConnectorAccountId(workspaceId, "gmail") ??
+      connectionIdRef.current;
     const data = await fetchSyncedMailList({
       workspaceId,
       connectorId: "gmail",
+      connectionId: preferred ?? undefined,
     });
     const readLocally = locallyReadIdsRef.current;
     const nextMessages = data.messages.map((row) =>
@@ -228,6 +237,7 @@ export function GmailConnectorView({
     );
     setMessages(nextMessages);
     setConnectionId(data.connectionId);
+    setActiveConnectorAccountId(workspaceId, "gmail", data.connectionId);
     setLastSyncedAt(data.sync.lastSyncedAt);
     writeViewCache(cacheKey, {
       messages: nextMessages,
@@ -418,6 +428,30 @@ export function GmailConnectorView({
     setStatus(null);
     setError(null);
   }, [detail]);
+
+  useEffect(() => {
+    return subscribeConnectorActiveAccount(() => {
+      const preferred = getActiveConnectorAccountId(workspaceId, "gmail");
+      if (!preferred || preferred === connectionIdRef.current) return;
+      connectionIdRef.current = preferred;
+      setConnectionId(preferred);
+      setPage("inbox");
+      setSelectedId(null);
+      setDetail(null);
+      setThreadMessages([]);
+      setReplyBody("");
+      setReplyOpen(false);
+      setError(null);
+      setLoading(true);
+      void loadList()
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : "Could not load mail.");
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    });
+  }, [loadList, workspaceId]);
 
   useEffect(() => {
     if (!onToolbarChange) return;
