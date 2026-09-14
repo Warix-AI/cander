@@ -1363,12 +1363,42 @@ select:focus-visible {
 
 .voice-orb {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 9999px;
+  transition: transform 200ms ease;
+  /* Keep layout box stable so scale doesn't shove neighboring chrome. */
+  flex-shrink: 0;
+}
+
+.voice-orb > img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  transition: transform 200ms ease;
 }
 
 .voice-orb-live {
   box-shadow: 0 0 14px oklch(0.7 0.15 45 / 0.4);
+}
+
+.voice-orb-live > img {
+  transform: scale(1.25);
+}
+
+.voice-orb-speaking > img {
+  animation: voice-orb-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes voice-orb-pulse {
+  0%,
+  100% {
+    transform: scale(1.18);
+  }
+  50% {
+    transform: scale(1.32);
+  }
 }
 
 @keyframes voice-pulse {

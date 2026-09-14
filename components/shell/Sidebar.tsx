@@ -15,6 +15,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { AccountMenu } from "@/components/shell/AccountMenu";
+import { VoiceControl } from "@/components/shell/VoiceControl";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { PinControl } from "@/components/shell/PinControl";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
@@ -646,7 +647,8 @@ export function Sidebar() {
             </div>
           </nav>
 
-          <div className="shrink-0 px-2 pb-2">
+          <div className="shrink-0 space-y-0.5 px-2 pb-2">
+            <VoiceControl />
             <AccountMenu />
           </div>
         </>

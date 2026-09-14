@@ -444,6 +444,8 @@ export type Thread = {
 };
 
 export type VoiceAnchor =
+  | "header"
+  | "sidebar"
   | "top-left"
   | "top-center"
   | "top-right"

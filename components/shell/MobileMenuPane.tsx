@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderWordmark } from "@/components/brand/CanderWordmark";
+import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import {
   MobileSlideStack,
   useMobileStackDirection,
@@ -220,7 +221,8 @@ function MenuMain({
             <PinsSheet onSelect={onSelectPin} hideHeading />
           </div>
 
-          <div className="mt-auto pt-3 pb-1">
+          <div className="mt-auto space-y-0.5 pt-3 pb-1">
+            <MobileVoiceRow />
             <button
               type="button"
               onClick={() => onOpenScreen("general")}
@@ -239,6 +241,34 @@ function MenuMain({
         </div>
       </div>
     </div>
+  );
+}
+
+function MobileVoiceRow() {
+  const { entitlements, voiceActive, voiceSpeaking, toggleVoice } = useApp();
+  if (!entitlements.hasVoice) return null;
+
+  return (
+    <button
+      type="button"
+      aria-pressed={voiceActive}
+      aria-label={voiceActive ? "Stop voice" : "Start voice"}
+      onClick={toggleVoice}
+      className={cn(
+        mobileMenuRowClass,
+        voiceActive ? mobileMenuRowActiveClass : undefined,
+      )}
+    >
+      <VoiceOrb
+        active={voiceActive}
+        speaking={voiceSpeaking}
+        as="div"
+        size={20}
+        label={voiceActive ? "Listening" : "Voice"}
+        className="shrink-0"
+      />
+      Voice
+    </button>
   );
 }
 

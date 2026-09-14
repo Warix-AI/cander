@@ -264,6 +264,11 @@ import {
   uploadRawOpenAIAttachment,
 } from "@/lib/ai/raw-openai/upload-client";
 import { speakText, stopTextToSpeech } from "@/lib/voice/text-to-speech";
+import {
+  isLiveConversationSupported,
+  startLiveConversation,
+  type LiveConversationSession,
+} from "@/lib/voice/openai-live-conversation";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
@@ -484,6 +489,8 @@ type AppContextValue = {
   sidebarLayout: SidebarLayout;
   moveSidebarNav: (id: SidebarNavId, dir: -1 | 1) => void;
   voiceActive: boolean;
+  /** True while Live mic/assistant audio is active (orb pulse). */
+  voiceSpeaking: boolean;
   voiceAnchor: VoiceAnchor;
   toggleVoice: () => void;
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
@@ -740,7 +747,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     string | null
   >(null);
   const [voiceActive, setVoiceActive] = useState(false);
-  const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("bottom-right");
+  const [voiceSpeaking, setVoiceSpeaking] = useState(false);
+  const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("sidebar");
+  const liveVoiceSessionRef = useRef<LiveConversationSession | null>(null);
+  const voiceRestartPendingRef = useRef(false);
+  const voiceStartingRef = useRef(false);
   const [browserChatOpen, setBrowserChatOpen] = useState(false);
   const [browserChatRatio, setBrowserChatRatio] = useState(0.28);
   const [browserPage, setBrowserPage] = useState<PageReference>({
@@ -3333,7 +3344,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   threadId: activeId,
                 });
               }
-              if (voiceActive) {
+              if (voiceActive && !liveVoiceSessionRef.current) {
                 speakText(sanitizeAssistantVisibleText(result.content));
               }
               return;
@@ -3409,7 +3420,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                     threadId: activeId,
                   });
                 }
-                if (voiceActive) {
+                if (voiceActive && !liveVoiceSessionRef.current) {
                   speakText(sanitizeAssistantVisibleText(result.content));
                 }
               }
@@ -4413,8 +4424,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (entitlements.hasVoice) return;
-    queueMicrotask(() => setVoiceActive(false));
+    queueMicrotask(() => {
+      setVoiceActive(false);
+      setVoiceSpeaking(false);
+      const session = liveVoiceSessionRef.current;
+      liveVoiceSessionRef.current = null;
+      if (session) void session.stop();
+    });
   }, [entitlements.hasVoice]);
+
+  useEffect(() => {
+    return () => {
+      const session = liveVoiceSessionRef.current;
+      liveVoiceSessionRef.current = null;
+      if (session) void session.stop();
+    };
+  }, []);
 
   useEffect(() => {
     if (panelMode !== "collapsed") return;
@@ -5342,9 +5367,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleVoice = useCallback(() => {
     if (!entitlements.hasVoice) return;
+
+    const stopLiveSession = async () => {
+      const session = liveVoiceSessionRef.current;
+      liveVoiceSessionRef.current = null;
+      setVoiceSpeaking(false);
+      if (session) {
+        try {
+          await session.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
     if (voiceActive) {
       stopTextToSpeech();
+      void stopLiveSession();
       setVoiceActive(false);
+      voiceRestartPendingRef.current = true;
       const activeThread = threadId
         ? threads.find((item) => item.id === threadId)
         : null;
@@ -5354,7 +5395,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeThread !== null &&
           activeThread.messages.length === 0);
       if (emptySession) {
-        newChat();
+        // Keep empty draft ready for restart-as-new-chat on next click.
         return;
       }
       if (threadId) {
@@ -5368,41 +5409,130 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setVoiceActive(true);
+    const beginChrome = () => {
+      if (
+        view === "space" &&
+        spaceId &&
+        isDockChatSpace(spaceId) &&
+        !threadId
+      ) {
+        openSpaceChat(spaceId, { keepProject: Boolean(projectId) });
+        return;
+      }
 
-    if (
-      view === "space" &&
-      spaceId &&
-      isDockChatSpace(spaceId) &&
-      !threadId
-    ) {
-      openSpaceChat(spaceId, { keepProject: Boolean(projectId) });
+      if (!threadId) {
+        let tid = "";
+        setThreads((current) => {
+          const { threads: next, id } = startContinuousChat(
+            current,
+            workspaceId,
+            null,
+          );
+          tid = id;
+          return next;
+        });
+        if (tid) {
+          threadIdRef.current = tid;
+          setThreadId(tid);
+        }
+        setView("chat");
+        setDrafting(true);
+        setPanelIntent("execute");
+        setPanelMode("split");
+        setMobileSurface("chat");
+        pushTarget({
+          view: "chat",
+          spaceId,
+          threadId: tid || null,
+          projectId,
+          panelMode: "split",
+          panelIntent: "execute",
+          connectorId,
+          jobId,
+          skillId,
+        });
+        return;
+      }
+
+      if (!spaceId) {
+        setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+      }
+    };
+
+    const appendVoiceTranscript = (
+      role: "user" | "assistant",
+      text: string,
+    ) => {
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      const activeId = threadIdRef.current;
+      if (!activeId) return;
+      const msg = {
+        id: nextId(role === "user" ? "u" : "a"),
+        role,
+        content: trimmed,
+        at: nowTime(),
+        status: "complete" as const,
+      };
+      setThreads((current) =>
+        current.map((item) =>
+          item.id === activeId
+            ? {
+                ...item,
+                messages: [...item.messages, msg],
+                updatedAt: nowTime(),
+              }
+            : item,
+        ),
+      );
+      setDrafting(false);
+    };
+
+    const startLive = async () => {
+      if (voiceStartingRef.current) return;
+      voiceStartingRef.current = true;
+      try {
+        if (!isLiveConversationSupported()) {
+          setVoiceActive(true);
+          beginChrome();
+          return;
+        }
+        beginChrome();
+        const session = await startLiveConversation({
+          workspaceId,
+          onSpeakingChange: setVoiceSpeaking,
+          onTranscript: appendVoiceTranscript,
+          onError: (message) => {
+            console.warn("[voice]", message);
+          },
+        });
+        if (!entitlements.hasVoice) {
+          await session.stop();
+          return;
+        }
+        liveVoiceSessionRef.current = session;
+        setVoiceActive(true);
+      } catch (err) {
+        setVoiceActive(false);
+        setVoiceSpeaking(false);
+        liveVoiceSessionRef.current = null;
+        console.warn(
+          "[voice]",
+          err instanceof Error ? err.message : "Could not start Live voice.",
+        );
+      } finally {
+        voiceStartingRef.current = false;
+      }
+    };
+
+    if (voiceRestartPendingRef.current) {
+      voiceRestartPendingRef.current = false;
+      newChat();
+      void startLive();
       return;
     }
 
-    if (!threadId) {
-      setView("chat");
-      setDrafting(true);
-      setPanelIntent("execute");
-      setPanelMode("split");
-      setMobileSurface("chat");
-      pushTarget({
-        view: "chat",
-        spaceId,
-        threadId: null,
-        projectId,
-        panelMode: "split",
-        panelIntent: "execute",
-        connectorId,
-        jobId,
-        skillId,
-      });
-      return;
-    }
-
-    if (!spaceId) {
-      setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
-    }
+    void startLive();
   }, [
     entitlements.hasVoice,
     voiceActive,
@@ -5415,6 +5545,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     connectorId,
     jobId,
     skillId,
+    workspaceId,
     newChat,
     summarizeThreadById,
     openSpaceChat,
@@ -6197,6 +6328,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSkill,
       openFile,
       voiceActive,
+      voiceSpeaking,
       voiceAnchor,
       toggleVoice,
       setVoiceAnchor,
@@ -6361,6 +6493,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSkill,
       openFile,
       voiceActive,
+      voiceSpeaking,
       voiceAnchor,
       toggleVoice,
       setVoiceAnchor,

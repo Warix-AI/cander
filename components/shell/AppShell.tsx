@@ -64,6 +64,7 @@ import {
 import { SessionBootScreen } from "@/components/shell/SessionBootScreen";
 import { ShareInListener } from "@/components/shell/ShareInListener";
 import { QuickAskHost } from "@/components/shell/QuickAskHost";
+import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { completeEmailVerificationFromUrl } from "@/lib/auth/email-verify-landing";
 import {
@@ -301,6 +302,7 @@ function AuthenticatedShell() {
           <PublishSheet />
           <DomainsSheet />
           <BrowserPipOverlay />
+          <FloatingVoiceDock />
         </div>
       </MobilePanelActionsProvider>
     </AppearanceProvider>

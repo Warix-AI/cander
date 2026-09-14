@@ -35,6 +35,7 @@ export function VoiceWaveIcon({
 
 export function VoiceOrb({
   active,
+  speaking = false,
   onClick,
   size = 38,
   className,
@@ -42,6 +43,8 @@ export function VoiceOrb({
   as = "button",
 }: {
   active: boolean;
+  /** Slow pulse while mic/assistant audio is active. */
+  speaking?: boolean;
   onClick?: () => void;
   size?: number;
   className?: string;
@@ -49,8 +52,9 @@ export function VoiceOrb({
   as?: "button" | "div";
 }) {
   const shared = cn(
-    "voice-orb relative shrink-0 overflow-hidden rounded-full",
+    "voice-orb relative shrink-0 rounded-full",
     active && "voice-orb-live",
+    active && speaking && "voice-orb-speaking",
     className,
   );
   const style = { width: size, height: size };

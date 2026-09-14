@@ -23,6 +23,7 @@ export function ShellWindowChromeBar({
   hideHistory = false,
   className,
   leading,
+  afterSearch,
   onSearch,
   onBack,
   onForward,
@@ -34,6 +35,8 @@ export function ShellWindowChromeBar({
   className?: string;
   /** Usually NavToggle or a PanelLeft collapse control. */
   leading: ReactNode;
+  /** Between Search and the drag spacer (e.g. Live voice orb). */
+  afterSearch?: ReactNode;
   onSearch?: () => void;
   onBack?: () => void;
   onForward?: () => void;
@@ -86,7 +89,14 @@ export function ShellWindowChromeBar({
           >
             <Search className="h-4 w-4" strokeWidth={1.7} />
           </button>
-          {dragSpacer}
+          {afterSearch ? (
+            <div
+              className="flex shrink-0 items-center"
+              style={desktop ? DESKTOP_NO_DRAG : undefined}
+            >
+              {afterSearch}
+            </div>
+          ) : null}
           <button
             type="button"
             aria-label="Back"
@@ -107,6 +117,7 @@ export function ShellWindowChromeBar({
           >
             <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
           </button>
+          {dragSpacer}
         </div>
       ) : (
         dragSpacer
