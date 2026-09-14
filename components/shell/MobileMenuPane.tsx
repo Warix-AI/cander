@@ -10,7 +10,6 @@ import {
   SquarePen,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { CanderMark } from "@/components/brand/CanderMark";
 import { CanderWordmark } from "@/components/brand/CanderWordmark";
 import {
   MobileSlideStack,
@@ -179,63 +178,67 @@ function MenuMain({
   };
 
   return (
-    <>
-      <div className="flex shrink-0 items-center justify-between gap-3 px-3 pl-7 pr-3 pt-[calc(env(safe-area-inset-top,0px)+22px)]">
-        <div className="flex min-w-0 items-center gap-2">
-          <CanderMark className="!h-6 !w-6" />
-          <CanderWordmark />
-        </div>
-      </div>
-
-      <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="flex flex-col gap-[0.1rem]">
-          <button
-            type="button"
-            onClick={onNewChat}
-            className={cn(
-              mobileMenuRowClass,
-              newActive && mobileMenuRowActiveClass,
-            )}
-            aria-label="New"
-          >
-            <SquarePen
-              className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
-              strokeWidth={MOBILE_MENU_ICON_STROKE}
-            />
-            <span className="min-w-0 flex-1 truncate">New</span>
-          </button>
-          {spaceItems.map((item) => (
-            <MobileNavRow
-              key={item.id}
-              id={item.id}
-              label={item.label}
-              Icon={item.Icon}
-              active={navActive(item.id)}
-              comingSoon={item.comingSoon}
-              onOpen={onOpenNav}
-            />
-          ))}
-          <PinsSheet onSelect={onSelectPin} hideHeading />
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className={cn(
+            "sticky top-0 z-20 flex items-center px-3 pl-7 pr-3 pt-[calc(env(safe-area-inset-top,0px)+22px)] pb-4",
+            MOBILE_MENU_BG,
+          )}
+        >
+          <CanderWordmark className="h-5" />
         </div>
 
-        <div className="mt-auto pt-3">
-          <button
-            type="button"
-            onClick={() => onOpenScreen("general")}
-            className={mobileMenuRowClass}
-          >
-            <PanelsTopLeft
+        <div className="flex min-h-[calc(100%-4.5rem)] flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+          <div className="flex flex-col gap-[0.1rem]">
+            <button
+              type="button"
+              onClick={onNewChat}
               className={cn(
-                MOBILE_MENU_ICON_SIZE,
-                "shrink-0 text-muted-foreground",
+                mobileMenuRowClass,
+                newActive && mobileMenuRowActiveClass,
               )}
-              strokeWidth={MOBILE_MENU_ICON_STROKE}
-            />
-            General
-          </button>
+              aria-label="New"
+            >
+              <SquarePen
+                className={cn(MOBILE_MENU_ICON_SIZE, "text-muted-foreground")}
+                strokeWidth={MOBILE_MENU_ICON_STROKE}
+              />
+              <span className="min-w-0 flex-1 truncate">New</span>
+            </button>
+            {spaceItems.map((item) => (
+              <MobileNavRow
+                key={item.id}
+                id={item.id}
+                label={item.label}
+                Icon={item.Icon}
+                active={navActive(item.id)}
+                comingSoon={item.comingSoon}
+                onOpen={onOpenNav}
+              />
+            ))}
+            <PinsSheet onSelect={onSelectPin} hideHeading />
+          </div>
+
+          <div className="mt-auto pt-3">
+            <button
+              type="button"
+              onClick={() => onOpenScreen("general")}
+              className={mobileMenuRowClass}
+            >
+              <PanelsTopLeft
+                className={cn(
+                  MOBILE_MENU_ICON_SIZE,
+                  "shrink-0 text-muted-foreground",
+                )}
+                strokeWidth={MOBILE_MENU_ICON_STROKE}
+              />
+              General
+            </button>
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
 
