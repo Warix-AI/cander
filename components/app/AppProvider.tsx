@@ -269,6 +269,7 @@ import {
   startLiveConversation,
   type LiveConversationSession,
 } from "@/lib/voice/openai-live-conversation";
+import { readLiveVoicePreference } from "@/lib/voice/live-voices";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
@@ -491,8 +492,12 @@ type AppContextValue = {
   voiceActive: boolean;
   /** True while Live mic/assistant audio is active (orb pulse). */
   voiceSpeaking: boolean;
+  /** Background thread for the active Live session (if any). */
+  voiceThreadId: string | null;
   voiceAnchor: VoiceAnchor;
   toggleVoice: () => void;
+  /** Jump to the active Live voice chat without stopping the session. */
+  openVoiceThread: () => void;
   setVoiceAnchor: (anchor: VoiceAnchor) => void;
   openProject: (
     id: string,
@@ -748,10 +753,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   >(null);
   const [voiceActive, setVoiceActive] = useState(false);
   const [voiceSpeaking, setVoiceSpeaking] = useState(false);
+  const [voiceThreadId, setVoiceThreadId] = useState<string | null>(null);
   const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("sidebar");
   const liveVoiceSessionRef = useRef<LiveConversationSession | null>(null);
   const voiceRestartPendingRef = useRef(false);
   const voiceStartingRef = useRef(false);
+  const voiceThreadIdRef = useRef<string | null>(null);
   const [browserChatOpen, setBrowserChatOpen] = useState(false);
   const [browserChatRatio, setBrowserChatRatio] = useState(0.28);
   const [browserPage, setBrowserPage] = useState<PageReference>({
@@ -4427,6 +4434,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queueMicrotask(() => {
       setVoiceActive(false);
       setVoiceSpeaking(false);
+      setVoiceThreadId(null);
+      voiceThreadIdRef.current = null;
       const session = liveVoiceSessionRef.current;
       liveVoiceSessionRef.current = null;
       if (session) void session.stop();
@@ -5386,77 +5395,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       void stopLiveSession();
       setVoiceActive(false);
       voiceRestartPendingRef.current = true;
-      const activeThread = threadId
-        ? threads.find((item) => item.id === threadId)
-        : null;
-      const emptySession =
-        (!threadId && drafting) ||
-        (activeThread !== undefined &&
-          activeThread !== null &&
-          activeThread.messages.length === 0);
-      if (emptySession) {
-        // Keep empty draft ready for restart-as-new-chat on next click.
-        return;
+      const backgroundId = voiceThreadIdRef.current;
+      if (backgroundId) {
+        summarizeThreadById(backgroundId);
       }
-      if (threadId) {
-        summarizeThreadById(threadId);
-        setDrafting(false);
-        setPanelMode("collapsed");
-        setPanelIntent("browse");
-        return;
-      }
-      setDrafting(false);
       return;
     }
 
-    const beginChrome = () => {
-      if (
-        view === "space" &&
-        spaceId &&
-        isDockChatSpace(spaceId) &&
-        !threadId
-      ) {
-        openSpaceChat(spaceId, { keepProject: Boolean(projectId) });
-        return;
-      }
-
-      if (!threadId) {
-        let tid = "";
-        setThreads((current) => {
-          const { threads: next, id } = startContinuousChat(
-            current,
-            workspaceId,
-            null,
-          );
-          tid = id;
-          return next;
-        });
-        if (tid) {
-          threadIdRef.current = tid;
-          setThreadId(tid);
-        }
-        setView("chat");
-        setDrafting(true);
-        setPanelIntent("execute");
-        setPanelMode("split");
-        setMobileSurface("chat");
-        pushTarget({
-          view: "chat",
-          spaceId,
-          threadId: tid || null,
-          projectId,
-          panelMode: "split",
-          panelIntent: "execute",
-          connectorId,
-          jobId,
-          skillId,
-        });
-        return;
-      }
-
-      if (!spaceId) {
-        setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
-      }
+    /** Create/reuse a background chat thread without navigating. */
+    const ensureBackgroundThread = (): string => {
+      const existing = voiceThreadIdRef.current;
+      if (existing) return existing;
+      let tid = "";
+      setThreads((current) => {
+        const { threads: next, id } = startContinuousChat(
+          current,
+          workspaceId,
+          null,
+        );
+        tid = id;
+        return next;
+      });
+      voiceThreadIdRef.current = tid;
+      setVoiceThreadId(tid);
+      return tid;
     };
 
     const appendVoiceTranscript = (
@@ -5465,7 +5427,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      const activeId = threadIdRef.current;
+      const activeId = voiceThreadIdRef.current;
       if (!activeId) return;
       const msg = {
         id: nextId(role === "user" ? "u" : "a"),
@@ -5485,21 +5447,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             : item,
         ),
       );
-      setDrafting(false);
     };
 
     const startLive = async () => {
       if (voiceStartingRef.current) return;
       voiceStartingRef.current = true;
       try {
+        const tid = ensureBackgroundThread();
         if (!isLiveConversationSupported()) {
           setVoiceActive(true);
-          beginChrome();
           return;
         }
-        beginChrome();
         const session = await startLiveConversation({
           workspaceId,
+          threadId: tid,
+          voice: readLiveVoicePreference(),
           onSpeakingChange: setVoiceSpeaking,
           onTranscript: appendVoiceTranscript,
           onError: (message) => {
@@ -5527,30 +5489,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     if (voiceRestartPendingRef.current) {
       voiceRestartPendingRef.current = false;
-      newChat();
+      // Fresh background thread for the next Live session.
+      voiceThreadIdRef.current = null;
+      setVoiceThreadId(null);
       void startLive();
       return;
     }
 
     void startLive();
-  }, [
-    entitlements.hasVoice,
-    voiceActive,
-    threadId,
-    threads,
-    drafting,
-    view,
-    spaceId,
-    projectId,
-    connectorId,
-    jobId,
-    skillId,
-    workspaceId,
-    newChat,
-    summarizeThreadById,
-    openSpaceChat,
-    pushTarget,
-  ]);
+  }, [entitlements.hasVoice, voiceActive, workspaceId, summarizeThreadById]);
+
+  const openVoiceThread = useCallback(() => {
+    const tid = voiceThreadIdRef.current ?? voiceThreadId;
+    if (!tid) return;
+    openThread(tid);
+  }, [voiceThreadId, openThread]);
 
   const openStandaloneBrowser = useCallback(
     (opts?: { query?: string }) => {
@@ -6329,8 +6282,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openFile,
       voiceActive,
       voiceSpeaking,
+      voiceThreadId,
       voiceAnchor,
       toggleVoice,
+      openVoiceThread,
       setVoiceAnchor,
       canGoBack: hist.i > 0,
       canGoForward: hist.i < hist.stack.length - 1,
@@ -6494,8 +6449,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openFile,
       voiceActive,
       voiceSpeaking,
+      voiceThreadId,
       voiceAnchor,
       toggleVoice,
+      openVoiceThread,
       setVoiceAnchor,
       hist,
       goBack,

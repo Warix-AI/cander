@@ -118,6 +118,7 @@ export type SettingsTab =
   | "workspaces"
   | "plans"
   | "usage"
+  | "voice"
   | "general"
   | "appearance";
 

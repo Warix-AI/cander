@@ -5,6 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
   LayoutGrid,
+  MessageSquare,
   PanelsTopLeft,
   Settings,
   SquarePen,
@@ -245,30 +246,51 @@ function MenuMain({
 }
 
 function MobileVoiceRow() {
-  const { entitlements, voiceActive, voiceSpeaking, toggleVoice } = useApp();
+  const {
+    entitlements,
+    voiceActive,
+    voiceSpeaking,
+    voiceThreadId,
+    toggleVoice,
+    openVoiceThread,
+  } = useApp();
   if (!entitlements.hasVoice) return null;
 
   return (
-    <button
-      type="button"
-      aria-pressed={voiceActive}
-      aria-label={voiceActive ? "Stop voice" : "Start voice"}
-      onClick={toggleVoice}
-      className={cn(
-        mobileMenuRowClass,
-        voiceActive ? mobileMenuRowActiveClass : undefined,
-      )}
-    >
-      <VoiceOrb
-        active={voiceActive}
-        speaking={voiceSpeaking}
-        as="div"
-        size={20}
-        label={voiceActive ? "Listening" : "Voice"}
-        className="shrink-0"
-      />
-      Voice
-    </button>
+    <div className="flex w-full items-center gap-0.5">
+      <button
+        type="button"
+        aria-pressed={voiceActive}
+        aria-label={voiceActive ? "Stop voice" : "Start voice"}
+        onClick={toggleVoice}
+        className={cn(
+          mobileMenuRowClass,
+          "min-w-0 flex-1",
+          voiceActive ? mobileMenuRowActiveClass : undefined,
+        )}
+      >
+        <VoiceOrb
+          active={voiceActive}
+          speaking={voiceSpeaking}
+          as="div"
+          size={20}
+          label={voiceActive ? "Listening" : "Voice"}
+          className="shrink-0"
+        />
+        Voice
+      </button>
+      {voiceActive && voiceThreadId ? (
+        <button
+          type="button"
+          aria-label="Open voice chat"
+          title="Open voice chat"
+          onClick={openVoiceThread}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
+        >
+          <MessageSquare className="h-5 w-5" strokeWidth={1.8} />
+        </button>
+      ) : null}
+    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import {
   GripVertical,
   LayoutGrid,
   MessageSquare,
+  Mic,
   Palette,
   SquarePen,
   UserRound,
@@ -86,6 +87,7 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   workspaces: LayoutGrid,
   plans: CreditCard,
   usage: ChartNoAxesColumn,
+  voice: Mic,
   general: UserRound,
   appearance: Palette,
 };

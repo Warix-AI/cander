@@ -6,6 +6,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: "workspaces", label: "Workspaces" },
   { id: "plans", label: "Plans" },
   { id: "usage", label: "Usage" },
+  { id: "voice", label: "Voice" },
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
 ];
@@ -20,6 +21,7 @@ export function visibleSettingsTabs(entitlements: Entitlements) {
       );
     }
     if (tab.id === "workspaces") return entitlements.hasWorkspaces;
+    if (tab.id === "voice") return entitlements.hasVoice;
     return true;
   });
 }

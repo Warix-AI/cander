@@ -1,8 +1,10 @@
 /**
- * Mint an ephemeral OpenAI Realtime client secret for Live conversation.
+ * Create a GPT-Live-1 WebRTC session with client delegation.
  * POST /api/ai/raw-openai/realtime-conversation-token
  *
- * Does not overload the transcription-only realtime-token route.
+ * Body: { sdp, workspaceId?, voice? }
+ * Returns: { sdp, sessionId, aiExecutionId, model, voice }
+ *
  * AI-minute metering stays open until realtime-conversation-end.
  */
 
@@ -10,14 +12,15 @@ import { NextResponse } from "next/server";
 import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { enforceUsageForRequest } from "@/lib/usage/server/guard-route";
 import { reconcileUsage } from "@/lib/usage/enforce";
-import { listActiveConnections } from "@/lib/connectors/connections";
-import { createClient } from "@supabase/supabase-js";
-import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import {
   REALTIME_CONVERSATION_INSTRUCTIONS,
   REALTIME_CONVERSATION_MODEL,
-  realtimeConversationTools,
 } from "@/lib/voice/realtime-tools";
+import {
+  DEFAULT_LIVE_VOICE,
+  isLiveVoiceId,
+  type LiveVoiceId,
+} from "@/lib/voice/live-voices";
 
 export const runtime = "nodejs";
 
@@ -45,18 +48,32 @@ export async function POST(request: Request) {
     );
   }
 
-  let workspaceId: string | null = null;
+  let body: {
+    sdp?: string;
+    workspaceId?: string;
+    voice?: string;
+  };
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      workspaceId?: string;
-    };
-    workspaceId =
-      typeof body.workspaceId === "string"
-        ? body.workspaceId.trim() || null
-        : null;
+    body = await request.json();
   } catch {
-    workspaceId = null;
+    return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
+
+  const sdp = typeof body.sdp === "string" ? body.sdp.trim() : "";
+  if (!sdp) {
+    return NextResponse.json(
+      { error: "An SDP offer is required." },
+      { status: 400 },
+    );
+  }
+
+  const workspaceId =
+    typeof body.workspaceId === "string"
+      ? body.workspaceId.trim() || null
+      : null;
+  const voice: LiveVoiceId = isLiveVoiceId(body.voice)
+    ? body.voice
+    : DEFAULT_LIVE_VOICE;
 
   const idempotencyKey =
     request.headers.get("Idempotency-Key")?.trim() ||
@@ -70,73 +87,39 @@ export async function POST(request: Request) {
     estimatedUnits: 1,
     provider: "openai",
     model: LIVE_MODEL,
-    metadata: { mode: "realtime_conversation" },
+    metadata: { mode: "gpt_live_client_delegation", voice },
   });
   if (!usage.ok) return usage.response;
 
-  let connectorIds: string[] = [];
   try {
-    const client = createClient(supabaseUrl(), supabaseAnonKey(), {
-      global: { headers: { Authorization: `Bearer ${auth.token}` } },
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-    const listed = await listActiveConnections({
-      client,
-      workspaceId: usage.workspaceId,
-      profileId: auth.user.id,
-    });
-    if (listed.ok) {
-      connectorIds = [
-        ...new Set(listed.connections.map((c) => c.connectorId)),
-      ];
-    }
-  } catch {
-    connectorIds = [];
-  }
-
-  try {
-    const tools = realtimeConversationTools({ connectorIds });
-    const response = await fetch(
-      "https://api.openai.com/v1/realtime/client_secrets",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "OpenAI-Safety-Identifier": auth.user.id,
-        },
-        body: JSON.stringify({
-          session: {
-            type: "realtime",
-            model: LIVE_MODEL,
-            instructions: REALTIME_CONVERSATION_INSTRUCTIONS,
-            audio: {
-              input: {
-                format: { type: "audio/pcm", rate: 24000 },
-                transcription: { model: "gpt-4o-mini-transcribe" },
-                turn_detection: {
-                  type: "server_vad",
-                  create_response: true,
-                  interrupt_response: true,
-                },
-              },
-              output: {
-                format: { type: "audio/pcm", rate: 24000 },
-                voice: "alloy",
-              },
-            },
-            tools,
-            tool_choice: "auto",
-          },
-        }),
+    const response = await fetch("https://api.openai.com/v1/live/sessions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "OpenAI-Safety-Identifier": auth.user.id,
       },
-    );
+      body: JSON.stringify({
+        session: {
+          model: LIVE_MODEL,
+          instructions: REALTIME_CONVERSATION_INSTRUCTIONS,
+          audio: {
+            output: { voice },
+          },
+          // Client owns Candor's assistant/tools; GPT-Live only converses.
+          delegation: { type: "client" },
+        },
+        transport: {
+          type: "webrtc",
+          sdp,
+        },
+      }),
+    });
 
     const data = (await response.json().catch(() => ({}))) as {
-      value?: string;
-      client_secret?: { value?: string };
+      session?: { id?: string };
+      transport?: { sdp?: string; type?: string };
       error?: { message?: string };
-      expires_at?: number;
     };
 
     if (!response.ok) {
@@ -151,27 +134,26 @@ export async function POST(request: Request) {
         await finishAIUsageExecution({
           executionId: usage.aiExecutionId ?? usage.reservationId,
           status: "failed",
-          metadata: { error: data.error?.message ?? "client_secret_failed" },
+          metadata: { error: data.error?.message ?? "live_session_failed" },
         });
       } catch {
         /* best-effort */
       }
       const message =
         data.error?.message ||
-        `Could not create realtime conversation session (${response.status}).`;
+        `Could not create Live session (${response.status}).`;
       return NextResponse.json(
         { error: message.slice(0, 500), latencyMs: Date.now() - started },
         { status: 502 },
       );
     }
 
-    const clientSecret =
-      (typeof data.value === "string" && data.value) ||
-      (typeof data.client_secret?.value === "string" &&
-        data.client_secret.value) ||
-      null;
+    const answerSdp =
+      typeof data.transport?.sdp === "string" ? data.transport.sdp : null;
+    const sessionId =
+      typeof data.session?.id === "string" ? data.session.id : null;
 
-    if (!clientSecret) {
+    if (!answerSdp || !sessionId) {
       await reconcileUsage({
         reservationId: usage.reservationId,
         status: "failed",
@@ -183,21 +165,20 @@ export async function POST(request: Request) {
         await finishAIUsageExecution({
           executionId: usage.aiExecutionId ?? usage.reservationId,
           status: "failed",
-          metadata: { error: "missing_client_secret" },
+          metadata: { error: "missing_live_session_answer" },
         });
       } catch {
         /* best-effort */
       }
       return NextResponse.json(
         {
-          error: "Realtime session response missing client secret.",
+          error: "Live session response missing SDP answer.",
           latencyMs: Date.now() - started,
         },
         { status: 502 },
       );
     }
 
-    // Confirm request/$ reservation, but leave AI minutes running until end.
     await reconcileUsage({
       reservationId: usage.reservationId,
       status: "confirmed",
@@ -205,12 +186,12 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      clientSecret,
+      sdp: answerSdp,
+      sessionId,
       model: LIVE_MODEL,
+      voice,
       aiExecutionId: usage.aiExecutionId ?? usage.reservationId,
       workspaceId: usage.workspaceId,
-      toolCount: tools.length,
-      expiresAt: data.expires_at ?? null,
       latencyMs: Date.now() - started,
     });
   } catch (e) {

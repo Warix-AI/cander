@@ -1,5 +1,6 @@
 "use client";
 
+import { MessageSquare } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { SIDEBAR_FOOTER_ROW } from "@/components/shell/AccountMenu";
 import { VoiceOrb } from "@/components/shell/VoiceOrb";
@@ -8,32 +9,52 @@ import { cn } from "@/lib/utils";
 
 /** Sidebar footer row — orb icon + “Voice”, above General. */
 export function VoiceControl({ className }: { className?: string }) {
-  const { voiceActive, voiceSpeaking, toggleVoice, entitlements } = useApp();
+  const {
+    voiceActive,
+    voiceSpeaking,
+    voiceThreadId,
+    toggleVoice,
+    openVoiceThread,
+    entitlements,
+  } = useApp();
 
   if (!entitlements.hasVoice) return null;
 
   return (
-    <button
-      type="button"
-      aria-pressed={voiceActive}
-      aria-label={voiceActive ? "Stop voice" : "Start voice"}
-      onClick={toggleVoice}
-      className={cn(
-        SIDEBAR_FOOTER_ROW,
-        voiceActive && "bg-sidebar-accent font-medium",
-        className,
-      )}
-    >
-      <VoiceOrb
-        active={voiceActive}
-        speaking={voiceSpeaking}
-        as="div"
-        size={16}
-        label={voiceActive ? "Listening" : "Voice"}
-        className="shrink-0"
-      />
-      Voice
-    </button>
+    <div className={cn("flex w-full items-center gap-0.5", className)}>
+      <button
+        type="button"
+        aria-pressed={voiceActive}
+        aria-label={voiceActive ? "Stop voice" : "Start voice"}
+        onClick={toggleVoice}
+        className={cn(
+          SIDEBAR_FOOTER_ROW,
+          "min-w-0 flex-1",
+          voiceActive && "bg-sidebar-accent font-medium",
+        )}
+      >
+        <VoiceOrb
+          active={voiceActive}
+          speaking={voiceSpeaking}
+          as="div"
+          size={16}
+          label={voiceActive ? "Listening" : "Voice"}
+          className="shrink-0"
+        />
+        Voice
+      </button>
+      {voiceActive && voiceThreadId ? (
+        <button
+          type="button"
+          aria-label="Open voice chat"
+          title="Open voice chat"
+          onClick={openVoiceThread}
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground"
+        >
+          <MessageSquare className="h-4 w-4" strokeWidth={2} />
+        </button>
+      ) : null}
+    </div>
   );
 }
 
