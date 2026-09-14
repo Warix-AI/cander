@@ -7,7 +7,11 @@ import { test } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { resolveConnectorScope } from "../lib/ai/tools/connector-scope.ts";
+import {
+  formatAccountAmbiguousQuestion,
+  matchConnectionFromUserText,
+  resolveConnectorScope,
+} from "../lib/ai/tools/connector-scope.ts";
 import { discoverRelevantTools } from "../lib/ai/tools/discovery.ts";
 import { getCanderTool } from "../lib/ai/tools/cander-registry.ts";
 import { defaultToolPermissions } from "../lib/connectors/tool-catalog.ts";
@@ -232,4 +236,44 @@ test("M4: OAuth active-connection recovery always scopes workspace_id", () => {
     false,
     "workspaceId must be required, not optional",
   );
+});
+
+test("matchConnectionFromUserText binds a unique account label", () => {
+  const candidates = [
+    { connectionId: "c1", label: "Personal" },
+    { connectionId: "c2", label: "Work" },
+  ];
+  assert.equal(
+    matchConnectionFromUserText({ text: "use Personal", candidates }),
+    "c1",
+  );
+  assert.equal(
+    matchConnectionFromUserText({ text: "Work please", candidates }),
+    "c2",
+  );
+  assert.equal(
+    matchConnectionFromUserText({ text: "either is fine", candidates }),
+    null,
+  );
+  assert.equal(
+    matchConnectionFromUserText({
+      text: "check my network settings",
+      candidates: [
+        { connectionId: "c1", label: "Work" },
+        { connectionId: "c2", label: "Personal" },
+      ],
+    }),
+    null,
+  );
+});
+
+test("formatAccountAmbiguousQuestion lists account labels", () => {
+  const message = formatAccountAmbiguousQuestion({
+    connectorLabel: "Gmail",
+    candidates: [{ label: "Personal" }, { label: "Work" }],
+  });
+  assert.match(message, /Gmail/);
+  assert.match(message, /"Personal"/);
+  assert.match(message, /"Work"/);
+  assert.match(message, /Which account should I use/);
 });

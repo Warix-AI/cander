@@ -526,7 +526,14 @@ export function startContinuousChat(
 ): { threads: Thread[]; id: string } {
   const id = `t-session-${workspaceId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const created = emptyContinuousChat(workspaceId, spaceId, id);
-  return { threads: [created, ...threads], id };
+  // Drop unused New drafts so revisiting New doesn't pile up blank chats.
+  const kept = threads.filter(
+    (thread) =>
+      !(
+        isDetachedSessionChat(thread, workspaceId) && !threadHasTurns(thread)
+      ),
+  );
+  return { threads: [created, ...kept], id };
 }
 
 /** Local mock “summarize on close” — one short line from recent turns. */

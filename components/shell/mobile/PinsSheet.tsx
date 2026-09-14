@@ -113,12 +113,14 @@ export function PinsSheet({
 
   // Only when the active destination changes — don't re-lock the accordion
   // while the user browses other pin folders (Images, Searches, …).
+  // Chats never auto-opens; the user must expand it.
   useEffect(() => {
     if (!activePinKey) return;
     const owning = pinGroups.find((group) =>
       group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
     );
-    if (owning) openPinSection(owning.id);
+    if (!owning || owning.id === "chats") return;
+    openPinSection(owning.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pinGroups read on nav change only
   }, [activePinKey, openPinSection]);
 

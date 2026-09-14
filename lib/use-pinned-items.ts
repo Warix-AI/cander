@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
-import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
+import { CONNECTOR_CATALOG, compareConnectorCatalogOrder } from "@/lib/api/connector-catalog";
 import {
   getSpaceEntityStoreSnapshot,
   localSpaceEntityStore,
@@ -16,6 +16,7 @@ import {
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
 import { ensureConnectedAppsPinned } from "@/lib/ensure-connected-apps-pinned";
+import { threadHasTurns } from "@/lib/persistent-chat";
 import {
   projectCoverGradientClass,
   projectCoverImageSrc,
@@ -69,6 +70,8 @@ function isSidebarChat(thread: Thread, workspaceId: string) {
   if (thread.connectorId) return false;
   // Project chats are reached via project pins (Canvas / Build / …).
   if (thread.projectId) return false;
+  // New / empty drafts stay off the list until the user sends a message.
+  if (!threadHasTurns(thread)) return false;
   return true;
 }
 
@@ -180,8 +183,11 @@ export function usePinnedItems() {
     }
 
     // Live connections fill Apps immediately after sign-in, even before pins sync.
-    for (const connectorId of connectedConnectorIdsLive(workspaceId)) {
-      if (seenConnectorIds.has(connectorId)) continue;
+    // Catalog order matches ensureConnectedAppsPinned so mobile/desktop agree.
+    const liveConnectors = connectedConnectorIdsLive(workspaceId)
+      .filter((connectorId) => !seenConnectorIds.has(connectorId))
+      .sort(compareConnectorCatalogOrder);
+    for (const connectorId of liveConnectors) {
       seenConnectorIds.add(connectorId);
       resolved.push(connectorPinnedItem(connectorId));
     }

@@ -1,56 +1,27 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
-import { useTheme } from "@/components/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
 
-const MARK_VERSION = "13";
+const MARK_VERSION = "14";
 
-function subscribeHtmlDark(onStoreChange: () => void) {
-  if (typeof document === "undefined") return () => {};
-  const root = document.documentElement;
-  const observer = new MutationObserver(onStoreChange);
-  observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-  return () => observer.disconnect();
-}
-
-function getHtmlDark(): boolean {
-  if (typeof document === "undefined") return false;
-  return document.documentElement.classList.contains("dark");
-}
-
-/** Brand mark — mono for chrome, color for splash / draft loading. */
+/** Brand mark — circular Cander orb (all tones share the color mark). */
 export function CanderMark({
   className,
-  tone = "auto",
+  tone: _tone = "auto",
 }: {
   className?: string;
-  /** Force white, black, or brand color; default follows theme / `html.dark`. */
+  /** Kept for call-site compatibility; mark is always the color orb. */
   tone?: "auto" | "white" | "black" | "color";
 }) {
-  const { theme } = useTheme();
-  const htmlDark = useSyncExternalStore(
-    subscribeHtmlDark,
-    getHtmlDark,
-    () => false,
-  );
-  const src =
-    tone === "color"
-      ? `/cander-mark-color.png?v=${MARK_VERSION}`
-      : tone === "white" ||
-          (tone === "auto" && (htmlDark || theme === "dark"))
-        ? `/cander-mark-dark.png?v=${MARK_VERSION}`
-        : `/cander-mark-light.png?v=${MARK_VERSION}`;
-
   return (
     <img
-      src={src}
+      src={`/cander-mark-color.png?v=${MARK_VERSION}`}
       alt=""
       aria-hidden="true"
-      width={248}
-      height={238}
+      width={732}
+      height={732}
       suppressHydrationWarning
-      className={cn("h-[29.7px] w-[31px] object-contain", className)}
+      className={cn("h-[29.7px] w-[29.7px] object-contain", className)}
     />
   );
 }

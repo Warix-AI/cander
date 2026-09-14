@@ -199,12 +199,12 @@ export function SpaceEmptyCard({
       )}
     >
       <div
-        className="pointer-events-none absolute inset-0 hidden sm:block"
+        className="pointer-events-none absolute inset-0"
         style={{ background: visual.gradient }}
         aria-hidden
       />
       <div
-        className="pointer-events-none absolute inset-0 hidden opacity-[0.16] mix-blend-overlay sm:block panel-grain"
+        className="pointer-events-none absolute inset-0 opacity-[0.16] mix-blend-overlay panel-grain"
         aria-hidden
       />
 

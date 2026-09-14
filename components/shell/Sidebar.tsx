@@ -303,13 +303,15 @@ export function Sidebar() {
           : null;
 
   // Expand the owning folder only when navigation changes — not while the
-  // user opens other pin sections to browse.
+  // user opens other pin sections to browse. Chats never auto-opens: only
+  // the user expanding that folder should show the list.
   useEffect(() => {
     if (!activePinKey) return;
     const owning = pinGroups.find((group) =>
       group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
     );
-    if (owning) openPinSection(owning.id);
+    if (!owning || owning.id === "chats") return;
+    openPinSection(owning.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pinGroups read on nav change only
   }, [activePinKey, openPinSection]);
 

@@ -34,7 +34,11 @@ import {
 } from "@/lib/ai/raw-openai/image-generation";
 import { listActiveConnections } from "@/lib/connectors/connections";
 import { authorizeToolExposure } from "@/lib/connectors/authorization";
-import { resolveConnectorScope } from "@/lib/ai/tools/connector-scope";
+import {
+  formatAccountAmbiguousQuestion,
+  matchConnectionFromUserText,
+  resolveConnectorScope,
+} from "@/lib/ai/tools/connector-scope";
 
 const SYSTEM_BASE = `You are Cander, a concise and capable AI assistant. Answer the user's request directly.
 Prefer compact, natural responses. Use connected app tools when needed via function calls.
@@ -221,6 +225,31 @@ export async function runAgentServerLoop(
       return [c.connectorId, full!] as const;
     }).filter((entry) => Boolean(entry[1])),
   );
+
+  const userMessage = lastUserMessage(input.messages);
+
+  // If the user named an account label (e.g. after we asked), bind it for
+  // multi-account connectors that are not already scoped this turn.
+  for (const connectorId of [
+    ...new Set(activeConnections.map((row) => row.connectorId)),
+  ]) {
+    if (scopedByConnector.has(connectorId)) continue;
+    const matches = activeConnections.filter(
+      (row) => row.connectorId === connectorId,
+    );
+    if (matches.length < 2) continue;
+    const matchedId = matchConnectionFromUserText({
+      text: userMessage,
+      candidates: matches.map((row) => ({
+        connectionId: row.connectionId,
+        label: row.label,
+      })),
+    });
+    if (!matchedId) continue;
+    const full = matches.find((row) => row.connectionId === matchedId);
+    if (full) scopedByConnector.set(connectorId, full);
+  }
+
   /**
    * Resolve an exact connection for a tool. Never pick by connector type alone
    * when multiple accounts exist unless the turn is scoped to one.
@@ -238,7 +267,10 @@ export async function runAgentServerLoop(
     return null;
   };
 
-  const userMessage = lastUserMessage(input.messages);
+  const connectorLabel = (connectorId: string) =>
+    snapshot.connectors.find((row) => row.connectorId === connectorId)?.label ??
+    connectorId;
+
   let discovery = scope.failClosed
     ? {
         toolIds: [] as string[],
@@ -253,18 +285,32 @@ export async function runAgentServerLoop(
       });
   let exposedIds = [...discovery.toolIds];
 
-  // Filter to tools that pass exposure authz for at least one account
+  // Filter to tools that pass exposure authz for at least one account.
+  // Multi-account (unresolved) tools stay exposed so we can ask / pause.
   exposedIds = exposedIds.filter((toolId) => {
     const tool = getCanderTool(toolId);
     if (!tool?.connectorId) return false;
+    const matches = activeConnections.filter(
+      (row) => row.connectorId === tool.connectorId,
+    );
     const conn = connectionForTool(tool.connectorId);
-    if (!conn) return false;
-    const authz = authorizeToolExposure(toolId, {
-      workspaceId: input.workspaceId,
-      profileId: input.profileId,
-      connection: conn,
-    });
-    return authz.ok;
+    if (conn) {
+      return authorizeToolExposure(toolId, {
+        workspaceId: input.workspaceId,
+        profileId: input.profileId,
+        connection: conn,
+      }).ok;
+    }
+    if (matches.length > 1) {
+      return matches.some((row) =>
+        authorizeToolExposure(toolId, {
+          workspaceId: input.workspaceId,
+          profileId: input.profileId,
+          connection: row,
+        }).ok,
+      );
+    }
+    return false;
   });
 
   // If scoped and resolved but discovery empty, fall back to those connectors only.
@@ -300,7 +346,24 @@ export async function runAgentServerLoop(
         const tool = getCanderTool(toolId);
         if (!tool?.connectorId) continue;
         const conn = connectionForTool(tool.connectorId);
-        if (!conn) continue;
+        if (!conn) {
+          const matches = activeConnections.filter(
+            (row) => row.connectorId === tool.connectorId,
+          );
+          if (
+            matches.length > 1 &&
+            matches.some((row) =>
+              authorizeToolExposure(toolId, {
+                workspaceId: input.workspaceId,
+                profileId: input.profileId,
+                connection: row,
+              }).ok,
+            )
+          ) {
+            exposedIds.push(toolId);
+          }
+          continue;
+        }
         const authz = authorizeToolExposure(toolId, {
           workspaceId: input.workspaceId,
           profileId: input.profileId,
@@ -311,14 +374,52 @@ export async function runAgentServerLoop(
     }
   }
 
+  // Before any model/tool work: if this turn needs a multi-account connector
+  // and no account is scoped/named, ask which account — every time.
+  for (const toolId of exposedIds) {
+    const tool = getCanderTool(toolId);
+    if (!tool?.connectorId) continue;
+    const matches = activeConnections.filter(
+      (row) => row.connectorId === tool.connectorId,
+    );
+    if (matches.length < 2) continue;
+    if (connectionForTool(tool.connectorId)) continue;
+    const candidates = matches.map((row) => ({
+      connectionId: row.connectionId,
+      label: row.label,
+    }));
+    const message = formatAccountAmbiguousQuestion({
+      connectorLabel: connectorLabel(tool.connectorId),
+      candidates,
+    });
+    return {
+      content: message,
+      toolResults: [],
+      pause: {
+        type: "account_ambiguous",
+        connectorId: tool.connectorId,
+        candidates,
+        message,
+      },
+      turnId,
+      model,
+      discoveryReason: discovery.reason,
+    };
+  }
+
   const refsPrompt = formatReferencesForPrompt(
     collectReferencesFromEvents(recentEvents),
   );
   const scopePrompt =
-    scope.scopedConnections.length > 0
-      ? `User scoped this turn to connected apps: ${preferConnectorIds.join(
+    scope.scopedConnections.length > 0 || scopedByConnector.size > 0
+      ? `User scoped this turn to connected apps: ${[
+          ...new Set([
+            ...preferConnectorIds,
+            ...scopedByConnector.keys(),
+          ]),
+        ].join(
           ", ",
-        )}. The user message names those apps inline where relevant. Prefer those connectors’ tools and do not ask which app to use unless the request clearly needs a different connected app.`
+        )}. Prefer those connectors’ tools for the scoped account and do not ask which app/account to use unless the request clearly needs a different connected app or account.`
       : scope.failClosed
         ? "User attempted to scope this turn to an app that could not be resolved for tool calls. If Connected apps above lists the app as connected, still use those tools. Do not invent a missing-access excuse."
         : "";
@@ -481,6 +582,14 @@ export async function runAgentServerLoop(
       const conn = connectionForTool(tool.connectorId);
 
       if (!conn && matches.length > 1) {
+        const candidates = matches.map((row) => ({
+          connectionId: row.connectionId,
+          label: row.label,
+        }));
+        const message = formatAccountAmbiguousQuestion({
+          connectorLabel: connectorLabel(tool.connectorId),
+          candidates,
+        });
         conversation.push({
           type: "function_call_output",
           call_id: callId,
@@ -488,25 +597,19 @@ export async function runAgentServerLoop(
             status: "denied",
             error: {
               code: "account_ambiguous",
-              message: `Multiple ${tool.connectorId} accounts are connected. Choose which account to use.`,
-              candidates: matches.map((row) => ({
-                connectionId: row.connectionId,
-                label: row.label,
-              })),
+              message,
+              candidates,
             },
           }),
         });
         return {
-          content: text || `Which ${tool.connectorId} account should I use?`,
+          content: text || message,
           toolResults,
           pause: {
             type: "account_ambiguous",
             connectorId: tool.connectorId,
-            candidates: matches.map((row) => ({
-              connectionId: row.connectionId,
-              label: row.label,
-            })),
-            message: `Multiple ${tool.connectorId} accounts are connected. Choose which account to use.`,
+            candidates,
+            message,
           },
           turnId,
           model,

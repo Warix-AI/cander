@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Check, ChevronDown } from "lucide-react";
 import { Dropdown } from "@/components/ui/Controls";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { APP_NAME } from "@/lib/app-brand";
 import {
   PRIMARY_NAV_CARD_ACTIVE,
@@ -77,6 +78,7 @@ export function ShellProductSwitcher({
               open && PRIMARY_NAV_CARD_ACTIVE,
             )}
           >
+            <CanderMark className="!h-5 !w-5 shrink-0" />
             <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">
               {current.title}
             </span>
@@ -111,6 +113,11 @@ export function ShellProductSwitcher({
                   selected && "bg-muted/60",
                 )}
               >
+                {product.id === "app" ? (
+                  <CanderMark className="!mt-0.5 !h-4 !w-4 shrink-0" />
+                ) : (
+                  <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                )}
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13.5px] font-medium leading-5 tracking-[-0.01em]">
                     {product.title}

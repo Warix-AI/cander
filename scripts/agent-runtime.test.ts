@@ -327,6 +327,8 @@ test("capability snapshot prompt lists connected apps", () => {
   });
   assert.match(text, /Gmail/);
   assert.match(text, /send:off/);
+  assert.match(text, /exactly one account/);
+  assert.match(text, /two or more accounts/);
 });
 
 test("slack tools honor default and explicit permissions", () => {

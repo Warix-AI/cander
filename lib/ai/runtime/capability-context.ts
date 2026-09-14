@@ -119,6 +119,7 @@ export function formatCapabilitySnapshotForPrompt(
   }
   lines.push(
     "Rules: never claim an external action succeeded unless a tool returned success. If an app appears above with a skill on, use its tools — do not say access is missing or disabled. Only mention enabling a skill when that skill is listed off.",
+    "Accounts: if an app lists exactly one account, use that account without asking. If an app lists two or more accounts, you MUST ask which account (by the account=\"…\" label) before calling any tool for that app — every time, unless this turn already scoped one account. Never guess or pick the first account.",
   );
   return lines.join("\n");
 }

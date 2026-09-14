@@ -10,6 +10,7 @@ import {
   SquarePen,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { CanderMark } from "@/components/brand/CanderMark";
 import { CanderWordmark } from "@/components/brand/CanderWordmark";
 import {
   MobileSlideStack,
@@ -180,7 +181,10 @@ function MenuMain({
   return (
     <>
       <div className="flex shrink-0 items-center justify-between gap-3 px-3 pl-7 pr-3 pt-[calc(env(safe-area-inset-top,0px)+22px)]">
-        <CanderWordmark />
+        <div className="flex min-w-0 items-center gap-2">
+          <CanderMark className="!h-6 !w-6" />
+          <CanderWordmark />
+        </div>
       </div>
 
       <div className="mt-[30px] flex min-h-0 flex-1 flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">

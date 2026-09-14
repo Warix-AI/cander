@@ -56,6 +56,40 @@ describe("shared space default chats", () => {
     );
   });
 
+  it("new chat replaces empty detached drafts instead of stacking blanks", () => {
+    const first = startContinuousChat([], "ws1", null);
+    const second = startContinuousChat(first.threads, "ws1", null);
+    assert.equal(
+      second.threads.filter((t) => isDetachedSessionChat(t, "ws1")).length,
+      1,
+    );
+    assert.equal(second.threads.some((t) => t.id === first.id), false);
+    assert.equal(second.threads[0]?.id, second.id);
+
+    const withMessage = first.threads.map((t) =>
+      t.id === first.id
+        ? {
+            ...t,
+            messages: [
+              {
+                id: "u1",
+                role: "user" as const,
+                content: "keep me",
+                at: "12:00",
+              },
+            ],
+            snippet: "keep me",
+          }
+        : t,
+    );
+    const third = startContinuousChat(withMessage, "ws1", null);
+    assert.equal(third.threads.some((t) => t.id === first.id), true);
+    assert.equal(
+      third.threads.filter((t) => isDetachedSessionChat(t, "ws1")).length,
+      2,
+    );
+  });
+
   it("Default chat promotes a draft into the universal slot", () => {
     const draft = startContinuousChat([], "ws1", null);
     const promoted = adoptThreadAsUniversalDefault(

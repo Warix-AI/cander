@@ -214,7 +214,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
         )
       : null;
   const canSwitchConnectorAccounts =
-    inConnector && Boolean(connectorId) && connectorAccounts.length > 0;
+    inConnector && Boolean(connectorId) && connectorAccounts.length > 1;
   const isWorkItemBrowser = isWorkItemBrowserProjectId(projectId);
   const entityOpen =
     (Boolean(projectId) && !isWorkItemBrowser) || inConnector;

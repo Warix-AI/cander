@@ -47,7 +47,6 @@ import { executeAuthorizedTool } from "@/lib/ai/runtime/tools";
 import { createApiBundle } from "@/lib/api";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
 import { connectionsForConnectorLive } from "@/lib/connector-connections-store";
-import { resolveActiveConnectorAccount } from "@/lib/connector-active-account";
 import { requestConnectorConnect, requestConnectorsCatalog } from "@/lib/connector-connect-intent";
 import { isUiConnectedStatus } from "@/lib/connectors/authz";
 import { sanitizeAssistantVisibleText } from "@/lib/ai/tool-protocol";
@@ -1324,7 +1323,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBrowserSearch(null);
     setPageReference(null);
     setEntityReference(null);
-    // Stay collapsed until the first message is sent (schedulePanelReveal).
+    // Stay collapsed until the user opens the panel (top-right toggle).
     setPanelMode("collapsed");
     setPanelRatioState(NEW_CHAT_CHOICE_PANEL_RATIO);
     setMobileSurface("chat");
@@ -2146,7 +2145,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let composerConnectors = (opts?.composerConnectors ?? []).filter(
         (c) => c.connectionId && c.connectorId && c.label,
       );
-      // One-chat-per-connector / open connector panel: always scope tools when connected.
+      // One-chat-per-connector: auto-scope only when a single account exists.
+      // Multiple accounts must be chosen explicitly (composer chip / user reply).
       if (selectedConnectionIds.length === 0) {
         const cid =
           opts?.scopedConnectorId ||
@@ -2154,13 +2154,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           thread?.connectorId ||
           null;
         if (cid) {
-          const active = resolveActiveConnectorAccount(
-            workspaceId,
-            cid,
-            connectionsForConnectorLive(workspaceId, cid),
-            isUiConnectedStatus,
+          const live = connectionsForConnectorLive(workspaceId, cid).filter(
+            (row) => isUiConnectedStatus(row.status),
           );
-          if (active) {
+          if (live.length === 1) {
+            const active = live[0]!;
             selectedConnectionId = active.id;
             selectedConnectionIds = [active.id];
             if (composerConnectors.length === 0) {
@@ -3514,14 +3512,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!onUnscopedChat && space && (kind === "build" || kind === "refine" || kind === "fix"))
         setBuildTool("preview");
       if (!onUnscopedChat && space && kind === "changes") setBuildTool("activity");
-      // First turn: dock the chat first, then reveal the right panel after a beat.
-      const revealPanelAfterDock =
-        panelMode === "collapsed" && !threadHasTurns(thread);
-      const nextPanelMode = revealPanelAfterDock ? "collapsed" : panelMode;
-      setPanelMode(nextPanelMode);
-      if (revealPanelAfterDock) {
-        schedulePanelReveal();
-      }
+      // New chat stays collapsed until the user opens the panel (top-right).
       setMobileSurface("chat");
       pushTarget({
         view: keepSpace ? "space" : "chat",
@@ -3530,7 +3521,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         projectId: onUnscopedChat
           ? projectId
           : (projectId ?? intent.projectId ?? null),
-        panelMode: nextPanelMode,
+        panelMode,
         panelIntent: "execute",
         connectorId: onUnscopedChat
           ? connectorId
@@ -3579,7 +3570,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       turnActive,
       setThreads,
       trackImageGenerationJob,
-      schedulePanelReveal,
     ],
   );
 

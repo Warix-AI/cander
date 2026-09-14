@@ -30,3 +30,13 @@ export const CONNECTOR_CATALOG: ConnectorInfo[] = [
 export function connectorName(id: string) {
   return CONNECTOR_CATALOG.find((item) => item.id === id)?.name ?? id;
 }
+
+/** Stable rank for Apps pin lists — catalog order, then id. */
+export function connectorCatalogRank(id: string) {
+  const index = CONNECTOR_CATALOG.findIndex((item) => item.id === id);
+  return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
+}
+
+export function compareConnectorCatalogOrder(a: string, b: string) {
+  return connectorCatalogRank(a) - connectorCatalogRank(b) || a.localeCompare(b);
+}
