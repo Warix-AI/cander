@@ -513,8 +513,7 @@ type AppContextValue = {
   openSettings: (tab?: SettingsTab, opts?: { hub?: boolean }) => void;
   openConnector: (id: string) => void;
   /**
-   * Open the Apps catalog detail for this app and start Connect / Add Account
-   * (existing modal flow — no parallel connection system).
+   * Open this app's detail screen in Apps (no auto name-account prompt).
    */
   openConnectorConnect: (id: string) => void;
   /** Re-select the persistent one-chat-per-connector thread. */
@@ -5851,8 +5850,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [pushTarget, workspaceId, setThreads]);
 
   /**
-   * Sidebar More → +: land on this app's existing Connect / Add Account UI
-   * in the Apps catalog (ConnectorDetailModal), not a parallel flow.
+   * Sidebar More → open this app's existing detail screen in Apps
+   * (ConnectorDetailModal) without auto-opening the name-account prompt.
    */
   const openConnectorConnect = useCallback(
     (id: string) => {

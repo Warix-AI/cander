@@ -7,6 +7,8 @@ import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
 import { signOutAccount } from "@/lib/auth/sign-out";
 import { closeAllPinSections } from "@/lib/pin-display-prefs";
+import { setAppsMoreOpen } from "@/lib/apps-more-prefs";
+import { requestConnectorsCatalog } from "@/lib/connector-connect-intent";
 import { USAGE_METER_TONES } from "@/lib/usage-meters";
 import { useUsageStatusPercent } from "@/lib/use-usage-status";
 import { cn } from "@/lib/utils";
@@ -110,6 +112,8 @@ export function AccountMenu() {
             className={flyoutRowClass}
             onClick={() => {
               closeAllPinSections();
+              setAppsMoreOpen(false);
+              requestConnectorsCatalog();
               openSpace("connectors");
               close();
             }}

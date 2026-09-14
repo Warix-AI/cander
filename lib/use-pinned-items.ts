@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceData } from "@/components/app/SpaceDataProvider";
 import { CONNECTOR_CATALOG } from "@/lib/api/connector-catalog";
@@ -10,12 +10,19 @@ import {
 } from "@/lib/api/space-entity-store";
 import { imageCoverFromMessages } from "@/lib/chat-image-cover";
 import {
+  connectedConnectorIdsLive,
+  getConnectorConnectionsServerSnapshot,
+  getConnectorConnectionsSnapshot,
+  subscribeConnectorConnections,
+} from "@/lib/connector-connections-store";
+import { ensureConnectedAppsPinned } from "@/lib/ensure-connected-apps-pinned";
+import {
   projectCoverGradientClass,
   projectCoverImageSrc,
 } from "@/lib/project-cover";
 import { healMisclassifiedPins } from "@/lib/session";
 import type { ProjectKind } from "@/lib/space-entities";
-import type { PinKind, SpaceId } from "@/lib/types";
+import type { PinKind, SpaceId, Thread } from "@/lib/types";
 
 export type PinnedItem = {
   kind: PinKind;
@@ -52,9 +59,44 @@ function chatDisplayTitle(title: string | undefined, snippet?: string) {
   if (name && name !== "Chat") return name;
   const fromSnippet = snippet?.trim();
   if (fromSnippet) return fromSnippet.slice(0, 48);
-  return "Pinned chat";
+  return "Chat";
 }
 
+/** Chats that belong in the sidebar Chats folder (not Apps / project folders). */
+function isSidebarChat(thread: Thread, workspaceId: string) {
+  if (thread.workspaceId !== workspaceId) return false;
+  // Connector one-chat threads live under Apps.
+  if (thread.connectorId) return false;
+  // Project chats are reached via project pins (Canvas / Build / …).
+  if (thread.projectId) return false;
+  return true;
+}
+
+function threadToPinnedItem(thread: Thread): PinnedItem {
+  return {
+    kind: "thread",
+    id: thread.id,
+    title: chatDisplayTitle(thread.title, thread.snippet),
+    spaceId: thread.spaceId,
+    coverImage: imageCoverFromMessages(thread.messages),
+  };
+}
+
+function connectorPinnedItem(id: string): PinnedItem {
+  const connector = CONNECTOR_CATALOG.find((item) => item.id === id);
+  return {
+    kind: "connector",
+    id,
+    title: pinConnectorTitle(id, connector?.name),
+    icon: connector?.id ?? id,
+  };
+}
+
+/**
+ * Sidebar rows: connector/project pins from the pin store, live connected
+ * apps (so Apps appear right after sign-in), plus every workspace chat under
+ * Chats (no manual pin required).
+ */
 export function usePinnedItems() {
   const { pins, threads, workspaceId } = useApp();
   const { ctx } = useSpaceData();
@@ -63,6 +105,11 @@ export function usePinnedItems() {
     ? localSpaceEntityStore.listAllProjects(ctx)
     : [];
   const projectRevision = snap.revision;
+  const connectionsSnap = useSyncExternalStore(
+    subscribeConnectorConnections,
+    getConnectorConnectionsSnapshot,
+    getConnectorConnectionsServerSnapshot,
+  );
 
   useEffect(() => {
     healMisclassifiedPins({
@@ -70,6 +117,12 @@ export function usePinnedItems() {
       projectIds: projects.map((item) => item.id),
     });
   }, [pins, threads, projects, projectRevision]);
+
+  // After connections hydrate (post sign-in), pin any connected apps missing
+  // from the sidebar so Apps populate without a manual refresh.
+  useEffect(() => {
+    ensureConnectedAppsPinned(workspaceId);
+  }, [workspaceId, connectionsSnap]);
 
   const items = useMemo(() => {
     const resolved: PinnedItem[] = [];
@@ -79,47 +132,30 @@ export function usePinnedItems() {
         .map((item) => [item.id, item] as const),
     );
     const threadById = new Map(threads.map((item) => [item.id, item] as const));
+    const seenThreadIds = new Set<string>();
+    const seenConnectorIds = new Set<string>();
 
     for (const pin of pins) {
       if (pin.kind === "connector") {
-        const connector = CONNECTOR_CATALOG.find((item) => item.id === pin.id);
-        resolved.push({
-          kind: "connector",
-          id: pin.id,
-          title: pinConnectorTitle(pin.id, connector?.name),
-          icon: connector?.id ?? pin.id,
-        });
+        seenConnectorIds.add(pin.id);
+        resolved.push(connectorPinnedItem(pin.id));
         continue;
       }
 
-      // Prefer thread resolution when a project pin id is actually a chat
-      // (legacy Recents pin bug), or when kind is already thread.
+      // Thread pins are superseded by auto-listed chats below.
+      if (pin.kind === "thread") continue;
+
       const thread = threadById.get(pin.id);
       const project = projectById.get(pin.id);
 
-      if (pin.kind === "thread" || (pin.kind === "project" && thread && !project)) {
-        if (thread && thread.workspaceId === workspaceId) {
-          resolved.push({
-            kind: "thread",
-            id: thread.id,
-            title: chatDisplayTitle(thread.title, thread.snippet),
-            spaceId: thread.spaceId,
-            coverImage: imageCoverFromMessages(thread.messages),
-          });
-        } else if (thread) {
-          resolved.push({
-            kind: "thread",
-            id: pin.id,
-            title: chatDisplayTitle(thread.title, thread.snippet),
-            spaceId: thread.spaceId,
-            coverImage: imageCoverFromMessages(thread.messages),
-          });
-        } else {
-          resolved.push({
-            kind: "thread",
-            id: pin.id,
-            title: "Pinned chat",
-          });
+      // Legacy: chat mis-pinned as project with no project row.
+      if (pin.kind === "project" && thread && !project) {
+        if (
+          isSidebarChat(thread, workspaceId) &&
+          !seenThreadIds.has(thread.id)
+        ) {
+          seenThreadIds.add(thread.id);
+          resolved.push(threadToPinnedItem(thread));
         }
         continue;
       }
@@ -142,8 +178,27 @@ export function usePinnedItems() {
         });
       }
     }
+
+    // Live connections fill Apps immediately after sign-in, even before pins sync.
+    for (const connectorId of connectedConnectorIdsLive(workspaceId)) {
+      if (seenConnectorIds.has(connectorId)) continue;
+      seenConnectorIds.add(connectorId);
+      resolved.push(connectorPinnedItem(connectorId));
+    }
+
+    // Auto-list every workspace chat under Chats (recency order).
+    const chatThreads = threads
+      .filter((thread) => isSidebarChat(thread, workspaceId))
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+
+    for (const thread of chatThreads) {
+      if (seenThreadIds.has(thread.id)) continue;
+      seenThreadIds.add(thread.id);
+      resolved.push(threadToPinnedItem(thread));
+    }
+
     return resolved;
-  }, [pins, threads, workspaceId, projects, projectRevision]);
+  }, [pins, threads, workspaceId, projects, projectRevision, connectionsSnap]);
 
   return { pinnedItems: items };
 }

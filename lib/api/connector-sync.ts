@@ -20,6 +20,7 @@ import {
   subscribeInstalledConnectors,
   getInstalledConnectorsRevision,
 } from "@/lib/connector-install";
+import { ensureConnectedAppsPinned } from "@/lib/ensure-connected-apps-pinned";
 import {
   getWorkConnectorsSnapshot,
   replaceWorkConnectorsState,
@@ -91,10 +92,14 @@ export async function hydrateConnectorsFromRemote(ctx: WorkspaceCtx) {
     try {
       const connections = await fetchConnectorConnections(workspaceId);
       replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+      ensureConnectedAppsPinned(workspaceId);
     } catch (err) {
       console.warn("[cander] connection hydrate failed", workspaceId, err);
     }
   }
+
+  // Also pin for the active ctx workspace even if membership list was empty.
+  ensureConnectedAppsPinned(ctx.workspaceId);
 
   window.setTimeout(() => {
     skipRemoteSync = false;

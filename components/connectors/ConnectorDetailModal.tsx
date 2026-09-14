@@ -244,6 +244,8 @@ export function ConnectorDetailModal({
   const showAccountBar = canManageServerConnection && !oauthPending && !blocked;
   const showAccountNav = showAccountBar && liveAccounts.length > 0;
   const showHeaderConnect = showAccountBar && liveAccounts.length === 0;
+  /** No accounts yet: title + Connect share one row just above the gradient. */
+  const compactUnconnected = showHeaderConnect;
   const menuHasItems =
     Boolean(selectedConnection && canManageServerConnection) ||
     canDisconnectOrUninstall ||
@@ -425,10 +427,14 @@ export function ConnectorDetailModal({
             dedicated
               ? cn(
                   "mx-auto w-full max-w-[42rem] px-5",
-                  // Clear mobile chrome + ~20px breathing room under the header.
+                  // Connected: lift header. Unconnected: sit title+Connect on the gradient.
                   mobile
-                    ? "pt-[calc(env(safe-area-inset-top,0px)+5.75rem)]"
-                    : "pt-[75px]",
+                    ? compactUnconnected
+                      ? "pt-[calc(env(safe-area-inset-top,0px)+4.5rem)]"
+                      : "pt-[calc(env(safe-area-inset-top,0px)+5.75rem)]"
+                    : compactUnconnected
+                      ? "pt-3"
+                      : "pt-[75px]",
                 )
               : "contents",
           )}
@@ -439,175 +445,220 @@ export function ConnectorDetailModal({
             dedicated ? "px-0" : "px-5 pt-5",
           )}
         >
-          <div className="flex items-start gap-3">
-            <ConnectorMark
-              id={item.icon}
-              size="md"
-              className={cn(CONNECTOR_ICON_CLASS, "shrink-0")}
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <h2
-                  id={`connector-detail-${item.id}`}
-                  className="truncate text-[22.5px] font-semibold leading-none tracking-[-0.03em]"
-                >
-                  {item.name}
-                </h2>
-                <span
-                  className={cn(
-                    "inline-flex h-5 shrink-0 items-center border px-1.5 text-[9px] font-medium tracking-[-0.01em]",
-                    SHELL_G3_RADIUS,
-                    statusTone,
-                  )}
-                >
-                  {statusLabel}
-                </span>
+          {compactUnconnected ? (
+            <div className="flex items-center gap-3">
+              <ConnectorMark
+                id={item.icon}
+                size="md"
+                className={cn(CONNECTOR_ICON_CLASS, "shrink-0")}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h2
+                    id={`connector-detail-${item.id}`}
+                    className="truncate text-[22.5px] font-semibold leading-none tracking-[-0.03em]"
+                  >
+                    {item.name}
+                  </h2>
+                  <span
+                    className={cn(
+                      "inline-flex h-5 shrink-0 items-center border px-1.5 text-[9px] font-medium tracking-[-0.01em]",
+                      SHELL_G3_RADIUS,
+                      statusTone,
+                    )}
+                  >
+                    {statusLabel}
+                  </span>
+                </div>
+                <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted-foreground">
+                  {item.description}
+                </p>
               </div>
-              <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted-foreground">
-                {item.description}
-              </p>
-            </div>
-            {!dedicated ? (
               <button
                 type="button"
-                aria-label="Close"
-                onClick={onClose}
+                aria-label="Connect account"
+                disabled={busy}
+                onClick={() => openNamePrompt("connect")}
                 className={cn(
-                  "inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
-                  SHELL_G3_RADIUS,
+                  "inline-flex h-10 shrink-0 items-center gap-2 px-3.5 text-[13px] font-medium tracking-[-0.01em]",
+                  connectorAccountChipShell,
+                  busy
+                    ? "cursor-not-allowed text-muted-foreground/40"
+                    : "text-foreground hover:bg-white/65 dark:hover:bg-white/[0.1]",
                 )}
               >
-                <X className="h-4 w-4" strokeWidth={1.6} />
-              </button>
-            ) : null}
-          </div>
-
-          {showAccountNav || showHeaderConnect || showActionsMenu ? (
-            <div className="mt-4 flex items-center gap-2">
-              {showAccountNav ? (
-                <ConnectorAccountBar
-                  className="min-w-0 flex-1"
-                  connectorIcon={item.icon}
-                  accounts={liveAccounts}
-                  activeId={selectedConnection?.id ?? null}
-                  onSelect={setSelectedId}
-                  addDisabled={!canAddAccount || busy}
-                  onAdd={() => {
-                    if (!canAddAccount) return;
-                    openNamePrompt("add");
-                  }}
+                <ConnectorMark
+                  id={item.icon}
+                  size="nav"
+                  className="shrink-0 opacity-80"
                 />
-              ) : (
-                <div className="min-w-0 flex-1" />
-              )}
-              <div className="flex shrink-0 items-center gap-0.5">
-                {showHeaderConnect ? (
+                Connect
+              </button>
+              {!dedicated ? (
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={onClose}
+                  className={cn(
+                    "inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
+                    SHELL_G3_RADIUS,
+                  )}
+                >
+                  <X className="h-4 w-4" strokeWidth={1.6} />
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-start gap-3">
+                <ConnectorMark
+                  id={item.icon}
+                  size="md"
+                  className={cn(CONNECTOR_ICON_CLASS, "shrink-0")}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <h2
+                      id={`connector-detail-${item.id}`}
+                      className="truncate text-[22.5px] font-semibold leading-none tracking-[-0.03em]"
+                    >
+                      {item.name}
+                    </h2>
+                    <span
+                      className={cn(
+                        "inline-flex h-5 shrink-0 items-center border px-1.5 text-[9px] font-medium tracking-[-0.01em]",
+                        SHELL_G3_RADIUS,
+                        statusTone,
+                      )}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-muted-foreground">
+                    {item.description}
+                  </p>
+                </div>
+                {!dedicated ? (
                   <button
                     type="button"
-                    aria-label="Connect account"
-                    disabled={busy}
-                    onClick={() => openNamePrompt("connect")}
+                    aria-label="Close"
+                    onClick={onClose}
                     className={cn(
-                      "inline-flex h-10 items-center gap-2 px-3.5 text-[13px] font-medium tracking-[-0.01em]",
-                      connectorAccountChipShell,
-                      busy
-                        ? "cursor-not-allowed text-muted-foreground/40"
-                        : "text-foreground hover:bg-white/65 dark:hover:bg-white/[0.1]",
-                    )}
-                  >
-                    <ConnectorMark
-                      id={item.icon}
-                      size="nav"
-                      className="shrink-0 opacity-80"
-                    />
-                    Connect
-                  </button>
-                ) : null}
-                {showActionsMenu ? (
-                  <Dropdown
-                    align="end"
-                    placement="bottom"
-                    menuClassName={cn(
-                      "min-w-[10rem] bg-white/55 shadow-[0_12px_32px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:bg-white/[0.08] dark:shadow-[0_12px_32px_rgba(0,0,0,0.22)]",
+                      "inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
                       SHELL_G3_RADIUS,
                     )}
-                    matchTrigger={false}
-                    trigger={({ toggle }) => (
-                      <button
-                        type="button"
-                        aria-label="App options"
-                        onClick={toggle}
-                        className={cn(
-                          "inline-flex h-10 w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
-                          SHELL_G3_RADIUS,
-                        )}
-                      >
-                        <Settings2 className="h-5 w-5" strokeWidth={1.8} />
-                      </button>
-                    )}
                   >
-                    {(close) => (
-                      <>
-                        {selectedConnection && canManageServerConnection ? (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={busy}
-                            onClick={() => {
-                              close();
-                              openNamePrompt("rename");
-                            }}
-                            className={cn(
-                              "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
-                              SHELL_G3_RADIUS,
-                            )}
-                          >
-                            Rename
-                          </button>
-                        ) : null}
-                        {!canDisconnectOrUninstall && !showAccountBar ? (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={busy}
-                            onClick={() => {
-                              close();
-                              void onConnect({ displayName: "Account" });
-                            }}
-                            className={cn(
-                              "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
-                              SHELL_G3_RADIUS,
-                            )}
-                          >
-                            {busy ? "Working…" : primaryLabel}
-                          </button>
-                        ) : null}
-                        {canDisconnectOrUninstall ? (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={busy}
-                            onClick={() => {
-                              close();
-                              setConfirmDisconnect(true);
-                            }}
-                            className={cn(
-                              "flex w-full px-3 py-2 text-left text-[13px] text-destructive hover:bg-destructive/5 disabled:opacity-50",
-                              SHELL_G3_RADIUS,
-                            )}
-                          >
-                            {canManageServerConnection
-                              ? "Disconnect"
-                              : "Uninstall"}
-                          </button>
-                        ) : null}
-                      </>
-                    )}
-                  </Dropdown>
+                    <X className="h-4 w-4" strokeWidth={1.6} />
+                  </button>
                 ) : null}
               </div>
-            </div>
-          ) : null}
+
+              {showAccountNav || showActionsMenu ? (
+                <div className="mt-4 flex items-center gap-2">
+                  {showAccountNav ? (
+                    <ConnectorAccountBar
+                      className="min-w-0 flex-1"
+                      connectorIcon={item.icon}
+                      accounts={liveAccounts}
+                      activeId={selectedConnection?.id ?? null}
+                      onSelect={setSelectedId}
+                      addDisabled={!canAddAccount || busy}
+                      onAdd={() => {
+                        if (!canAddAccount) return;
+                        openNamePrompt("add");
+                      }}
+                    />
+                  ) : (
+                    <div className="min-w-0 flex-1" />
+                  )}
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    {showActionsMenu ? (
+                      <Dropdown
+                        align="end"
+                        placement="bottom"
+                        menuClassName={cn(
+                          "min-w-[10rem] bg-white/55 shadow-[0_12px_32px_rgba(15,23,42,0.12)] backdrop-blur-xl dark:bg-white/[0.08] dark:shadow-[0_12px_32px_rgba(0,0,0,0.22)]",
+                          SHELL_G3_RADIUS,
+                        )}
+                        matchTrigger={false}
+                        trigger={({ toggle }) => (
+                          <button
+                            type="button"
+                            aria-label="App options"
+                            onClick={toggle}
+                            className={cn(
+                              "inline-flex h-10 w-12 shrink-0 items-center justify-center text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground",
+                              SHELL_G3_RADIUS,
+                            )}
+                          >
+                            <Settings2 className="h-5 w-5" strokeWidth={1.8} />
+                          </button>
+                        )}
+                      >
+                        {(close) => (
+                          <>
+                            {selectedConnection && canManageServerConnection ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={busy}
+                                onClick={() => {
+                                  close();
+                                  openNamePrompt("rename");
+                                }}
+                                className={cn(
+                                  "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
+                                  SHELL_G3_RADIUS,
+                                )}
+                              >
+                                Rename
+                              </button>
+                            ) : null}
+                            {!canDisconnectOrUninstall && !showAccountBar ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={busy}
+                                onClick={() => {
+                                  close();
+                                  void onConnect({ displayName: "Account" });
+                                }}
+                                className={cn(
+                                  "flex w-full px-3 py-2 text-left text-[13px] hover:bg-black/[0.06] dark:hover:bg-white/[0.1] disabled:opacity-50",
+                                  SHELL_G3_RADIUS,
+                                )}
+                              >
+                                {busy ? "Working…" : primaryLabel}
+                              </button>
+                            ) : null}
+                            {canDisconnectOrUninstall ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={busy}
+                                onClick={() => {
+                                  close();
+                                  setConfirmDisconnect(true);
+                                }}
+                                className={cn(
+                                  "flex w-full px-3 py-2 text-left text-[13px] text-destructive hover:bg-destructive/5 disabled:opacity-50",
+                                  SHELL_G3_RADIUS,
+                                )}
+                              >
+                                {canManageServerConnection
+                                  ? "Disconnect"
+                                  : "Uninstall"}
+                              </button>
+                            ) : null}
+                          </>
+                        )}
+                      </Dropdown>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
 
         <div

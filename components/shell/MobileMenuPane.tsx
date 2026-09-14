@@ -25,6 +25,8 @@ import {
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
 import { closeAllPinSections } from "@/lib/pin-display-prefs";
+import { setAppsMoreOpen } from "@/lib/apps-more-prefs";
+import { requestConnectorsCatalog } from "@/lib/connector-connect-intent";
 import { navLabel, useMainNavItems } from "@/lib/use-main-nav-items";
 import { isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { navIcon } from "@/lib/space-icons";
@@ -74,6 +76,8 @@ export function MobileMenuPane() {
     } else if (id === "recents") {
       openRecents();
     } else if (id === "connectors") {
+      setAppsMoreOpen(false);
+      requestConnectorsCatalog();
       openSpace("connectors");
       opensPanel = true;
     } else if (!isExtraNavId(id)) {

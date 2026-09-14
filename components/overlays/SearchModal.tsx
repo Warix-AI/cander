@@ -29,6 +29,8 @@ import {
 } from "@/lib/hooks/use-space-index";
 import { QuerySkeleton } from "@/lib/hooks/space-query-ui";
 import { SHOW_CONNECTORS_NAV } from "@/lib/spaces";
+import { setAppsMoreOpen } from "@/lib/apps-more-prefs";
+import { requestConnectorsCatalog } from "@/lib/connector-connect-intent";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { cn } from "@/lib/utils";
 
@@ -173,7 +175,11 @@ export function SearchModal() {
         meta: "Connect your apps",
         group: "Navigate",
         icon: Blocks,
-        run: () => openSpace("connectors"),
+        run: () => {
+          setAppsMoreOpen(false);
+          requestConnectorsCatalog();
+          openSpace("connectors");
+        },
       });
     }
     push({

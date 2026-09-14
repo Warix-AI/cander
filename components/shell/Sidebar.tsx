@@ -51,6 +51,7 @@ import {
 import {
   getAppsMoreOpenServerSnapshot,
   getAppsMoreOpenSnapshot,
+  setAppsMoreOpen,
   subscribeAppsMoreOpen,
 } from "@/lib/apps-more-prefs";
 import { spaceIconTint } from "@/lib/space-icons";
@@ -593,6 +594,9 @@ export function Sidebar() {
                             const closing = !collapsed;
                             const ownsView = Boolean(activeChild);
                             togglePinSection(group.id);
+                            if (group.id === "connectors" && closing) {
+                              setAppsMoreOpen(false);
+                            }
                             // Closing the folder that owns the current view → New.
                             if (closing && ownsView) {
                               skipMobilePagerTransitionOnce();
@@ -862,21 +866,40 @@ function PinnedRow({
       >
         <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
-      <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
-        {running ? (
-          <span
-            aria-hidden
-            title="Expert running"
-            className="pointer-events-none absolute h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
-          />
-        ) : inUse ? (
-          <span
-            aria-hidden
-            className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
-          />
-        ) : null}
-        <PinControl kind={kind} id={id} />
-      </div>
+      {kind === "connector" ? (
+        running || inUse ? (
+          <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
+            {running ? (
+              <span
+                aria-hidden
+                title="Expert running"
+                className="pointer-events-none h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4]"
+              />
+            ) : (
+              <span
+                aria-hidden
+                className="pointer-events-none h-1.5 w-1.5 rounded-full bg-[#0b4fc4]"
+              />
+            )}
+          </div>
+        ) : null
+      ) : (
+        <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
+          {running ? (
+            <span
+              aria-hidden
+              title="Expert running"
+              className="pointer-events-none absolute h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
+            />
+          ) : inUse ? (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
+            />
+          ) : null}
+          <PinControl kind={kind} id={id} />
+        </div>
+      )}
     </div>
   );
 }

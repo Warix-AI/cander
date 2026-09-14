@@ -25,6 +25,7 @@ import {
 import {
   getAppsMoreOpenServerSnapshot,
   getAppsMoreOpenSnapshot,
+  setAppsMoreOpen,
   subscribeAppsMoreOpen,
 } from "@/lib/apps-more-prefs";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
@@ -158,6 +159,9 @@ export function PinsSheet({
               const closing = !collapsed;
               const ownsView = Boolean(activeChild);
               togglePinSection(group.id);
+              if (group.id === "connectors" && closing) {
+                setAppsMoreOpen(false);
+              }
               if (closing && ownsView) {
                 // Avoid stacking menu-close + pager + surface-enter (rebound jolt).
                 skipMobilePagerTransitionOnce();
@@ -214,7 +218,6 @@ export function PinsSheet({
               <AppsMoreSection
                 listedIds={group.items.map((item) => item.id)}
                 onConnect={connectFromMore}
-                rowClassName={cn(mobileMenuRowClass, "pl-1.5")}
               />
             ) : null}
           </PinSectionFolder>

@@ -51,7 +51,10 @@ import type { ConnectorConnection } from "@/lib/connectors/types";
 import {
   getConnectorConnectIntentServerSnapshot,
   getConnectorConnectIntentSnapshot,
+  getConnectorsCatalogIntentServerSnapshot,
+  getConnectorsCatalogIntentSnapshot,
   subscribeConnectorConnectIntent,
+  subscribeConnectorsCatalogIntent,
 } from "@/lib/connector-connect-intent";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
 import {
@@ -114,7 +117,6 @@ export function ConnectorsDashboard() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [detailConnectorId, setDetailConnectorId] = useState<string | null>(null);
   const [detailRenameNonce, setDetailRenameNonce] = useState(0);
-  const [detailConnectNonce, setDetailConnectNonce] = useState(0);
   const [connectionsLoading, setConnectionsLoading] = useState(
     () => getDataBackend() !== "local",
   );
@@ -123,6 +125,11 @@ export function ConnectorsDashboard() {
     subscribeConnectorConnectIntent,
     getConnectorConnectIntentSnapshot,
     getConnectorConnectIntentServerSnapshot,
+  );
+  const catalogIntent = useSyncExternalStore(
+    subscribeConnectorsCatalogIntent,
+    getConnectorsCatalogIntentSnapshot,
+    getConnectorsCatalogIntentServerSnapshot,
   );
 
   const ensureConnectorPinned = (id: string) => {
@@ -416,17 +423,25 @@ export function ConnectorsDashboard() {
   };
 
   const handledConnectNonceRef = useRef(0);
+  const handledCatalogNonceRef = useRef(0);
 
-  // Sidebar More → +: open this app's detail in Connect / Add Account state.
+  // Sidebar More → +: open this app's detail screen (no auto name prompt).
   useEffect(() => {
     if (!connectIntent?.connectorId) return;
     if (handledConnectNonceRef.current === connectIntent.nonce) return;
     handledConnectNonceRef.current = connectIntent.nonce;
     setDetailConnectorId(connectIntent.connectorId);
-    setDetailConnectNonce(connectIntent.nonce);
     void refreshConnections();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intent nonce drives requests
   }, [connectIntent?.nonce, connectIntent?.connectorId]);
+
+  // General → Apps (and other catalog entry points): show the Apps list, not a detail.
+  useEffect(() => {
+    if (!catalogIntent?.nonce) return;
+    if (handledCatalogNonceRef.current === catalogIntent.nonce) return;
+    handledCatalogNonceRef.current = catalogIntent.nonce;
+    setDetailConnectorId(null);
+  }, [catalogIntent?.nonce]);
 
   const selectConnector = (id: string) => {
     // The General catalog opens its own connector detail. Pinned connector
@@ -860,7 +875,6 @@ export function ConnectorsDashboard() {
         }}
         onSetPin={() => setPin("connector", detailItem.id, "primary")}
         renameRequestNonce={detailRenameNonce}
-        connectRequestNonce={detailConnectNonce}
         onPromptSelect={(text) => {
           setComposerPendingInput({ text, source: "quick-ask" });
           newChat();
