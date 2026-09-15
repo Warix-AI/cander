@@ -34,10 +34,10 @@ export type VoiceDelegationOpenContext = {
   needsBrowser?: boolean;
 };
 
-const MIN_INTERVAL_MS = 2_800;
+const MIN_INTERVAL_MS = 6_500;
 /** Only speak a silence heartbeat after this long with no progress line. */
-const HEARTBEAT_MS = 7_000;
-const MAX_SPOKEN = 6;
+const HEARTBEAT_MS = 8_000;
+const MAX_SPOKEN = 5;
 
 const HEARTBEAT_LINES = [
   "This is taking a bit — hang tight.",
