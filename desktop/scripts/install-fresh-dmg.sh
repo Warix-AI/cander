@@ -23,20 +23,24 @@ if [[ ! -d "$APP_SRC" ]]; then
   env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac dir
 fi
 
-echo "→ Building $DMG…"
-STAGE="$(mktemp -d /tmp/cander-dmg-XXXX)"
-rm -f "$DMG"
-cp -R "$APP_SRC" "$STAGE/Cander.app"
-ln -s /Applications "$STAGE/Applications"
-hdiutil create -volname "Cander" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
-rm -rf "$STAGE"
-
 echo "→ Installing to /Applications…"
-hdiutil attach "$DMG" -nobrowse -quiet
-cp -R "/Volumes/Cander/Cander.app" /Applications/
-hdiutil detach "/Volumes/Cander" -quiet || true
+# Prefer copying the packaged .app directly (works when hdiutil is blocked).
+ditto --rsrc --extattr "$APP_SRC" /Applications/Cander.app
+
+if command -v hdiutil >/dev/null 2>&1; then
+  echo "→ Building $DMG (optional)…"
+  STAGE="$(mktemp -d /tmp/cander-dmg-XXXX)"
+  rm -f "$DMG"
+  if cp -R "$APP_SRC" "$STAGE/Cander.app" \
+    && ln -s /Applications "$STAGE/Applications" \
+    && hdiutil create -volname "Cander" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then
+    open -R "$DMG"
+  else
+    echo "DMG create skipped (hdiutil unavailable). Zip still at release/Cander-${VERSION}-arm64.zip"
+  fi
+  rm -rf "$STAGE"
+fi
 
 echo "→ Opening Cander…"
 open -a Cander
-open -R "$DMG"
 echo "Done. Only /Applications/Cander.app (${VERSION}) should remain."

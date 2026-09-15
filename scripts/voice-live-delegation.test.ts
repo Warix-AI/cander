@@ -86,7 +86,8 @@ describe("GPT-Live voice helpers", () => {
   it("instructs Live to speak mid-delegation progress commentary", () => {
     assert.match(realtimeToolsSrc, /Progress commentary during delegation/);
     assert.match(realtimeToolsSrc, /mid-delegation commentary/);
-    assert.match(realtimeToolsSrc, /do not stay silent/i);
+    assert.match(realtimeToolsSrc, /Do NOT invent filler chatter/i);
+    assert.match(realtimeToolsSrc, /Never repeat the same reassurance/i);
   });
 });
 
