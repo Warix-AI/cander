@@ -3,3 +3,4 @@ release/
 .dev/
 native/FoundationModelsHelper/FoundationModelsHelper
 node_modules/
+desktop/assets/icon-fullbleed.png

@@ -19,11 +19,13 @@ Publishes `notifications` to `supabase_realtime`.
 
 ## 2. Apple Push (iOS / Capacitor)
 
+**Requires a paid Apple Developer Program team.** Personal Teams cannot create provisioning profiles that include Push Notifications — that is why Xcode shows “doesn’t include…” / “Cannot create … provisioning profile” after adding push.
+
 1. Apple Developer → Keys → create an **APNs** key (`.p8`). Note Key ID + Team ID.
 2. App ID `ai.warix.cander` → enable **Push Notifications**.
 3. In Xcode (after `cd mobile && npx cap sync`):
-   - Signing & Capabilities → Push Notifications
-   - Confirm `App.entitlements` has `aps-environment` (`development` for debug builds; set to `production` for App Store / TestFlight release builds)
+   - Signing & Capabilities → **+ Capability → Push Notifications**
+   - Confirm `App.entitlements` has `aps-environment` (`development` for debug builds; `production` for App Store / TestFlight)
 4. Server env:
 
 ```bash
