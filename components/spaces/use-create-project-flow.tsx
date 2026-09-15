@@ -11,7 +11,7 @@ import { useSpaceMutation } from "@/lib/hooks/use-space-query";
 import type { ProjectKind } from "@/lib/space-entities";
 import type { SpaceId } from "@/lib/types";
 
-const DISABLED_PROJECT_KINDS = new Set<ProjectKind>(["app", "site"]);
+const DISABLED_PROJECT_KINDS = new Set<ProjectKind>(["app", "site", "automation"]);
 
 export function useCreateProjectFlow(onCreated: (projectId: string) => void) {
   const ctx = useWorkspaceCtx();

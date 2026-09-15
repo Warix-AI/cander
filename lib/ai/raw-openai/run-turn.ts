@@ -12,6 +12,7 @@ import { AiRuntimeError } from "../runtime/types.ts";
 import { getRawOpenAIAuthHeaders } from "./upload-client.ts";
 import { parseRawOpenAIStreamLine } from "./stream-events.ts";
 import { normalizeMessageCitations } from "./citations.ts";
+import { buildAssistantIdentityInstructions } from "@/lib/voice/assistant-profile";
 
 const SYSTEM_INSTRUCTIONS = `You are Cander, a concise and capable AI assistant. Answer the user's request directly. Prefer compact, natural responses and avoid unnecessary background, repetition, long introductions, or excessive sectioning. Give enough detail to fully answer the question, but do not expand beyond what is useful. Match the user's requested level of detail when specified.
 
@@ -110,6 +111,13 @@ export async function runRawOpenAITurn(
   }
   const systemParts = [
     SYSTEM_INSTRUCTIONS,
+    (() => {
+      try {
+        return buildAssistantIdentityInstructions();
+      } catch {
+        return "";
+      }
+    })(),
     request.toolContext?.trim() || "",
     browsingFocusBlock,
     connectorFocusBlock,

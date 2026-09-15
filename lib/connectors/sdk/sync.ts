@@ -9,6 +9,7 @@ import { resolveConnectionForTool } from "../connections.ts";
 import { getConnectorViewAdapter } from "./registry.ts";
 import type { SyncMessageHeader, SyncResult } from "./types.ts";
 import { dispatchNewMailToExperts } from "@/lib/agents/connector-events";
+import { notifyNewGmailMessages } from "@/lib/notifications/gmail-new-email";
 
 export type RunConnectorSyncInput = {
   /** User-scoped client for connection resolution (RLS). */
@@ -158,6 +159,12 @@ export async function runConnectorSync(
       }
     }
 
+    const priorProviderState =
+      existingState?.provider_state &&
+      typeof existingState.provider_state === "object"
+        ? (existingState.provider_state as Record<string, unknown>)
+        : {};
+
     await admin.from("connector_sync_state").upsert(
       {
         connection_id: connection.connectionId,
@@ -165,7 +172,10 @@ export async function runConnectorSync(
         owner_id: input.profileId,
         connector_id: input.connectorId,
         cursor: sync.cursor ?? now,
-        provider_state: sync.providerState ?? {},
+        provider_state: {
+          ...priorProviderState,
+          ...(sync.providerState ?? {}),
+        },
         last_synced_at: now,
         last_error: null,
         status: "idle",
@@ -214,6 +224,55 @@ export async function runConnectorSync(
             reason:
               err instanceof Error ? err.message : "Expert dispatch failed.",
           });
+        }
+      }
+    }
+
+    // Cross-client notifications (Gmail → createNotification only).
+    if (input.connectorId === "gmail") {
+      let armedAt =
+        typeof priorProviderState.push_notifications_armed_at === "string"
+          ? priorProviderState.push_notifications_armed_at
+          : null;
+
+      // First successful sync after feature: arm without notifying historical mail.
+      if (!armedAt) {
+        armedAt = now;
+        await admin
+          .from("connector_sync_state")
+          .update({
+            provider_state: {
+              ...priorProviderState,
+              ...(sync.providerState ?? {}),
+              push_notifications_armed_at: armedAt,
+            },
+            updated_at: now,
+          })
+          .eq("connection_id", connection.connectionId);
+      } else if (newHeaders.length) {
+        const selfEmails = new Set<string>();
+        for (const h of sync.upserted) {
+          for (const to of h.toAddrs ?? []) {
+            const m = String(to).match(
+              /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i,
+            );
+            if (m?.[0]) selfEmails.add(m[0].toLowerCase());
+          }
+        }
+        try {
+          await notifyNewGmailMessages({
+            workspaceId: input.workspaceId,
+            profileId: input.profileId,
+            connectionId: connection.connectionId,
+            messages: newHeaders,
+            armedAt,
+            selfEmails: [...selfEmails],
+          });
+        } catch (err) {
+          console.warn(
+            "[connectors] notification dispatch failed:",
+            err instanceof Error ? err.message : err,
+          );
         }
       }
     }

@@ -653,6 +653,52 @@ export function GmailConnectorView({
     }
   };
 
+  // Notification / deep-link: open the targeted Gmail account + message.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { consumePendingConnectorFocus } = await import(
+        "@/lib/notifications/pending-connector-focus"
+      );
+      const focus = consumePendingConnectorFocus("gmail");
+      if (!focus || cancelled) return;
+      if (focus.connectionId) {
+        setActiveConnectorAccountId(workspaceId, "gmail", focus.connectionId);
+        connectionIdRef.current = focus.connectionId;
+        setConnectionId(focus.connectionId);
+      }
+      try {
+        const data = await fetchSyncedMailList({
+          workspaceId,
+          connectorId: "gmail",
+          connectionId:
+            focus.connectionId ??
+            getActiveConnectorAccountId(workspaceId, "gmail") ??
+            undefined,
+        });
+        if (cancelled) return;
+        setMessages(data.messages);
+        setConnectionId(data.connectionId);
+        const seedId = focus.messageId;
+        const seedThread = focus.threadId;
+        const item = data.messages.find(
+          (row) =>
+            (seedId && row.providerMessageId === seedId) ||
+            (seedThread &&
+              (row.threadId === seedThread ||
+                row.providerMessageId === seedThread)),
+        );
+        if (item) await openMessage(item);
+      } catch {
+        /* fall back to inbox */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once when panel mounts
+  }, [workspaceId]);
+
   const sendCompose = async () => {
     if (!composeTo.trim() || (!composeSubject.trim() && !composeBody.trim())) {
       setError("Add a recipient and a subject or body.");

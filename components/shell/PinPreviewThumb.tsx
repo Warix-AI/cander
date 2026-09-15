@@ -5,7 +5,7 @@ import { DefaultChatPreviewWash } from "@/components/spaces/BannerWash";
 import type { PinnedItem } from "@/lib/use-pinned-items";
 import { cn } from "@/lib/utils";
 
-const CHAT_ORB_SRC = "/cander-orb.png?v=16";
+const CHAT_ORB_SRC = "/cander-orb.png?v=17";
 
 /** Leading mark for a pinned row — connector brand, chat orb, or project cover. */
 export function PinPreviewThumb({

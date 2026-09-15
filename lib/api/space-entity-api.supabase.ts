@@ -144,6 +144,9 @@ export function createSupabaseSpaceEntityApi(): SpaceEntityApi {
       const existing = localSpaceEntityStore.listAllProjects(ctx);
       const title = assertUniqueProjectTitle(existing, input.title);
       const kind = input.kind ?? projectKindFromSpace(input.space);
+      if (kind === "automation") {
+        throw new Error("Expert projects are coming soon.");
+      }
       // Flag-gated V2 create: site projects get builder_version=v2_config.
       // Existing projects remain v1; apps stay on the coding-agent path.
       const { isWebsiteBuilderV2EnabledPublic } = await import(

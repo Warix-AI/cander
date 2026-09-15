@@ -527,10 +527,13 @@ export function startContinuousChat(
   const id = `t-session-${workspaceId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const created = emptyContinuousChat(workspaceId, spaceId, id);
   // Drop unused New drafts so revisiting New doesn't pile up blank chats.
+  // Keep titled Voice sessions even before the first transcript lands.
   const kept = threads.filter(
     (thread) =>
       !(
-        isDetachedSessionChat(thread, workspaceId) && !threadHasTurns(thread)
+        isDetachedSessionChat(thread, workspaceId) &&
+        !threadHasTurns(thread) &&
+        thread.title !== "Voice"
       ),
   );
   return { threads: [created, ...kept], id };

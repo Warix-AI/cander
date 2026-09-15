@@ -4,10 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Bot, LoaderCircle, Play } from "lucide-react";
 import {
   applyAgentConfigPatchClient,
-  listUserConnectorConnectionsClient,
   loadAgentBundleClient,
   runAgentClient,
-  setAgentScopeClient,
   updateProjectAgentClient,
 } from "@/lib/agents/client";
 import {
@@ -31,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { Field, TextArea } from "./builder/fields";
 
 type SaveState = "idle" | "saving" | "saved" | "error";
-type ConfigTab = "instructions" | "schedule" | "scope";
+type ConfigTab = "instructions" | "schedule" | "voice";
 
 export function AgentBuilderPanel({
   workspaceId,
@@ -132,6 +130,7 @@ export function AgentBuilderPanel({
       instructions: string;
       enabled: boolean;
       status: AgentStatus;
+      voiceEnabled: boolean;
     }>,
   ) => {
     await runSave(async () => {
@@ -273,7 +272,7 @@ export function AgentBuilderPanel({
           [
             ["instructions", "Instructions"],
             ["schedule", "Schedule"],
-            ["scope", "Scope"],
+            ["voice", "Voice"],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -313,21 +312,13 @@ export function AgentBuilderPanel({
             }
           />
         ) : (
-          <ScopeEditor
-            workspaceId={workspaceId}
-            projectId={projectId}
-            agentId={agentId}
-            selectedIds={(bundle.scope ?? []).map((s) => s.connectionId)}
+          <VoiceEditor
+            voiceEnabled={bundle.agent.voiceEnabled}
             busy={saveState === "saving"}
-            onSave={(connectionIds) =>
-              void runSave(async () => {
-                const scope = await setAgentScopeClient({
-                  workspaceId,
-                  projectId,
-                  agentId,
-                  connectionIds,
-                });
-                setBundle((prev) => (prev ? { ...prev, scope } : prev));
+            onSave={(voiceEnabled) =>
+              void applyPatch({
+                voiceEnabled,
+                ...(voiceEnabled ? { status: "active" as const } : {}),
               })
             }
           />
@@ -414,7 +405,11 @@ function InstructionsEditor({
         disabled={busy}
         rows={16}
         placeholder="# Booking&#10;&#10;Verify the customer before booking. Never schedule outside business hours…"
-        onCommit={(value) => onSaveInstructions(value)}
+        onCommit={(value) => {
+          const trimmed = value.trim();
+          if (!trimmed) return;
+          onSaveInstructions(trimmed);
+        }}
       />
     </div>
   );
@@ -458,7 +453,7 @@ function ScheduleEditor({
       <div>
         <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Schedule</h2>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          When this agent wakes and talks to Cander. Run now always works.
+          When this Expert wakes and talks to Cander. Run now always works.
         </p>
       </div>
 
@@ -538,7 +533,7 @@ function ScheduleEditor({
         </div>
       ) : (
         <p className="text-[12.5px] text-muted-foreground">
-          This agent only wakes when you press Run now.
+          This Expert only wakes when you press Run now.
         </p>
       )}
 
@@ -567,114 +562,52 @@ function ScheduleEditor({
   );
 }
 
-function ScopeEditor({
-  workspaceId,
-  selectedIds,
+function VoiceEditor({
+  voiceEnabled,
   busy,
   onSave,
 }: {
-  workspaceId: string;
-  projectId: string;
-  agentId: string;
-  selectedIds: string[];
+  voiceEnabled: boolean;
   busy: boolean;
-  onSave: (connectionIds: string[]) => void;
+  onSave: (voiceEnabled: boolean) => void;
 }) {
-  const [connections, setConnections] = useState<
-    Array<{ id: string; connectorId: string; label: string }>
-  >([]);
-  const [picked, setPicked] = useState<string[]>(selectedIds);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [enabled, setEnabled] = useState(voiceEnabled);
 
   useEffect(() => {
-    setPicked(selectedIds);
-  }, [selectedIds]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listUserConnectorConnectionsClient({ workspaceId })
-      .then((rows) => {
-        if (!cancelled) setConnections(rows);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setLoadError(
-            err instanceof Error ? err.message : "Could not load connections.",
-          );
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId]);
-
-  const toggle = (id: string) => {
-    setPicked((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
+    setEnabled(voiceEnabled);
+  }, [voiceEnabled]);
 
   return (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-4">
+    <div className="mx-auto max-w-md space-y-4">
       <div>
-        <h2 className="text-[14px] font-semibold tracking-[-0.02em]">Scope</h2>
+        <h2 className="text-[15px] font-semibold tracking-[-0.02em]">Voice</h2>
         <p className="mt-1 text-[12.5px] text-muted-foreground">
-          Which Cander resources may this Expert ask about? Leave empty to allow
-          all of your connected apps. This is not agent-owned tools — Cander
-          still executes everything.
+          Enable Live voice for this Expert. Simple conversation stays lightweight;
+          multi-step tool work runs through the Expert agent with brief progress
+          cues. Persona voice is chosen in Settings.
         </p>
       </div>
 
-      {loadError ? (
-        <p className="text-[12.5px] text-destructive">{loadError}</p>
-      ) : null}
-
-      {!connections.length && !loadError ? (
-        <p className="text-[12.5px] text-muted-foreground">
-          No active connections yet. Connect apps under Apps, then return
-          here.
-        </p>
-      ) : (
-        <ul className="divide-y divide-border rounded-[12px] border border-border">
-          {connections.map((conn) => {
-            const on = picked.includes(conn.id);
-            return (
-              <li key={conn.id}>
-                <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 text-[13px]">
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    disabled={busy}
-                    onChange={() => toggle(conn.id)}
-                    className="h-4 w-4"
-                  />
-                  <span className="min-w-0 flex-1 truncate font-medium">
-                    {conn.label}
-                  </span>
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground uppercase">
-                    {conn.connectorId}
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <p className="text-[12px] text-muted-foreground">
-        {picked.length === 0
-          ? "Current: all connected apps"
-          : `Current: ${picked.length} connection${picked.length === 1 ? "" : "s"}`}
-      </p>
+      <label className="flex items-center justify-between gap-3 rounded-[12px] border border-border px-3.5 py-3">
+        <span className="text-[13px] font-medium">Enable voice interactions</span>
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={busy}
+          onChange={(e) => setEnabled(e.target.checked)}
+          className="h-4 w-4"
+        />
+      </label>
 
       <button
         type="button"
         disabled={busy}
         className="rounded-full bg-foreground px-4 py-2 text-[12.5px] font-medium text-background disabled:opacity-50"
-        onClick={() => onSave(picked)}
+        onClick={() => onSave(enabled)}
       >
-        Save scope
+        Save voice
       </button>
     </div>
   );
 }
+

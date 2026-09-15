@@ -45,7 +45,11 @@ export async function POST(request: Request) {
       executionId: aiExecutionId,
       status,
       userId: auth.user.id,
-      metadata: { mode: "realtime_conversation", endedBy: "client" },
+      metadata: {
+        mode: "realtime_conversation",
+        endedBy: "client",
+        unit: "seconds",
+      },
     });
   } catch (e) {
     const message =

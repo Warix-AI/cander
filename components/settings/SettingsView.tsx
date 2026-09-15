@@ -9,6 +9,7 @@ import {
   ImagePlus,
   LayoutGrid,
   Mic,
+  Bell,
   Palette,
   UserRound,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import { PlansSettings } from "@/components/settings/PlansSettings";
 import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
 import { UsageSettings } from "@/components/settings/UsageSettings";
 import { VoiceSettings } from "@/components/settings/VoiceSettings";
+import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import {
   SettingsField,
   SettingsFootnote,
@@ -85,6 +87,7 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   plans: CreditCard,
   usage: ChartNoAxesColumn,
   voice: Mic,
+  notifications: Bell,
   general: UserRound,
   appearance: Palette,
 };
@@ -211,6 +214,8 @@ export function SettingsView() {
 
       {settingsTab === "voice" ? <VoiceSettings /> : null}
 
+      {settingsTab === "notifications" ? <NotificationSettings /> : null}
+
       {settingsTab === "general" ? (
         <GeneralSettings
           onAfterSignOut={() => leave()}
@@ -264,6 +269,8 @@ export function SettingsView() {
           {settingsTab === "usage" ? <UsageSettings /> : null}
 
           {settingsTab === "voice" ? <VoiceSettings /> : null}
+
+          {settingsTab === "notifications" ? <NotificationSettings /> : null}
 
           {settingsTab === "general" ? (
             <GeneralSettings onAfterSignOut={() => leave()} />

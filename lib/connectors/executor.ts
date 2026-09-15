@@ -29,7 +29,10 @@ import {
   mapGmailToolArguments,
   type GmailConnectorToolName,
 } from "./composio-tools.ts";
-import { normalizeGmailReplyArguments } from "./gmail-reply-target.ts";
+import {
+  assertGmailOutboundNotSelf,
+  normalizeGmailReplyArguments,
+} from "./gmail-reply-target.ts";
 
 export type ExecuteConnectorToolInput = {
   client: SupabaseClient;
@@ -136,6 +139,22 @@ export async function executeConnectorTool(
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not resolve Gmail reply target.";
+      return { ok: false, status: 400, error: message };
+    }
+  }
+  if (input.tool === "gmail.send" || input.tool === "gmail.draft") {
+    try {
+      await assertGmailOutboundNotSelf({
+        connectionId: connection.connectionId,
+        workspaceId: input.workspaceId,
+        profileId: input.profileId,
+        args: toolArguments,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Could not validate Gmail recipient.";
       return { ok: false, status: 400, error: message };
     }
   }

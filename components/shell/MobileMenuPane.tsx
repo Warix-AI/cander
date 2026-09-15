@@ -8,8 +8,11 @@ import {
   MessageSquare,
   PanelsTopLeft,
   Settings,
+  Shield,
   SquarePen,
+  X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderWordmark } from "@/components/brand/CanderWordmark";
 import { VoiceOrb } from "@/components/shell/VoiceOrb";
@@ -19,6 +22,7 @@ import {
 } from "@/components/shell/mobile/MobileSlideStack";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
+import { useIsPlatformAdmin } from "@/lib/admin/use-platform-admin";
 import {
   MOBILE_MENU_BG,
   MOBILE_MENU_ICON_SIZE,
@@ -33,6 +37,7 @@ import { navLabel, useMainNavItems } from "@/lib/use-main-nav-items";
 import { isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { navIcon } from "@/lib/space-icons";
 import type { MobileMenuScreen, NavDestinationId } from "@/lib/types";
+import { voiceStatusLabel } from "@/lib/voice/voice-status";
 import { cn } from "@/lib/utils";
 
 const MOBILE_SECONDARY_NAV: SidebarNavId[] = ["connectors", "recents"];
@@ -249,6 +254,8 @@ function MobileVoiceRow() {
   const {
     entitlements,
     voiceActive,
+    voiceConnecting,
+    voiceStatus,
     voiceSpeaking,
     voiceThreadId,
     toggleVoice,
@@ -256,38 +263,71 @@ function MobileVoiceRow() {
   } = useApp();
   if (!entitlements.hasVoice) return null;
 
+  const live = voiceActive || voiceConnecting;
+  const label = voiceStatusLabel(
+    voiceConnecting && voiceStatus === "idle" ? "connecting" : voiceStatus,
+  );
+
   return (
     <div className="flex w-full items-center gap-0.5">
       <button
         type="button"
-        aria-pressed={voiceActive}
-        aria-label={voiceActive ? "Stop voice" : "Start voice"}
+        aria-pressed={live}
+        aria-busy={voiceConnecting}
+        aria-label={
+          voiceConnecting
+            ? "Connecting voice"
+            : voiceActive
+              ? "Stop voice"
+              : "Start voice"
+        }
         onClick={toggleVoice}
         className={cn(
           mobileMenuRowClass,
           "min-w-0 flex-1",
-          voiceActive ? mobileMenuRowActiveClass : undefined,
+          live ? mobileMenuRowActiveClass : undefined,
         )}
       >
-        <VoiceOrb
-          active={voiceActive}
-          speaking={voiceSpeaking}
-          as="div"
-          size={20}
-          label={voiceActive ? "Listening" : "Voice"}
-          className="shrink-0"
-        />
-        Voice
+        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
+          <VoiceOrb
+            active={live}
+            speaking={voiceSpeaking}
+            as="div"
+            size={16}
+            label={label}
+            className="shrink-0"
+          />
+        </span>
+        {label}
       </button>
       {voiceActive && voiceThreadId ? (
         <button
           type="button"
           aria-label="Open voice chat"
           title="Open voice chat"
-          onClick={openVoiceThread}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            openVoiceThread();
+          }}
           className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
         >
           <MessageSquare className="h-5 w-5" strokeWidth={1.8} />
+        </button>
+      ) : null}
+      {live ? (
+        <button
+          type="button"
+          aria-label="Stop voice"
+          title="Stop voice"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            if (live) toggleVoice();
+          }}
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
+        >
+          <X className="h-5 w-5" strokeWidth={1.8} />
         </button>
       ) : null}
     </div>
@@ -412,6 +452,9 @@ function GeneralSheet({
   onOpenNav: (id: SidebarNavId) => void;
   onOpenSettings: () => void;
 }) {
+  const router = useRouter();
+  const isPlatformAdmin = useIsPlatformAdmin();
+
   return (
     <div className="space-y-px">
       <button
@@ -464,6 +507,22 @@ function GeneralSheet({
         />
         Settings
       </button>
+      {isPlatformAdmin ? (
+        <button
+          type="button"
+          onClick={() => router.push("/admin")}
+          className={mobileMenuRowClass}
+        >
+          <Shield
+            className={cn(
+              MOBILE_MENU_ICON_SIZE,
+              "shrink-0 text-muted-foreground",
+            )}
+            strokeWidth={MOBILE_MENU_ICON_STROKE}
+          />
+          Admin
+        </button>
+      ) : null}
     </div>
   );
 }

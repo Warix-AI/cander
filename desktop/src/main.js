@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu, session, ipcMain, nativeTheme } = require("electron");
+const { app, BrowserWindow, shell, Menu, session, ipcMain, nativeTheme, Notification } = require("electron");
 const fs = require("fs");
 const path = require("path");
 const foundationModels = require("./foundation-models-bridge");
@@ -702,6 +702,31 @@ app.whenReady().then(() => {
   });
   ipcMain.handle("cander:shell-get-theme", async () => {
     return { theme: readShellTheme() };
+  });
+
+  ipcMain.handle("cander:notification-show", async (_e, opts) => {
+    if (!Notification.isSupported()) return { ok: false };
+    const title =
+      typeof opts?.title === "string" && opts.title.trim()
+        ? opts.title.trim()
+        : "Cander";
+    const body =
+      typeof opts?.body === "string" ? opts.body.trim().slice(0, 240) : "";
+    const data =
+      opts?.data && typeof opts.data === "object" ? opts.data : {};
+    const note = new Notification({ title, body, silent: false });
+    note.on("click", () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("cander:notification-click", data);
+      }
+    });
+    note.show();
+    return { ok: true };
   });
 
   speechBridge.bindIpc(ipcMain, () => mainWindow);

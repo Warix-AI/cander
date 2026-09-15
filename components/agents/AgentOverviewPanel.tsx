@@ -36,6 +36,15 @@ function formatWhen(iso: string | null | undefined) {
   }
 }
 
+function formatDurationMs(ms: number | null | undefined) {
+  if (ms == null || !Number.isFinite(ms) || ms < 0) return null;
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const rem = seconds % 60;
+  return rem ? `${minutes}m ${rem}s` : `${minutes}m`;
+}
+
 function scheduleLabel(agent: ProjectAgent | null) {
   if (!agent) return "—";
   if (agent.trigger.type === "manual") return "Manual";
@@ -133,6 +142,7 @@ export function AgentOverviewPanel({
             triggerType: run.triggerType,
             startedAt: run.startedAt,
             completedAt: run.completedAt,
+            activeDurationMs: run.activeDurationMs,
           })),
     );
   };
@@ -261,8 +271,16 @@ export function AgentOverviewPanel({
               <Stat label="Next run" value={formatWhen(agent?.nextRunAt)} />
               <Stat label="Runs (7d)" value={String(runsLast7d || activity.length)} />
               <Stat
+                label="Voice"
+                value={agent?.voiceEnabled ? "On" : "Off"}
+              />
+              <Stat
                 label="Latest"
                 value={latest?.status ?? "—"}
+              />
+              <Stat
+                label="Latest time"
+                value={formatDurationMs(latest?.activeDurationMs) ?? "—"}
               />
             </section>
 
@@ -307,8 +325,11 @@ export function AgentOverviewPanel({
                           {item.summary || item.triggerType}
                         </p>
                       </div>
-                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 text-right text-[11px] text-muted-foreground">
                         {formatWhen(item.startedAt)}
+                        {formatDurationMs(item.activeDurationMs)
+                          ? ` · ${formatDurationMs(item.activeDurationMs)}`
+                          : ""}
                       </span>
                     </li>
                   ))}

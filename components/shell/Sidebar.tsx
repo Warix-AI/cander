@@ -25,13 +25,11 @@ import {
   pinSectionHeaderClass,
 } from "@/components/shell/PinSectionFolder";
 import { PinnedEmptyHint } from "@/components/shell/PinnedEmptyHint";
-import { ShellProductSwitcher } from "@/components/shell/ShellProductSwitcher";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
 import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
-import { useIsPlatformAdmin } from "@/lib/admin/use-platform-admin";
 import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import {
@@ -121,7 +119,6 @@ export function Sidebar() {
   } = useApp();
 
   const runningExperts = useRunningExpertState(workspaceId);
-  const isPlatformAdmin = useIsPlatformAdmin();
 
   const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
@@ -449,27 +446,11 @@ export function Sidebar() {
       {/* Web / floating — header icons live inside the menu column only. */}
       {!macDesktop ? <WindowChrome hideHistory={peeking} /> : null}
 
-      {isPlatformAdmin ? (
-        <div
-          className={cn(
-            "shrink-0 px-2",
-            macDesktop || floating ? "mt-2" : "mt-3.5",
-            "mb-2",
-          )}
-        >
-          <ShellProductSwitcher active="app" />
-        </div>
-      ) : null}
-
       {inSettings ? (
         <nav
           className={cn(
             "min-h-0 flex-1 overflow-y-auto px-2",
-            isPlatformAdmin
-              ? "mt-0"
-              : macDesktop || floating
-                ? "mt-2"
-                : "mt-3.5",
+            macDesktop || floating ? "mt-2" : "mt-3.5",
           )}
           aria-label="Settings"
         >
@@ -519,11 +500,7 @@ export function Sidebar() {
           <nav
             className={cn(
               "flex min-h-0 flex-1 flex-col overflow-hidden px-2",
-              isPlatformAdmin
-                ? "mt-0"
-                : macDesktop || floating
-                  ? "mt-2"
-                  : "mt-3.5",
+              macDesktop || floating ? "mt-2" : "mt-3.5",
             )}
             aria-label="Main"
           >

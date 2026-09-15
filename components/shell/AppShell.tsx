@@ -63,6 +63,7 @@ import {
 } from "@/lib/workspace-catalog";
 import { SessionBootScreen } from "@/components/shell/SessionBootScreen";
 import { ShareInListener } from "@/components/shell/ShareInListener";
+import { NotificationListener } from "@/components/shell/NotificationListener";
 import { QuickAskHost } from "@/components/shell/QuickAskHost";
 import { FloatingVoiceDock } from "@/components/shell/VoiceControl";
 import { isSupabaseConfigured } from "@/lib/data-backend";
@@ -77,6 +78,7 @@ export function AppShell() {
       <AppProvider>
         <SpaceDataBridge>
           <ShareInListener />
+          <NotificationListener />
           <QuickAskHost />
           <Root />
         </SpaceDataBridge>

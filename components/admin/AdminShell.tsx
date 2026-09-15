@@ -2,18 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PanelLeft, PanelRight } from "lucide-react";
+import { House, PanelLeft, PanelRight } from "lucide-react";
 import { AdminChatColumn } from "@/components/admin/AdminChatColumn";
 import { AdminNavPanel } from "@/components/admin/AdminNavPanel";
 import { AdminSearchModal } from "@/components/admin/AdminSearchModal";
 import { AdminWorkspace } from "@/components/admin/AdminWorkspace";
 import { useAdmin } from "@/components/admin/AdminProvider";
-import { ShellProductSwitcher } from "@/components/shell/ShellProductSwitcher";
 import {
   BrowserChromeIconButton,
   clearBrowserChromeHovers,
 } from "@/components/shell/PanelToggle";
 import { ADMIN_SECTION_LABELS, ADMIN_SECTIONS } from "@/lib/admin/sections";
+import { APP_NAME } from "@/lib/app-brand";
 import {
   DEFAULT_PANEL_RATIO,
   PINNED_CHAT_WIDTH,
@@ -23,6 +23,7 @@ import {
   PRIMARY_NAV_CARD_HOVER,
   PRIMARY_NAV_CARD_RADIUS_FIRST,
   PRIMARY_NAV_CARD_RADIUS_LAST,
+  PRIMARY_NAV_CARD_RADIUS_SOLO,
   MOBILE_MENU_BG,
   MOBILE_APP_BG,
 } from "@/lib/mobile-menu-styles";
@@ -98,7 +99,31 @@ export function AdminShell() {
         {mobileSurface === "menu" ? (
           <div className="flex min-h-0 flex-1 flex-col bg-sidebar">
             <div className="px-3 pt-4 pb-2">
-              <ShellProductSwitcher active="admin" />
+              <div
+                className={cn(
+                  "flex w-full flex-col gap-0 p-[3px]",
+                  SHELL_G3_RADIUS,
+                  "bg-black/[0.03] dark:bg-white/[0.045]",
+                )}
+              >
+                <Link
+                  href="/"
+                  className={cn(
+                    "flex w-full items-center gap-3 px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+                    PRIMARY_NAV_CARD_RADIUS_SOLO,
+                    PRIMARY_NAV_CARD_HOVER,
+                  )}
+                  aria-label={`Back to ${APP_NAME}`}
+                >
+                  <House
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    strokeWidth={2}
+                  />
+                  <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">
+                    {APP_NAME}
+                  </span>
+                </Link>
+              </div>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto px-2">
               <div

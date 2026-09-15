@@ -6,6 +6,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
 import { useSyncAgentRuntimeThread } from "@/components/agents/AgentRuntimeTranscript";
 import { ExpertRuntimeApprovalBar } from "@/components/agents/ExpertRuntimeApprovalBar";
+import { ExpertVoiceDock } from "@/components/agents/ExpertVoiceDock";
 import { useAgentPinSurface } from "@/components/agents/useAgentPinSurface";
 import { upsertChatThread, getChatStoreSnapshot } from "@/lib/api/chat-store";
 import { mergeHydratedThread } from "@/lib/api/chat-sync";
@@ -598,12 +599,20 @@ export function ChatColumn() {
           )}
         </div>
         {agentOverview ? (
-          <ExpertRuntimeApprovalBar
-            workspaceId={agentPin.workspaceId}
-            projectId={agentPin.projectId ?? ""}
-            agentId={agentPin.agentId}
-            enabled={agentOverview}
-          />
+          <>
+            <ExpertRuntimeApprovalBar
+              workspaceId={agentPin.workspaceId}
+              projectId={agentPin.projectId ?? ""}
+              agentId={agentPin.agentId}
+              enabled={agentOverview}
+            />
+            <ExpertVoiceDock
+              workspaceId={agentPin.workspaceId}
+              projectId={agentPin.projectId ?? ""}
+              agentId={agentPin.agentId}
+              enabled={agentOverview}
+            />
+          </>
         ) : (
           <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
         )}
@@ -634,12 +643,20 @@ export function ChatColumn() {
           )}
         </div>
         {agentOverview ? (
-          <ExpertRuntimeApprovalBar
-            workspaceId={agentPin.workspaceId}
-            projectId={agentPin.projectId ?? ""}
-            agentId={agentPin.agentId}
-            enabled={agentOverview}
-          />
+          <>
+            <ExpertRuntimeApprovalBar
+              workspaceId={agentPin.workspaceId}
+              projectId={agentPin.projectId ?? ""}
+              agentId={agentPin.agentId}
+              enabled={agentOverview}
+            />
+            <ExpertVoiceDock
+              workspaceId={agentPin.workspaceId}
+              projectId={agentPin.projectId ?? ""}
+              agentId={agentPin.agentId}
+              enabled={agentOverview}
+            />
+          </>
         ) : (
           <div className={cn("sticky bottom-0 z-20 shrink-0", MOBILE_APP_BG)}>
             <ComposerDock onSend={send} autoFocus={autofocusComposer} />
@@ -682,12 +699,20 @@ export function ChatColumn() {
       )}
 
       {showLanding ? null : agentOverview ? (
-        <ExpertRuntimeApprovalBar
-          workspaceId={agentPin.workspaceId}
-          projectId={agentPin.projectId ?? ""}
-          agentId={agentPin.agentId}
-          enabled={agentOverview}
-        />
+        <>
+          <ExpertRuntimeApprovalBar
+            workspaceId={agentPin.workspaceId}
+            projectId={agentPin.projectId ?? ""}
+            agentId={agentPin.agentId}
+            enabled={agentOverview}
+          />
+          <ExpertVoiceDock
+            workspaceId={agentPin.workspaceId}
+            projectId={agentPin.projectId ?? ""}
+            agentId={agentPin.agentId}
+            enabled={agentOverview}
+          />
+        </>
       ) : (
         <ComposerDock onSend={send} autoFocus={autofocusComposer} />
       )}

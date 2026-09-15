@@ -266,6 +266,10 @@ export const localSpaceEntityStore = {
   createProject(ctx: WorkspaceCtx, input: CreateProjectInput) {
     hydrate();
     const title = assertUniqueProjectTitle(state.projects.filter((p) => p.workspaceId === ctx.workspaceId), input.title);
+    const kind = input.kind ?? projectKindFromSpace(input.space);
+    if (kind === "automation") {
+      throw new Error("Expert projects are coming soon.");
+    }
     const project: SpaceProject = {
       ...newEntityTimestamps(),
       id: newId(),
@@ -274,7 +278,7 @@ export const localSpaceEntityStore = {
       title,
       summary: input.summary ?? "",
       cover: input.cover,
-      kind: input.kind ?? projectKindFromSpace(input.space),
+      kind,
       status: "draft",
       instructions: input.instructions,
     };

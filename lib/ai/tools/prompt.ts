@@ -15,6 +15,7 @@ Rules:
 - For live/public facts (news, weather, scores, “latest”, look up online), call web.search and ground the answer in returned links/snippets. If empty or unavailable, say so — don’t invent headlines.
 - Never invent tools that are not listed. For complex coding/research use create_work_task only.
 - Navigate spaces with nav.open: target one of new_chat, work, build, research, studio, recents, connectors, settings. "Explore" (and spoken "Home") means research. "Create" (and spoken "Build" / "Studio") means studio — Build projects still use internal id build when opened.
+- Personality / voice preferences: when the user asks you to sound different, talk slower/faster, be funnier, change your spoken name, switch voices, undo, or reset personality, call assistant.profile.apply with structured fields (0-10 dims, assistantName, voiceId, undo, reset). When they say their name ("my name is…", "call me…", "remember my name"), call assistant.profile.apply with userName. Do not rename the Cander product — only your spoken persona name.
 - panel.open is only for the side panel or a known projectId — not for switching spaces.
 - Create projects with project.create only after you know title and space (build or research). If missing, use ui.ask_clarification with single_choice: Build (id build) and Home (id research). Never say “research” to the user — say Home.
 - Open a project via workspace.search then project.open only when they ask to open/find a project.
@@ -26,6 +27,7 @@ export const CANDER_NO_TOOLS_THIS_TURN = `No tools are available for this turn. 
 /** Full static catalog (Edge builds a subset per turn). */
 export const CANDER_TOOL_CATALOG_FOR_EDGE = `Available tools and arguments:
 - nav.open: { "target": "new_chat"|"work"|"build"|"research"|"recents"|"connectors"|"settings", "settingsTab"?: string }
+- assistant.profile.apply: { "undo"?: boolean, "reset"?: boolean, "assistantName"?: string|null, "userName"?: string|null, "voiceId"?: string|null, "pace"?: number, "energy"?: number, "warmth"?: number, "expressiveness"?: number, "humor"?: number, "sarcasm"?: number, "formality"?: number, "conciseness"?: number, "directness"?: number, "backchannelLevel"?: number, "demeanor"?: string|null, "addStyleInstruction"?: string, "reason"?: string }
 - panel.open: { "projectId"?: string, "mode"?: string }
 - panel.close: {}
 - project.create: { "title": string, "space"?: "build"|"research"|"work", "kind"?: string, "summary"?: string }
@@ -42,6 +44,8 @@ export const CANDER_TOOL_CATALOG_FOR_EDGE = `Available tools and arguments:
 const EDGE_TOOL_LINES: Record<string, string> = {
   "nav.open":
     '- nav.open: { "target": "new_chat"|"work"|"build"|"research"|"recents"|"connectors"|"settings", "settingsTab"?: string }',
+  "assistant.profile.apply":
+    '- assistant.profile.apply: { "undo"?: boolean, "reset"?: boolean, "assistantName"?: string|null, "userName"?: string|null, "voiceId"?: string|null, "pace"?: number, "energy"?: number, "warmth"?: number, "expressiveness"?: number, "humor"?: number, "sarcasm"?: number, "formality"?: number, "conciseness"?: number, "directness"?: number, "backchannelLevel"?: number, "demeanor"?: string|null, "addStyleInstruction"?: string, "reason"?: string }',
   "panel.open": '- panel.open: { "projectId"?: string, "mode"?: string }',
   "panel.close": "- panel.close: {}",
   "project.create":

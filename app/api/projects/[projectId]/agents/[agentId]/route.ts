@@ -85,6 +85,7 @@ export async function PATCH(
     instructions?: string;
     enabled?: boolean;
     status?: "draft" | "active" | "paused";
+    voiceEnabled?: boolean;
   };
   try {
     body = await request.json();
@@ -109,6 +110,7 @@ export async function PATCH(
         instructions: body.instructions,
         enabled: body.enabled,
         status: body.status,
+        voiceEnabled: body.voiceEnabled,
       },
     );
     return NextResponse.json({ agent });

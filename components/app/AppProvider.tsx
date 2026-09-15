@@ -269,7 +269,19 @@ import {
   startLiveConversation,
   type LiveConversationSession,
 } from "@/lib/voice/openai-live-conversation";
-import { readLiveVoicePreference } from "@/lib/voice/live-voices";
+import {
+  DEFAULT_LIVE_VOICE,
+  isLiveVoiceId,
+  readLiveVoicePreference,
+  type LiveVoiceId,
+} from "@/lib/voice/live-voices";
+import {
+  getAssistantProfileSnapshot,
+  subscribeAssistantProfile,
+} from "@/lib/voice/assistant-profile";
+import { buildLivePersonalityInstructions } from "@/lib/voice/realtime-tools";
+import type { VoiceLiveStatus } from "@/lib/voice/voice-status";
+import { resolveActiveExpertVoiceTarget } from "@/lib/agents/active-expert-voice";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
@@ -490,6 +502,10 @@ type AppContextValue = {
   sidebarLayout: SidebarLayout;
   moveSidebarNav: (id: SidebarNavId, dir: -1 | 1) => void;
   voiceActive: boolean;
+  /** True while Live session is connecting (mic + WebRTC). */
+  voiceConnecting: boolean;
+  /** Live activity label for the sidebar (Waiting / Thinking / …). */
+  voiceStatus: VoiceLiveStatus;
   /** True while Live mic/assistant audio is active (orb pulse). */
   voiceSpeaking: boolean;
   /** Background thread for the active Live session (if any). */
@@ -523,7 +539,14 @@ type AppContextValue = {
   openThread: (id: string) => void;
   openShared: () => void;
   openSettings: (tab?: SettingsTab, opts?: { hub?: boolean }) => void;
-  openConnector: (id: string) => void;
+  openConnector: (
+    id: string,
+    opts?: {
+      connectionId?: string;
+      messageId?: string;
+      threadId?: string;
+    },
+  ) => void;
   /**
    * Open this app's detail screen in Apps (no auto name-account prompt).
    */
@@ -752,12 +775,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     string | null
   >(null);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceConnecting, setVoiceConnecting] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<VoiceLiveStatus>("idle");
   const [voiceSpeaking, setVoiceSpeaking] = useState(false);
   const [voiceThreadId, setVoiceThreadId] = useState<string | null>(null);
   const [voiceAnchor, setVoiceAnchor] = useState<VoiceAnchor>("sidebar");
   const liveVoiceSessionRef = useRef<LiveConversationSession | null>(null);
   const voiceRestartPendingRef = useRef(false);
   const voiceStartingRef = useRef(false);
+  const voiceRollingRef = useRef(false);
+  const liveVoiceIdRef = useRef<LiveVoiceId>(readLiveVoicePreference());
   const voiceThreadIdRef = useRef<string | null>(null);
   const [browserChatOpen, setBrowserChatOpen] = useState(false);
   const [browserChatRatio, setBrowserChatRatio] = useState(0.28);
@@ -4433,6 +4460,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (entitlements.hasVoice) return;
     queueMicrotask(() => {
       setVoiceActive(false);
+      setVoiceConnecting(false);
+      setVoiceStatus("idle");
       setVoiceSpeaking(false);
       setVoiceThreadId(null);
       voiceThreadIdRef.current = null;
@@ -5086,6 +5115,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             detail: "Pick a space (Build or Home) before creating a project.",
           };
         }
+        if (opts.kind === "automation") {
+          return {
+            ok: false,
+            detail: "Expert projects are coming soon.",
+          };
+        }
         const kind =
           (opts.kind as
             | "app"
@@ -5381,6 +5416,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const session = liveVoiceSessionRef.current;
       liveVoiceSessionRef.current = null;
       setVoiceSpeaking(false);
+      setVoiceConnecting(false);
+      setVoiceStatus("idle");
       if (session) {
         try {
           await session.stop();
@@ -5390,10 +5427,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    if (voiceActive) {
+    if (voiceActive || voiceConnecting) {
       stopTextToSpeech();
       void stopLiveSession();
       setVoiceActive(false);
+      setVoiceConnecting(false);
+      setVoiceStatus("idle");
       voiceRestartPendingRef.current = true;
       const backgroundId = voiceThreadIdRef.current;
       if (backgroundId) {
@@ -5405,7 +5444,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     /** Create/reuse a background chat thread without navigating. */
     const ensureBackgroundThread = (): string => {
       const existing = voiceThreadIdRef.current;
-      if (existing) return existing;
+      if (existing) {
+        const found = threads.find((item) => item.id === existing);
+        if (found) return existing;
+      }
       let tid = "";
       setThreads((current) => {
         const { threads: next, id } = startContinuousChat(
@@ -5414,7 +5456,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           null,
         );
         tid = id;
-        return next;
+        return next.map((item) =>
+          item.id === id
+            ? { ...item, title: "Voice", snippet: "Live voice" }
+            : item,
+        );
       });
       voiceThreadIdRef.current = tid;
       setVoiceThreadId(tid);
@@ -5441,8 +5487,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           item.id === activeId
             ? {
                 ...item,
+                title: item.title === "Chat" ? "Voice" : item.title,
                 messages: [...item.messages, msg],
                 updatedAt: nowTime(),
+                snippet: trimmed.slice(0, 80),
               }
             : item,
         ),
@@ -5452,36 +5500,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const startLive = async () => {
       if (voiceStartingRef.current) return;
       voiceStartingRef.current = true;
+      setVoiceConnecting(true);
+      setVoiceStatus("connecting");
       try {
         const tid = ensureBackgroundThread();
         if (!isLiveConversationSupported()) {
-          setVoiceActive(true);
-          return;
+          throw new Error("Live voice is not supported in this browser.");
         }
+        const expertVoice = resolveActiveExpertVoiceTarget({
+          workspaceId,
+          profileId: actor.id,
+          projectId,
+          spaceId,
+        });
+        const voice = readLiveVoicePreference();
+        liveVoiceIdRef.current = voice;
         const session = await startLiveConversation({
           workspaceId,
           threadId: tid,
-          voice: readLiveVoicePreference(),
+          voice,
+          expertProjectId:
+            expertVoice?.voiceEnabled ? expertVoice.projectId : null,
+          expertAgentId:
+            expertVoice?.voiceEnabled ? expertVoice.agentId : null,
           onSpeakingChange: setVoiceSpeaking,
+          onStatusChange: setVoiceStatus,
           onTranscript: appendVoiceTranscript,
+          onIdleTimeout: () => {
+            liveVoiceSessionRef.current = null;
+            setVoiceActive(false);
+            setVoiceConnecting(false);
+            setVoiceSpeaking(false);
+            setVoiceStatus("idle");
+            appendVoiceTranscript(
+              "assistant",
+              "Voice ended due to inactivity",
+            );
+          },
           onError: (message) => {
             console.warn("[voice]", message);
+            appendVoiceTranscript("assistant", message);
           },
         });
         if (!entitlements.hasVoice) {
           await session.stop();
+          setVoiceConnecting(false);
+          setVoiceStatus("idle");
           return;
         }
         liveVoiceSessionRef.current = session;
         setVoiceActive(true);
+        setVoiceConnecting(false);
+        setVoiceStatus((current) =>
+          current === "connecting" ? "listening" : current,
+        );
       } catch (err) {
         setVoiceActive(false);
+        setVoiceConnecting(false);
         setVoiceSpeaking(false);
+        setVoiceStatus("idle");
         liveVoiceSessionRef.current = null;
-        console.warn(
-          "[voice]",
-          err instanceof Error ? err.message : "Could not start Live voice.",
-        );
+        const message =
+          err instanceof Error ? err.message : "Could not start Live voice.";
+        console.warn("[voice]", message);
+        const tid = voiceThreadIdRef.current;
+        if (tid) {
+          const msg = {
+            id: nextId("a"),
+            role: "assistant" as const,
+            content: message,
+            at: nowTime(),
+            status: "complete" as const,
+          };
+          setThreads((current) =>
+            current.map((item) =>
+              item.id === tid
+                ? {
+                    ...item,
+                    title: "Voice",
+                    messages: [...item.messages, msg],
+                    updatedAt: nowTime(),
+                  }
+                : item,
+            ),
+          );
+        }
       } finally {
         voiceStartingRef.current = false;
       }
@@ -5497,13 +5600,202 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     void startLive();
-  }, [entitlements.hasVoice, voiceActive, workspaceId, summarizeThreadById]);
+  }, [
+    entitlements.hasVoice,
+    voiceActive,
+    voiceConnecting,
+    workspaceId,
+    projectId,
+    spaceId,
+    actor.id,
+    summarizeThreadById,
+    threads,
+  ]);
+
+  useEffect(() => {
+    return subscribeAssistantProfile(() => {
+      const profile = getAssistantProfileSnapshot();
+      const nextVoice: LiveVoiceId =
+        profile.voiceId && isLiveVoiceId(profile.voiceId)
+          ? profile.voiceId
+          : DEFAULT_LIVE_VOICE;
+      const session = liveVoiceSessionRef.current;
+      if (!session || voiceRollingRef.current || voiceStartingRef.current) {
+        liveVoiceIdRef.current = nextVoice;
+        return;
+      }
+      if (nextVoice === liveVoiceIdRef.current) {
+        session.appendPersonalityInstructions(
+          buildLivePersonalityInstructions(profile),
+        );
+        return;
+      }
+
+      liveVoiceIdRef.current = nextVoice;
+      void (async () => {
+        if (voiceRollingRef.current || voiceStartingRef.current) return;
+        if (!liveVoiceSessionRef.current) return;
+        voiceRollingRef.current = true;
+        setVoiceConnecting(true);
+        try {
+          const prev = liveVoiceSessionRef.current;
+          liveVoiceSessionRef.current = null;
+          setVoiceSpeaking(false);
+          if (prev) {
+            try {
+              await prev.stop();
+            } catch {
+              /* ignore */
+            }
+          }
+          const tid = voiceThreadIdRef.current;
+          if (!tid || !entitlements.hasVoice) {
+            setVoiceActive(false);
+            setVoiceStatus("idle");
+            return;
+          }
+          if (!isLiveConversationSupported()) {
+            setVoiceActive(false);
+            setVoiceStatus("idle");
+            return;
+          }
+          const expertVoice = resolveActiveExpertVoiceTarget({
+            workspaceId,
+            profileId: actor.id,
+            projectId,
+            spaceId,
+          });
+          const appendVoiceTranscript = (
+            role: "user" | "assistant",
+            text: string,
+          ) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            const activeId = voiceThreadIdRef.current;
+            if (!activeId) return;
+            const msg = {
+              id: nextId(role === "user" ? "u" : "a"),
+              role,
+              content: trimmed,
+              at: nowTime(),
+              status: "complete" as const,
+            };
+            setThreads((current) =>
+              current.map((item) =>
+                item.id === activeId
+                  ? {
+                      ...item,
+                      title: item.title === "Chat" ? "Voice" : item.title,
+                      messages: [...item.messages, msg],
+                      updatedAt: nowTime(),
+                      snippet: trimmed.slice(0, 80),
+                    }
+                  : item,
+              ),
+            );
+          };
+          const next = await startLiveConversation({
+            workspaceId,
+            threadId: tid,
+            voice: nextVoice,
+            expertProjectId:
+              expertVoice?.voiceEnabled ? expertVoice.projectId : null,
+            expertAgentId:
+              expertVoice?.voiceEnabled ? expertVoice.agentId : null,
+            onSpeakingChange: setVoiceSpeaking,
+            onStatusChange: setVoiceStatus,
+            onTranscript: appendVoiceTranscript,
+            onIdleTimeout: () => {
+              liveVoiceSessionRef.current = null;
+              setVoiceActive(false);
+              setVoiceConnecting(false);
+              setVoiceSpeaking(false);
+              setVoiceStatus("idle");
+              appendVoiceTranscript(
+                "assistant",
+                "Voice ended due to inactivity",
+              );
+            },
+            onError: (message) => {
+              console.warn("[voice]", message);
+              appendVoiceTranscript("assistant", message);
+            },
+          });
+          liveVoiceSessionRef.current = next;
+          setVoiceActive(true);
+          setVoiceStatus((current) =>
+            current === "connecting" ? "listening" : current,
+          );
+        } catch (err) {
+          console.warn("[voice] rollover failed", err);
+          setVoiceActive(false);
+          setVoiceSpeaking(false);
+          setVoiceStatus("idle");
+          liveVoiceSessionRef.current = null;
+        } finally {
+          voiceRollingRef.current = false;
+          setVoiceConnecting(false);
+        }
+      })();
+    });
+  }, [
+    entitlements.hasVoice,
+    workspaceId,
+    projectId,
+    spaceId,
+    actor.id,
+  ]);
 
   const openVoiceThread = useCallback(() => {
     const tid = voiceThreadIdRef.current ?? voiceThreadId;
     if (!tid) return;
-    openThread(tid);
-  }, [voiceThreadId, openThread]);
+
+    // Ensure the Voice thread exists in state (empty drafts can be pruned).
+    setThreads((current) => {
+      if (current.some((item) => item.id === tid)) {
+        return current.map((item) =>
+          item.id === tid && item.title === "Chat"
+            ? { ...item, title: "Voice" }
+            : item,
+        );
+      }
+      return [
+        {
+          id: tid,
+          title: "Voice",
+          workspaceId,
+          updatedAt: new Date().toISOString(),
+          snippet: "Live voice",
+          messages: [],
+          persistent: true,
+        },
+        ...current,
+      ];
+    });
+
+    setThreadId(tid);
+    setDrafting(false);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setSpaceId(null);
+    setProjectId(null);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setView("chat");
+    setMobileSurface("chat");
+    pushTarget({
+      view: "chat",
+      spaceId: null,
+      threadId: tid,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [voiceThreadId, workspaceId, pushTarget]);
 
   const openStandaloneBrowser = useCallback(
     (opts?: { query?: string }) => {
@@ -5882,9 +6174,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPanelMode("split");
   }, [spaceId, spaceLibraryOpen]);
 
-  const openConnector = useCallback((id: string) => {
+  const openConnector = useCallback((
+    id: string,
+    opts?: {
+      connectionId?: string;
+      messageId?: string;
+      threadId?: string;
+    },
+  ) => {
     const catalog = CONNECTOR_CATALOG.find((item) => item.id === id);
     const title = catalog?.name ? `${catalog.name}` : "App";
+    if (opts?.connectionId) {
+      void import("@/lib/connector-active-account").then((m) => {
+        m.setActiveConnectorAccountId(workspaceId, id, opts.connectionId!);
+      });
+    }
+    if (opts?.connectionId || opts?.messageId || opts?.threadId) {
+      void import("@/lib/notifications/pending-connector-focus").then((m) => {
+        m.setPendingConnectorFocus({
+          connectorId: id,
+          connectionId: opts.connectionId,
+          messageId: opts.messageId,
+          threadId: opts.threadId,
+        });
+      });
+    }
     const snapshot = getChatStoreSnapshot().threads;
     const { threads: next, id: nextId } = upsertPersistentConnectorThread(
       snapshot,
@@ -6281,6 +6595,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSkill,
       openFile,
       voiceActive,
+      voiceConnecting,
+      voiceStatus,
       voiceSpeaking,
       voiceThreadId,
       voiceAnchor,
@@ -6448,6 +6764,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openSkill,
       openFile,
       voiceActive,
+      voiceConnecting,
+      voiceStatus,
       voiceSpeaking,
       voiceThreadId,
       voiceAnchor,

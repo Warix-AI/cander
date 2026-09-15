@@ -15,6 +15,7 @@ import {
   CANDER_PRODUCT_GUIDE,
   isCanderHelpQuestion,
 } from "@/lib/cander-product-guide";
+import { buildAssistantIdentityInstructions } from "@/lib/voice/assistant-profile";
 
 export function buildCanderOnDeviceInstructions(opts?: {
   shortName?: string | null;
@@ -38,9 +39,14 @@ export function buildCanderOnDeviceInstructions(opts?: {
   userMessage?: string | null;
 }) {
   const whoParts: string[] = [];
+  try {
+    whoParts.push(buildAssistantIdentityInstructions());
+  } catch {
+    /* ignore */
+  }
   if (opts?.shortName?.trim()) {
     whoParts.push(
-      `The signed-in user’s preferred name is ${opts.shortName.trim()}.`,
+      `The signed-in user’s account name is ${opts.shortName.trim()}.`,
     );
   }
   if (opts?.fullName?.trim() && opts.fullName.trim() !== opts.shortName?.trim()) {

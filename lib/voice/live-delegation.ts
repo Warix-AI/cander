@@ -55,10 +55,10 @@ export function summarizeForVoiceSpeech(content: string): string {
   if (!cleaned) {
     return "I couldn't complete that request.";
   }
-  // Prefer first 1–2 sentences for speech.
+  // Prefer a few spoken sentences — enough detail without a long monologue.
   const parts = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
-  if (parts.length <= 2) return cleaned.slice(0, 500);
-  return parts.slice(0, 2).join(" ").slice(0, 500);
+  if (parts.length <= 4) return cleaned.slice(0, 900);
+  return parts.slice(0, 4).join(" ").slice(0, 900);
 }
 
 export function voiceDelegationLog(

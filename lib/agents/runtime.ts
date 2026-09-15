@@ -20,7 +20,7 @@ import {
   patchAgentRunPayload,
   updateProjectAgent,
 } from "@/lib/agents/server";
-import { computeNextRunAt } from "@/lib/agents/schedule";
+import { computeNextRunAt, computeScheduleRetryAt } from "@/lib/agents/schedule";
 import type {
   AgentActivityOutcome,
   AgentConversationMessage,
@@ -34,7 +34,7 @@ import {
   fallbackRunOutcomeSummary,
 } from "@/lib/agents/types";
 import { runAgentServerLoop } from "@/lib/ai/runtime/agent-loop-server";
-import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
+import { resolveExpertModelId, EXPERT_MODEL_ID } from "@/lib/agents/expert-model";
 import { sanitizeExpertVisibleMessage } from "@/lib/agents/expert-voice";
 import {
   finishAIUsageExecution,
@@ -261,7 +261,7 @@ async function planNextAgentMessage(opts: {
   }
 
   const openai = new OpenAI({ apiKey });
-  const model = resolveOpenAIModel();
+  const model = resolveExpertModelId(opts.agent.modelId);
   const system = `You are ${opts.agent.name}, a knowledgeable human specialist Cander is consulting.
 Speak directly to Cander as that specialist. Be concise, decisive, and natural.
 
@@ -359,7 +359,7 @@ async function summarizeAgentRunOutcome(opts: {
 
   try {
     const openai = new OpenAI({ apiKey });
-    const model = resolveOpenAIModel();
+    const model = EXPERT_MODEL_ID;
     const res = await openai.chat.completions.create({
       model,
       temperature: 0.2,
@@ -441,6 +441,7 @@ export async function runAgent(
 
   const billingPlan = await resolveBillingPlanForProfile(input.profileId);
   const aiSource = aiSourceForAgentTrigger(input.triggerType);
+  const runStartedMs = Date.now();
   const aiExecution = await startAIUsageExecution({
     userId: input.profileId,
     workspaceId: input.workspaceId,
@@ -455,8 +456,21 @@ export async function runAgent(
       projectId: input.projectId,
       runId: run.id,
       triggerType: input.triggerType,
+      model: resolveExpertModelId(bundle.agent.modelId),
     },
   });
+
+  // Persist execution id early for Overview linkage.
+  try {
+    await completeAgentRun({
+      runId: run.id,
+      workspaceId: input.workspaceId,
+      status: "running",
+      aiExecutionId: aiExecution.executionId,
+    });
+  } catch {
+    /* ignore */
+  }
 
   const nowIso = new Date().toISOString();
   let toolCount = 0;
@@ -667,7 +681,20 @@ export async function runAgent(
             ...run.triggerPayload,
             pendingApproval: pending,
           },
+          aiExecutionId: aiExecution.executionId,
+          activeDurationMs: Date.now() - runStartedMs,
         });
+        try {
+          await finishAIUsageExecution({
+            executionId: aiExecution.executionId,
+            status: "interrupted",
+            plan: billingPlan,
+            userId: input.profileId,
+            metadata: { toolCount, runStatus: "waiting" },
+          });
+        } catch {
+          /* ignore */
+        }
         return {
           run: waiting,
           content: lastCander,
@@ -716,6 +743,8 @@ export async function runAgent(
       workspaceId: input.workspaceId,
       status: runStatus,
       summary,
+      aiExecutionId: aiExecution.executionId,
+      activeDurationMs: Date.now() - runStartedMs,
     });
 
     if (
@@ -797,7 +826,53 @@ export async function runAgent(
       status: "failed",
       error: message,
       summary,
+      aiExecutionId: aiExecution.executionId,
+      activeDurationMs: Date.now() - runStartedMs,
     });
+
+    // Scheduled wakes: advance to next slot, with one short deferred retry for
+    // transient failures (Overview still records this failed run).
+    if (
+      input.triggerType === "schedule" &&
+      bundle.agent.trigger.type === "schedule"
+    ) {
+      const alreadyRetried = Boolean(
+        (run.triggerPayload as { scheduleRetry?: unknown } | undefined)
+          ?.scheduleRetry,
+      );
+      const next = alreadyRetried
+        ? computeNextRunAt(bundle.agent.trigger, new Date())
+        : computeScheduleRetryAt(new Date());
+      await updateProjectAgent(
+        input.agentId,
+        input.workspaceId,
+        input.projectId,
+        {
+          lastTriggeredAt: nowIso,
+          nextRunAt: next ? next.toISOString() : null,
+        },
+      );
+      if (!alreadyRetried) {
+        try {
+          await completeAgentRun({
+            runId: run.id,
+            workspaceId: input.workspaceId,
+            status: "failed",
+            error: message,
+            summary,
+            triggerPayload: {
+              ...run.triggerPayload,
+              scheduleRetry: true,
+            },
+            aiExecutionId: aiExecution.executionId,
+            activeDurationMs: Date.now() - runStartedMs,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
     return { run: failed, content: message, toolCount };
   }
 }

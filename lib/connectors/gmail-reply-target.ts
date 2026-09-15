@@ -135,6 +135,96 @@ export async function normalizeGmailReplyArguments(opts: {
   return next;
 }
 
+/** Collect addresses that belong to the connected mailbox / signed-in user. */
+export async function resolveConnectedMailboxEmails(opts: {
+  connectionId: string;
+  workspaceId: string;
+  profileId: string;
+}): Promise<Set<string>> {
+  const admin = createSupabaseAdminClient();
+  const emails = new Set<string>();
+
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("email")
+    .eq("id", opts.profileId)
+    .maybeSingle();
+  const profileEmail = extractEmailAddress(
+    typeof profile?.email === "string" ? profile.email : null,
+  );
+  if (profileEmail) emails.add(profileEmail);
+
+  const { data: mailRows } = await admin
+    .from("connector_mail_messages")
+    .select("to_addrs")
+    .eq("connection_id", opts.connectionId)
+    .order("received_at", { ascending: false, nullsFirst: false })
+    .limit(40);
+
+  for (const row of mailRows ?? []) {
+    const tos = Array.isArray(row.to_addrs) ? row.to_addrs : [];
+    for (const to of tos) {
+      const email = extractEmailAddress(String(to));
+      if (email) emails.add(email);
+    }
+  }
+
+  return emails;
+}
+
+/** True when any to/cc/bcc address is the connected mailbox. */
+export function outboundTargetsSelfMailbox(
+  args: Record<string, unknown>,
+  selfEmails: Iterable<string>,
+): string | null {
+  const self = new Set(
+    [...selfEmails]
+      .map((e) => extractEmailAddress(e))
+      .filter(Boolean) as string[],
+  );
+  if (self.size === 0) return null;
+
+  for (const field of ["to", "recipient_email", "cc", "bcc"] as const) {
+    const raw = args[field];
+    const parts: string[] = [];
+    if (typeof raw === "string") {
+      parts.push(...raw.split(/[,;]/));
+    } else if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (typeof item === "string") parts.push(...item.split(/[,;]/));
+      }
+    }
+    for (const part of parts) {
+      const email = extractEmailAddress(part);
+      if (email && self.has(email)) return email;
+    }
+  }
+  return null;
+}
+
+/**
+ * Hard-block gmail.send / gmail.draft when To/Cc/Bcc is the owner's mailbox.
+ * Same failure mode as self-replies: model confuses search `to` with recipient.
+ */
+export async function assertGmailOutboundNotSelf(opts: {
+  connectionId: string;
+  workspaceId: string;
+  profileId: string;
+  args: Record<string, unknown>;
+}): Promise<void> {
+  const selfEmails = await resolveConnectedMailboxEmails({
+    connectionId: opts.connectionId,
+    workspaceId: opts.workspaceId,
+    profileId: opts.profileId,
+  });
+  const hit = outboundTargetsSelfMailbox(opts.args, selfEmails);
+  if (hit) {
+    throw new Error(
+      `Refusing to send to the connected mailbox itself (${hit}). Use the other person's address as To — not your own inbox.`,
+    );
+  }
+}
+
 /** Test helper — no DB. */
 export function chooseReplyRecipient(opts: {
   requestedTo?: string | null;

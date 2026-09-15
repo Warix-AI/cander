@@ -99,8 +99,15 @@ export async function runAssistantTurn(
     const { isCalendarConnectorTurn } = await import(
       "@/lib/ai/connectors/calendar-intent"
     );
+    const hasConnectorFocusContext = (request.messages ?? []).some(
+      (m) =>
+        m.role === "system" &&
+        typeof m.content === "string" &&
+        m.content.includes("## ConnectorFocus"),
+    );
     const needsConnectorTools =
       connectorScoped ||
+      hasConnectorFocusContext ||
       isCommsConnectorTurn(request.content, request.messages) ||
       isCalendarConnectorTurn(request.content, request.messages);
 

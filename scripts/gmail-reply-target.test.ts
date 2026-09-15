@@ -4,6 +4,7 @@ import {
   chooseReplyRecipient,
   emailsEqual,
   extractEmailAddress,
+  outboundTargetsSelfMailbox,
 } from "../lib/connectors/gmail-reply-target.ts";
 
 test("extractEmailAddress handles bare and angled addresses", () => {
@@ -42,5 +43,29 @@ test("emailsEqual is case-insensitive", () => {
   assert.equal(
     emailsEqual("Matt@Warix.co", "matt@warix.co"),
     true,
+  );
+});
+
+test("outboundTargetsSelfMailbox blocks self to/cc", () => {
+  assert.equal(
+    outboundTargetsSelfMailbox(
+      { to: "matthewdavila51@gmail.com", subject: "Hi", body: "x" },
+      ["matthewdavila51@gmail.com"],
+    ),
+    "matthewdavila51@gmail.com",
+  );
+  assert.equal(
+    outboundTargetsSelfMailbox(
+      { to: "alice@example.com", cc: "matthewdavila51@gmail.com" },
+      ["matthewdavila51@gmail.com"],
+    ),
+    "matthewdavila51@gmail.com",
+  );
+  assert.equal(
+    outboundTargetsSelfMailbox(
+      { to: "Alice <alice@example.com>" },
+      ["matthewdavila51@gmail.com"],
+    ),
+    null,
   );
 });

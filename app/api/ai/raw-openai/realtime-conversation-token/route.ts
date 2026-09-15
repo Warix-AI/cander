@@ -13,12 +13,14 @@ import { requireBearerUser } from "@/lib/ai/raw-openai/auth";
 import { enforceUsageForRequest } from "@/lib/usage/server/guard-route";
 import { reconcileUsage } from "@/lib/usage/enforce";
 import {
-  REALTIME_CONVERSATION_INSTRUCTIONS,
   REALTIME_CONVERSATION_MODEL,
+  buildLiveConversationInstructions,
 } from "@/lib/voice/realtime-tools";
+import { clampAssistantProfile } from "@/lib/voice/assistant-profile";
 import {
   DEFAULT_LIVE_VOICE,
   isLiveVoiceId,
+  liveVoicePersonaName,
   type LiveVoiceId,
 } from "@/lib/voice/live-voices";
 
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
     sdp?: string;
     workspaceId?: string;
     voice?: string;
+    profile?: Record<string, unknown>;
   };
   try {
     body = await request.json();
@@ -59,8 +62,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload." }, { status: 400 });
   }
 
-  const sdp = typeof body.sdp === "string" ? body.sdp.trim() : "";
-  if (!sdp) {
+  // Do NOT trim() the whole SDP — trailing \r\n is required by SDP parsers.
+  // OpenAI returns "failed to unmarshal SDP: EOF" if the final newline is stripped.
+  const sdpRaw = typeof body.sdp === "string" ? body.sdp : "";
+  const sdp = sdpRaw.endsWith("\n") ? sdpRaw : `${sdpRaw}\n`;
+  if (!sdpRaw.trim()) {
     return NextResponse.json(
       { error: "An SDP offer is required." },
       { status: 400 },
@@ -74,6 +80,18 @@ export async function POST(request: Request) {
   const voice: LiveVoiceId = isLiveVoiceId(body.voice)
     ? body.voice
     : DEFAULT_LIVE_VOICE;
+  const profile = body.profile
+    ? clampAssistantProfile({
+        ...body.profile,
+        voiceId: isLiveVoiceId(body.profile.voiceId)
+          ? body.profile.voiceId
+          : voice,
+      })
+    : clampAssistantProfile({ voiceId: voice });
+  const sessionVoice =
+    profile.voiceId && isLiveVoiceId(profile.voiceId)
+      ? profile.voiceId
+      : voice;
 
   const idempotencyKey =
     request.headers.get("Idempotency-Key")?.trim() ||
@@ -87,7 +105,12 @@ export async function POST(request: Request) {
     estimatedUnits: 1,
     provider: "openai",
     model: LIVE_MODEL,
-    metadata: { mode: "gpt_live_client_delegation", voice },
+    metadata: {
+      mode: "gpt_live_client_delegation",
+      voice: sessionVoice,
+      persona: liveVoicePersonaName(sessionVoice),
+      unit: "seconds",
+    },
   });
   if (!usage.ok) return usage.response;
 
@@ -102,9 +125,9 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         session: {
           model: LIVE_MODEL,
-          instructions: REALTIME_CONVERSATION_INSTRUCTIONS,
+          instructions: buildLiveConversationInstructions(sessionVoice, profile),
           audio: {
-            output: { voice },
+            output: { voice: sessionVoice },
           },
           // Client owns Candor's assistant/tools; GPT-Live only converses.
           delegation: { type: "client" },
@@ -189,7 +212,7 @@ export async function POST(request: Request) {
       sdp: answerSdp,
       sessionId,
       model: LIVE_MODEL,
-      voice,
+      voice: sessionVoice,
       aiExecutionId: usage.aiExecutionId ?? usage.reservationId,
       workspaceId: usage.workspaceId,
       latencyMs: Date.now() - started,

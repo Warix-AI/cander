@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@agent-browser/sandbox": "^0.35.1",
+    "@capacitor/push-notifications": "^7.0.7",
     "@composio/core": "0.18.0",
     "@octokit/app": "^16.1.4",
     "@octokit/core": "^7.0.8",
@@ -40,6 +41,7 @@
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.8",
     "@vercel/sandbox": "^3.2.1",
+    "jose": "^6.2.12",
     "lucide-react": "^1.31.0",
     "next": "16.3.1",
     "openai": "^7.8.0",
@@ -48,6 +50,7 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "stripe": "^22.6.0",
+    "web-push": "^3.6.7",
     "ws": "^8.21.3"
   },
   "devDependencies": {
@@ -55,6 +58,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",

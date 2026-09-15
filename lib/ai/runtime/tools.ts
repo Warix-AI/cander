@@ -316,6 +316,72 @@ export async function executeAuthorizedTool(
           output: result.detail,
         };
       }
+      case "assistant.profile.apply": {
+        const { applyAssistantProfileToolArgs } = await import(
+          "@/lib/voice/apply-assistant-profile-tool"
+        );
+        const result = applyAssistantProfileToolArgs({
+          undo: Boolean(args.undo),
+          reset: Boolean(args.reset),
+          assistantName:
+            args.assistantName === null
+              ? null
+              : args.assistantName !== undefined
+                ? String(args.assistantName)
+                : undefined,
+          userName:
+            args.userName === null
+              ? null
+              : args.userName !== undefined
+                ? String(args.userName)
+                : undefined,
+          voiceId:
+            args.voiceId === null
+              ? null
+              : args.voiceId !== undefined
+                ? String(args.voiceId)
+                : undefined,
+          pace: args.pace !== undefined ? Number(args.pace) : undefined,
+          energy: args.energy !== undefined ? Number(args.energy) : undefined,
+          warmth: args.warmth !== undefined ? Number(args.warmth) : undefined,
+          expressiveness:
+            args.expressiveness !== undefined
+              ? Number(args.expressiveness)
+              : undefined,
+          humor: args.humor !== undefined ? Number(args.humor) : undefined,
+          sarcasm:
+            args.sarcasm !== undefined ? Number(args.sarcasm) : undefined,
+          formality:
+            args.formality !== undefined ? Number(args.formality) : undefined,
+          conciseness:
+            args.conciseness !== undefined
+              ? Number(args.conciseness)
+              : undefined,
+          directness:
+            args.directness !== undefined ? Number(args.directness) : undefined,
+          backchannelLevel:
+            args.backchannelLevel !== undefined
+              ? Number(args.backchannelLevel)
+              : undefined,
+          demeanor:
+            args.demeanor === null
+              ? null
+              : args.demeanor !== undefined
+                ? String(args.demeanor)
+                : undefined,
+          addStyleInstruction:
+            args.addStyleInstruction !== undefined
+              ? String(args.addStyleInstruction)
+              : undefined,
+          reason:
+            args.reason !== undefined ? String(args.reason) : undefined,
+        });
+        return {
+          name: tool.name,
+          ok: result.ok,
+          output: result.output,
+        };
+      }
       case "panel.open": {
         const result = actions.panelOpen({
           projectId: args.projectId

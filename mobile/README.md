@@ -80,4 +80,10 @@ mobile/
 
 ## Out of scope (for now)
 
-App Store / Play listing, push notifications, offline Next bundle, native Ollama. This is a remote-URL shell only.
+App Store / Play listing, offline Next bundle, native Ollama. This is a remote-URL shell only.
+
+## Push notifications
+
+Native push is supported via `@capacitor/push-notifications`. Full setup (APNs, FCM, entitlements, test endpoint): see [`docs/notifications-setup.md`](../docs/notifications-setup.md).
+
+Permission is requested only from **Settings → Notifications** (never automatically on cold start).

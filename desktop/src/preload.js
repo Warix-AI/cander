@@ -49,6 +49,15 @@ contextBridge.exposeInMainWorld("canderDesktop", {
       return () => ipcRenderer.removeListener("cander:shell-event", listener);
     },
   },
+  notifications: {
+    show: (opts) => ipcRenderer.invoke("cander:notification-show", opts || {}),
+    onClick: (handler) => {
+      const listener = (_event, payload) => handler(payload || {});
+      ipcRenderer.on("cander:notification-click", listener);
+      return () =>
+        ipcRenderer.removeListener("cander:notification-click", listener);
+    },
+  },
   browser: {
     createTab: (tabId, initialUrl, options) =>
       ipcRenderer.invoke("cander:browser-create", tabId, initialUrl, options),

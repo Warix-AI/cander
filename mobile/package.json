@@ -24,7 +24,8 @@
     "@capacitor/core": "^7.4.3",
     "@capacitor/haptics": "^7.0.5",
     "@capacitor/ios": "^7.4.3",
-    "@capacitor/keyboard": "^7.0.6"
+    "@capacitor/keyboard": "^7.0.6",
+    "@capacitor/push-notifications": "^7.0.7"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.4.3",

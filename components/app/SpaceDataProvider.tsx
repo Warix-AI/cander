@@ -24,6 +24,10 @@ import {
   bootstrapSupabaseAppearance,
   isAppearanceActorId,
 } from "@/lib/api/appearance-sync";
+import {
+  bootstrapSupabaseAssistantProfile,
+  startAssistantProfileRemoteSync,
+} from "@/lib/api/assistant-profile-sync";
 import { setAppearanceActorId } from "@/lib/appearance";
 import {
   bindChatStoreOwner,
@@ -136,6 +140,12 @@ export function SpaceDataProvider({
     const stopChatSync = startChatRemoteSync(ctx);
     const stopChatRealtime = startChatRealtimePull(api.chat, ctx);
 
+    void import("@/lib/notifications/notification-sync").then((m) => {
+      if (cancelled) return;
+      void m.hydrateNotifications(actorId);
+      m.startNotificationRealtime(actorId);
+    });
+
     return () => {
       cancelled = true;
       stopEntitySync();
@@ -145,6 +155,9 @@ export function SpaceDataProvider({
       stopProjectBrowserSync();
       stopChatSync();
       stopChatRealtime();
+      void import("@/lib/notifications/notification-sync").then((m) => {
+        m.stopNotificationRealtime();
+      });
     };
   }, [actorId, api, backend, ctx, workspaceId]);
 
@@ -165,8 +178,18 @@ export function SpaceDataProvider({
         stopAppearanceSync = startAppearanceRemoteSync(ctx);
       });
 
+    let stopAssistantProfileSync = () => {};
+    void bootstrapSupabaseAssistantProfile(ctx)
+      .catch((err) => {
+        console.warn("[cander] assistant profile bootstrap failed", err);
+      })
+      .finally(() => {
+        stopAssistantProfileSync = startAssistantProfileRemoteSync(ctx);
+      });
+
     return () => {
       stopAppearanceSync();
+      stopAssistantProfileSync();
     };
   }, [canSyncAppearance, ctx]);
 

@@ -173,6 +173,7 @@ export async function updateProjectAgentClient(opts: {
     instructions: string;
     enabled: boolean;
     status: import("@/lib/agents/types").AgentStatus;
+    voiceEnabled: boolean;
   }>;
 }): Promise<ProjectAgent> {
   const headers = await authHeaders();

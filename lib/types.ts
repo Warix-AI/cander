@@ -119,6 +119,7 @@ export type SettingsTab =
   | "plans"
   | "usage"
   | "voice"
+  | "notifications"
   | "general"
   | "appearance";
 

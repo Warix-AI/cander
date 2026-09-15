@@ -1,5 +1,6 @@
 /**
  * Friendly schedule presets ↔ cron + next_run_at helpers.
+ * next_run_at is computed in the trigger's IANA timezone.
  */
 
 import type { AgentTrigger } from "@/lib/agents/types";
@@ -59,7 +60,42 @@ export function buildScheduleTrigger(opts: {
   };
 }
 
-/** Rough next run from cron — supports common 5-field patterns used by presets. */
+type ZonedParts = {
+  minute: number;
+  hour: number;
+  dow: number;
+};
+
+/** Wall-clock fields for `date` as seen in `timeZone`. */
+export function getZonedCronParts(date: Date, timeZone: string): ZonedParts {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  const weekday = get("weekday");
+  const dowMap: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+  return {
+    minute: Number(get("minute")) || 0,
+    hour: Number(get("hour")) || 0,
+    dow: dowMap[weekday] ?? date.getUTCDay(),
+  };
+}
+
+/** Next run from cron — evaluates minute/hour/dow in the trigger IANA timezone. */
 export function computeNextRunAt(
   trigger: AgentTrigger,
   from = new Date(),
@@ -68,19 +104,28 @@ export function computeNextRunAt(
   const parts = trigger.cron.trim().split(/\s+/);
   if (parts.length < 5) return null;
   const [minPart, hourPart, , , dowPart] = parts;
+  const timeZone = trigger.timezone?.trim() || "America/Denver";
   const candidate = new Date(from.getTime());
-  candidate.setSeconds(0, 0);
+  candidate.setUTCSeconds(0, 0);
+  candidate.setUTCMilliseconds(0);
 
   for (let i = 0; i < 60 * 24 * 14; i++) {
-    candidate.setMinutes(candidate.getMinutes() + 1);
-    const minute = candidate.getMinutes();
-    const hour = candidate.getHours();
-    const dow = candidate.getDay();
-
-    if (!matchCronField(minPart!, minute)) continue;
-    if (!matchCronField(hourPart!, hour)) continue;
-    if (!matchDow(dowPart!, dow)) continue;
-    return candidate;
+    candidate.setUTCMinutes(candidate.getUTCMinutes() + 1);
+    let zoned: ZonedParts;
+    try {
+      zoned = getZonedCronParts(candidate, timeZone);
+    } catch {
+      // Invalid IANA zone → fall back to UTC wall clock.
+      zoned = {
+        minute: candidate.getUTCMinutes(),
+        hour: candidate.getUTCHours(),
+        dow: candidate.getUTCDay(),
+      };
+    }
+    if (!matchCronField(minPart!, zoned.minute)) continue;
+    if (!matchCronField(hourPart!, zoned.hour)) continue;
+    if (!matchDow(dowPart!, zoned.dow)) continue;
+    return new Date(candidate.getTime());
   }
   return null;
 }
@@ -138,4 +183,9 @@ export function coerceSchedulePreset(raw: unknown): SchedulePreset {
   if (raw === "every_few_hours") return "hourly";
   if (raw === "weekday" || raw === "weekly") return "daily";
   return "hourly";
+}
+
+/** One deferred retry slot (~2 minutes) for transient scheduled failures. */
+export function computeScheduleRetryAt(from = new Date()): Date {
+  return new Date(from.getTime() + 2 * 60_000);
 }

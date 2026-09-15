@@ -1,10 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Blocks, CircleUser, Gauge, History, Settings } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  Blocks,
+  CircleUser,
+  Gauge,
+  History,
+  Settings,
+  Shield,
+} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { Dropdown } from "@/components/ui/Controls";
+import { useIsPlatformAdmin } from "@/lib/admin/use-platform-admin";
 import { signOutAccount } from "@/lib/auth/sign-out";
 import { closeAllPinSections } from "@/lib/pin-display-prefs";
 import { setAppsMoreOpen } from "@/lib/apps-more-prefs";
@@ -73,7 +82,9 @@ function UsageFlyoutRow({ onOpen }: { onOpen: () => void }) {
 }
 
 export function AccountMenu() {
+  const router = useRouter();
   const { view, openSettings, openRecents, openSpace } = useApp();
+  const isPlatformAdmin = useIsPlatformAdmin();
 
   return (
     <Dropdown
@@ -118,10 +129,7 @@ export function AccountMenu() {
               close();
             }}
           >
-            <Blocks
-              className={flyoutIconClass}
-              strokeWidth={2}
-            />
+            <Blocks className={flyoutIconClass} strokeWidth={2} />
             Apps
           </button>
           <UsageFlyoutRow
@@ -140,10 +148,7 @@ export function AccountMenu() {
               close();
             }}
           >
-            <History
-              className={flyoutIconClass}
-              strokeWidth={2}
-            />
+            <History className={flyoutIconClass} strokeWidth={2} />
             Recents
           </button>
           <button
@@ -158,12 +163,22 @@ export function AccountMenu() {
               close();
             }}
           >
-            <Settings
-              className={flyoutIconClass}
-              strokeWidth={2}
-            />
+            <Settings className={flyoutIconClass} strokeWidth={2} />
             Settings
           </button>
+          {isPlatformAdmin ? (
+            <button
+              type="button"
+              className={flyoutRowClass}
+              onClick={() => {
+                close();
+                router.push("/admin");
+              }}
+            >
+              <Shield className={flyoutIconClass} strokeWidth={2} />
+              Admin
+            </button>
+          ) : null}
         </div>
       )}
     </Dropdown>

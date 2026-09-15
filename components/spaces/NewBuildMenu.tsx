@@ -15,9 +15,9 @@ export const BUILD_CREATE_OPTIONS: {
 }[] = [
   {
     kind: "automation",
-    label: "Agent",
-    summary: "Coming soon",
-    title: "Buddy",
+    label: "Expert",
+    summary: "Scheduled workflows and tool-heavy tasks",
+    title: "Expert",
     disabled: true,
   },
 ];

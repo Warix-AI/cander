@@ -49,13 +49,13 @@ export function canvasStartOptions(): CanvasStartOption[] {
     },
     {
       id: "agent",
-      label: "Agent",
-      summary: "Coming soon",
+      label: "Expert",
+      summary: "Scheduled workflows and tool-heavy tasks",
       action: "create-project",
       icon: Bot,
       kind: "automation",
       space: "build",
-      title: "Buddy",
+      title: "Expert",
       disabled: true,
     },
   ];

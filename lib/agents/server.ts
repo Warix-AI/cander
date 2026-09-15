@@ -7,6 +7,12 @@
  */
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import {
+  DEFAULT_EXPERT_DELIVERY,
+  EXPERT_MODEL_ID,
+  parseExpertDelivery,
+  resolveExpertModelId,
+} from "@/lib/agents/expert-model";
 import { computeNextRunAt } from "@/lib/agents/schedule";
 import type {
   AgentActivityItem,
@@ -105,6 +111,11 @@ function mapAgent(row: Record<string, unknown>): ProjectAgent {
     color: row.color != null ? String(row.color) : null,
     pinned: Boolean(row.pinned),
     sortOrder: Number(row.sort_order ?? 0),
+    voiceEnabled: Boolean(row.voice_enabled),
+    modelId: resolveExpertModelId(
+      row.model_id != null ? String(row.model_id) : null,
+    ),
+    delivery: parseExpertDelivery(row.delivery),
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),
   };
@@ -139,6 +150,12 @@ function mapRun(row: Record<string, unknown>): AgentRun {
     idempotencyKey:
       row.idempotency_key != null ? String(row.idempotency_key) : null,
     triggerPayload: payload,
+    aiExecutionId:
+      row.ai_execution_id != null ? String(row.ai_execution_id) : null,
+    activeDurationMs:
+      row.active_duration_ms != null && Number.isFinite(Number(row.active_duration_ms))
+        ? Number(row.active_duration_ms)
+        : null,
   };
 }
 
@@ -188,7 +205,7 @@ export async function ensureDefaultAgent(opts: {
       .eq("id", opts.projectId)
       .eq("workspace_id", opts.workspaceId)
       .maybeSingle();
-    name = String(project?.title ?? "").trim() || "Buddy";
+    name = String(project?.title ?? "").trim() || "Expert";
   }
   return createProjectAgent({
     workspaceId: opts.workspaceId,
@@ -219,7 +236,7 @@ export async function createProjectAgent(opts: {
       id,
       workspace_id: opts.workspaceId,
       project_id: opts.projectId,
-      name: opts.name.trim() || "Buddy",
+      name: opts.name.trim() || "Expert",
       description:
         opts.description ??
         "Automated extension of you that talks to Cander on a schedule.",
@@ -227,6 +244,9 @@ export async function createProjectAgent(opts: {
       enabled: opts.enabled ?? true,
       status: opts.enabled === false ? "paused" : "draft",
       trigger: { type: "manual" },
+      voice_enabled: false,
+      model_id: EXPERT_MODEL_ID,
+      delivery: DEFAULT_EXPERT_DELIVERY,
       sort_order: existing.length,
       created_by: opts.userId,
     })
@@ -269,13 +289,23 @@ export async function updateProjectAgent(
     icon: string | null;
     color: string | null;
     pinned: boolean;
+    voiceEnabled: boolean;
   }>,
 ): Promise<ProjectAgent> {
   const admin = createSupabaseAdminClient();
   const row: Record<string, unknown> = {};
   if (patch.name !== undefined) row.name = patch.name.trim() || "Expert";
   if (patch.description !== undefined) row.description = patch.description;
-  if (patch.instructions !== undefined) row.instructions = patch.instructions;
+  if (patch.instructions !== undefined) {
+    const trimmed = patch.instructions.trim();
+    if (!trimmed) {
+      throw new Error("Instructions cannot be empty.");
+    }
+    if (trimmed.length > 50_000) {
+      throw new Error("Instructions are too long (50k character max).");
+    }
+    row.instructions = trimmed;
+  }
   if (patch.enabled !== undefined) {
     row.enabled = patch.enabled;
     if (patch.status === undefined) {
@@ -306,6 +336,16 @@ export async function updateProjectAgent(
   if (patch.icon !== undefined) row.icon = patch.icon;
   if (patch.color !== undefined) row.color = patch.color;
   if (patch.pinned !== undefined) row.pinned = patch.pinned;
+  if (patch.voiceEnabled !== undefined) {
+    row.voice_enabled = patch.voiceEnabled;
+    // Voice on implies chat+voice readiness: keep Expert active when enabling voice.
+    if (patch.voiceEnabled && patch.status === undefined) {
+      row.status = "active";
+      row.enabled = true;
+    }
+  }
+  // Always keep model locked server-side.
+  row.model_id = EXPERT_MODEL_ID;
   const { data, error } = await admin
     .from("project_agents")
     .update(row)
@@ -357,6 +397,7 @@ export async function duplicateProjectAgent(opts: {
   await updateProjectAgent(copy.id, opts.workspaceId, opts.projectId, {
     trigger: bundle.agent.trigger,
     status: "draft",
+    voiceEnabled: bundle.agent.voiceEnabled,
   });
   const next = await loadAgentBundle(copy.id, opts.workspaceId, opts.projectId);
   if (!next) throw new Error("Could not load duplicated agent.");
@@ -597,6 +638,8 @@ export async function completeAgentRun(opts: {
   summary?: string;
   error?: string;
   triggerPayload?: Record<string, unknown>;
+  aiExecutionId?: string | null;
+  activeDurationMs?: number | null;
 }): Promise<AgentRun> {
   const admin = createSupabaseAdminClient();
   const terminal =
@@ -611,6 +654,12 @@ export async function completeAgentRun(opts: {
   };
   if (opts.triggerPayload !== undefined) {
     patch.trigger_payload = opts.triggerPayload;
+  }
+  if (opts.aiExecutionId !== undefined) {
+    patch.ai_execution_id = opts.aiExecutionId;
+  }
+  if (opts.activeDurationMs !== undefined) {
+    patch.active_duration_ms = opts.activeDurationMs;
   }
   const { data, error } = await admin
     .from("agent_runs")
@@ -726,7 +775,8 @@ export async function applyAgentConfigPatch(opts: {
     patch.trigger !== undefined ||
     patch.icon !== undefined ||
     patch.color !== undefined ||
-    patch.pinned !== undefined
+    patch.pinned !== undefined ||
+    patch.voiceEnabled !== undefined
   ) {
     await updateProjectAgent(agentId, workspaceId, projectId, {
       name: patch.name,
@@ -738,6 +788,7 @@ export async function applyAgentConfigPatch(opts: {
       icon: patch.icon,
       color: patch.color,
       pinned: patch.pinned,
+      voiceEnabled: patch.voiceEnabled,
     });
   }
 

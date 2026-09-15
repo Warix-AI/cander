@@ -18,7 +18,7 @@ export type CreateStart = {
   disabled?: boolean;
 };
 
-/** Unified Create menu — Image (Studio) + Agent (coming soon). */
+/** Unified Create menu — Image (Studio) + Expert (Build). */
 export const CREATE_MENU_OPTIONS: CreateStart[] = [
   {
     id: "image",

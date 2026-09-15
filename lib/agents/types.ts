@@ -41,6 +41,12 @@ export type ProjectAgent = {
   color: string | null;
   pinned: boolean;
   sortOrder: number;
+  /** Live voice interactions enabled for this Expert. */
+  voiceEnabled: boolean;
+  /** Locked execution model (gpt-5.6-luna). */
+  modelId: string;
+  /** Delivery channels (expert_chat/overview now; email/PDF later). */
+  delivery: { channels: string[] };
   createdAt: string;
   updatedAt: string;
 };
@@ -75,6 +81,7 @@ export type AgentActivityItem = {
   triggerType: string;
   startedAt: string;
   completedAt: string | null;
+  activeDurationMs?: number | null;
 };
 
 /** Runtime conversation turn — Agent speaks as the user to Cander. */
@@ -111,6 +118,8 @@ export type AgentRun = {
   error: string | null;
   idempotencyKey: string | null;
   triggerPayload: Record<string, unknown>;
+  aiExecutionId: string | null;
+  activeDurationMs: number | null;
 };
 
 export type ProjectAgentBundle = {
@@ -131,6 +140,7 @@ export type AgentConfigPatch = {
   icon?: string | null;
   color?: string | null;
   pinned?: boolean;
+  voiceEnabled?: boolean;
   /** Replace Agent Scope connection ids (empty = all user connectors). */
   scopeConnectionIds?: string[];
   /** @deprecated Mapped to instructions for builder-chat compatibility */
@@ -230,6 +240,7 @@ export function runToActivityItem(opts: {
     triggerType: run.triggerType,
     startedAt: run.startedAt,
     completedAt: run.completedAt,
+    activeDurationMs: run.activeDurationMs,
   };
 }
 

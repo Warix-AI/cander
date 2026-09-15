@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { ColorModeToggle } from "@/components/shell/ColorModeToggle";
 import { SIDEBAR_FOOTER_ROW } from "@/components/shell/AccountMenu";
-import { ShellProductSwitcher } from "@/components/shell/ShellProductSwitcher";
 import {
   ShellNavToggleButton,
   ShellWindowChromeBar,
@@ -23,15 +22,19 @@ import {
 import { Dropdown } from "@/components/ui/Controls";
 import { ADMIN_SECTION_LABELS, type AdminSection } from "@/lib/admin/sections";
 import { useAdmin, ADMIN_SECTIONS } from "@/components/admin/AdminProvider";
+import { APP_NAME } from "@/lib/app-brand";
 import { useDesktopShell } from "@/lib/desktop-shell";
 import {
   PRIMARY_NAV_CARD_ACTIVE,
   PRIMARY_NAV_CARD_HOVER,
   PRIMARY_NAV_CARD_RADIUS_FIRST,
   PRIMARY_NAV_CARD_RADIUS_LAST,
+  PRIMARY_NAV_CARD_RADIUS_SOLO,
 } from "@/lib/mobile-menu-styles";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { House } from "lucide-react";
 
 const SECTION_ICONS: Record<AdminSection, LucideIcon> = {
   overview: LayoutDashboard,
@@ -50,6 +53,7 @@ const SECTION_ICONS: Record<AdminSection, LucideIcon> = {
  * placement as Cander).
  */
 export function AdminNavPanel({ className }: { className?: string }) {
+  const router = useRouter();
   const {
     section,
     setSection,
@@ -114,7 +118,32 @@ export function AdminNavPanel({ className }: { className?: string }) {
             aria-label="Admin"
           >
             <div className="mb-2 shrink-0">
-              <ShellProductSwitcher active="admin" />
+              <div
+                className={cn(
+                  "flex w-full flex-col gap-0 p-[3px]",
+                  SHELL_G3_RADIUS,
+                  "bg-black/[0.03] dark:bg-white/[0.045]",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => router.push("/")}
+                  className={cn(
+                    "flex w-full items-center gap-3 px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
+                    PRIMARY_NAV_CARD_RADIUS_SOLO,
+                    PRIMARY_NAV_CARD_HOVER,
+                  )}
+                  aria-label={`Back to ${APP_NAME}`}
+                >
+                  <House
+                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                    strokeWidth={2}
+                  />
+                  <span className="min-w-0 flex-1 truncate tracking-[-0.01em]">
+                    {APP_NAME}
+                  </span>
+                </button>
+              </div>
             </div>
 
             <div className="flex min-h-0 shrink flex-col gap-0 overflow-y-auto">

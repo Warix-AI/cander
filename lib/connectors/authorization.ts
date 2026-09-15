@@ -136,6 +136,24 @@ export function evaluateConfirmationRequirement(
         preview: { toolId: tool.id, to, subject, body },
       };
     }
+    // Name-only "to" without an address is too easy to mis-route to self.
+    if (!/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(to)) {
+      return {
+        required: true,
+        message: "Confirm the recipient email address before sending.",
+        preview: { toolId: tool.id, to, subject, body },
+      };
+    }
+  }
+  if (tool.id === "gmail.draft") {
+    const to = String(args.to ?? "").trim();
+    if (to && !/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(to)) {
+      return {
+        required: true,
+        message: "Confirm the recipient email address before drafting.",
+        preview: { toolId: tool.id, to },
+      };
+    }
   }
   if (tool.id === "gmail.reply") {
     const threadId = String(args.threadId ?? "").trim();

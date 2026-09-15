@@ -4,7 +4,7 @@
  */
 
 import OpenAI from "openai";
-import { resolveOpenAIModel } from "@/lib/ai/raw-openai/web-search";
+import { EXPERT_MODEL_ID } from "@/lib/agents/expert-model";
 import {
   formatExpertDirectoryForPrompt,
   listExpertDirectory,
@@ -110,7 +110,7 @@ async function pickExpertWithLlm(opts: {
 
   try {
     const openai = new OpenAI({ apiKey });
-    const model = resolveOpenAIModel();
+    const model = EXPERT_MODEL_ID;
     const res = await openai.chat.completions.create({
       model,
       temperature: 0,

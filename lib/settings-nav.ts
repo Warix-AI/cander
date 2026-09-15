@@ -7,6 +7,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
   { id: "plans", label: "Plans" },
   { id: "usage", label: "Usage" },
   { id: "voice", label: "Voice" },
+  { id: "notifications", label: "Notifications" },
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
 ];

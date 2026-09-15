@@ -26,12 +26,14 @@ export type ToolDomain =
   | "build"
   | "agent"
   | "experts"
-  | "health";
+  | "health"
+  | "preferences";
 
 export const TOOL_DOMAINS: Record<ToolDomain, readonly string[]> = {
   core: [],
   clarification: ["ui.ask_clarification", "ui.confirm"],
   navigation: ["nav.open", "panel.open", "panel.close"],
+  preferences: ["assistant.profile.apply"],
   projects: ["project.create", "project.open"],
   search: ["workspace.search"],
   knowledge: ["knowledge.search"],
@@ -163,6 +165,23 @@ const IN_APP_PATTERNS: RegExp[] = [
   /\b(check|get|find)\b[\s\S]{0,24}\b(the\s+)?weather\b/i,
   /\bhow('?s| is)\b[\s\S]{0,24}\b(the\s+)?weather\b/i,
 ];
+
+const PERSONALITY_PREF_PATTERNS: RegExp[] = [
+  /\b(be|sound|talk|speak|make yourself|call yourself|your name)\b[\s\S]{0,48}\b(funnier|funny|humor|sarcastic|sarcasm|slower|faster|calmer|energetic|warmer|formal|casual|concise|short|direct|expressive)\b/i,
+  /\b(talk|speak)\b[\s\S]{0,24}\b(slower|faster|softer|deeper)\b/i,
+  /\b(use|try|switch|change|give me)\b[\s\S]{0,32}\b(voice|male|female|british|irish|australian|southern)\b/i,
+  /\b(call yourself|your name is|i('?m| am) going to call you|introduce yourself as)\b/i,
+  /\b(my name is|call me|remember (my|that my) name|preferred name is)\b/i,
+  /\b(undo that|go back|previous voice|reset (your )?personality|go back to normal)\b/i,
+  /\b(keep (your )?answers short|stop (joking|over-explaining)|tone (it|the jokes) down|bring the energy)\b/i,
+  /\bhumor\b[\s\S]{0,16}\b(\d+|out of)\b/i,
+];
+
+export function isPersonalityPreferenceIntent(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return PERSONALITY_PREF_PATTERNS.some((re) => re.test(t));
+}
 
 const CONVERSATION_ONLY_PATTERNS: RegExp[] = [
   /^(hi|hey|hello|yo|sup|howdy)\b/i,
@@ -311,6 +330,10 @@ export function resolveAllowedToolsForTurn(opts: {
 
   if (opts.forceDomains?.length) {
     for (const d of opts.forceDomains) domains.add(d);
+  }
+
+  if (isPersonalityPreferenceIntent(content)) {
+    domains.add("preferences");
   }
 
   if (isAgentBuilderIntent(content)) {

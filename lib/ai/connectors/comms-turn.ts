@@ -63,6 +63,9 @@ function buildGmailTurnInstructions(enabledTools: string[]): string {
       "- Reply in an existing thread with gmail.reply when the user asks you to reply.",
       '- Example: {"tool":"gmail.reply","arguments":{"threadId":"<thread id>","body":"Thanks for the update."}}',
       "- Confirm recipient, subject, and body before sending. Never send without a clear user request.",
+      "- To must be the other person's address — NEVER the connected Gmail mailbox / account owner email.",
+      "- After gmail.search or gmail.read, do not copy the message `to` field into gmail.send. For new mail use the person's address; for replies use the peer `from` address.",
+      "- If you only have a name and no email address, ask for the address — do not guess or use the user's own email.",
     );
   }
 

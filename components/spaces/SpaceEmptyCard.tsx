@@ -35,8 +35,8 @@ const SPACE_VISUAL: Record<
   build: {
     gradient:
       "linear-gradient(270deg, oklch(0.55 0.19 262) 0%, oklch(0.64 0.16 256) 18%, oklch(0.74 0.1 255 / 0.7) 38%, oklch(0.86 0.05 255 / 0.32) 58%, oklch(0.94 0.02 255 / 0.1) 74%, transparent 92%)",
-    words: ["Search", "Image", "Agent"],
-    comingSoonWords: ["Agent"],
+    words: ["Search", "Image", "Expert"],
+    comingSoonWords: ["Expert"],
   },
   studio: {
     gradient:

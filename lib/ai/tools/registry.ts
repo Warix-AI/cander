@@ -32,7 +32,8 @@ export type AiToolDefinition = {
     | "build"
     | "agent"
     | "experts"
-    | "health";
+    | "health"
+    | "preferences";
   parameters: {
     type: "object";
     required?: string[];
@@ -233,6 +234,52 @@ registerAiTool({
         type: "string",
         description: "Optional settings tab when target is settings",
       },
+    },
+  },
+});
+
+registerAiTool({
+  name: "assistant.profile.apply",
+  description:
+    "Update the user's conversational assistant personality/voice preferences (humor, pace, energy, assistant name, user name, voice, etc.). Use when they ask to sound different, talk slower/faster, be funnier, change your name, tell you their name, switch voice, undo, or reset personality. Do not rename the Cander product.",
+  permission: { requireWorkspaceMember: true },
+  domain: "preferences",
+  enabled: true,
+  parameters: {
+    type: "object",
+    properties: {
+      undo: { type: "boolean", description: "Revert the last personality change" },
+      reset: { type: "boolean", description: "Reset to default personality" },
+      assistantName: {
+        type: ["string", "null"],
+        description: "Spoken name for the assistant persona (not the product)",
+      },
+      userName: {
+        type: ["string", "null"],
+        description:
+          "Preferred name for the user across chats (when they say my name is / call me)",
+      },
+      voiceId: {
+        type: ["string", "null"],
+        description:
+          "OpenAI Live voice id (marin|gleam|vesper|stone|quartz|ripple|willow|meridian|bossa|tempo|beacon|delta|cinder) or natural request like female/male/british/australian/another",
+      },
+      pace: { type: "number", description: "0-10 speaking pace (lower=slower)" },
+      energy: { type: "number", description: "0-10 energy" },
+      warmth: { type: "number", description: "0-10 warmth" },
+      expressiveness: { type: "number", description: "0-10 expressiveness" },
+      humor: { type: "number", description: "0-10 humor" },
+      sarcasm: { type: "number", description: "0-10 sarcasm" },
+      formality: { type: "number", description: "0-10 formality" },
+      conciseness: { type: "number", description: "0-10 conciseness (higher=shorter)" },
+      directness: { type: "number", description: "0-10 directness" },
+      backchannelLevel: { type: "number", description: "0-10 backchannel frequency" },
+      demeanor: { type: ["string", "null"], description: "Optional freeform demeanor" },
+      addStyleInstruction: {
+        type: "string",
+        description: "Optional short custom style note to remember",
+      },
+      reason: { type: "string", description: "Brief reason for the change" },
     },
   },
 });

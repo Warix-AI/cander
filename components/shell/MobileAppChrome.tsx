@@ -39,6 +39,7 @@ import {
   MobilePanelActionsCluster,
   useMobilePanelActionsState,
 } from "@/components/shell/mobile/MobilePanelActions";
+import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import { canvasStartOptions } from "@/lib/canvas-start-options";
 import { useCreateProjectFlow } from "@/components/spaces/use-create-project-flow";
 import { useSpaceMutation, useSpaceProject } from "@/lib/hooks/use-space-query";
@@ -105,7 +106,7 @@ type ResearchBrowserActions = {
 
 /**
  * ChatGPT-style mobile top bar.
- * Content: menu · Chat|{Space} · new chat
+ * Content: menu · Chat|{Space} · voice (or new chat if voice unavailable)
  * In-project: back · project name (actions) · forward to panel / ⋯ on panel
  * Menu / settings sub-screens: back · title · (+ create workspace)
  */
@@ -128,6 +129,10 @@ export function MobileAppChrome({ className }: { className?: string }) {
     setPanelMode,
     newChat,
     openSpaceChat,
+    voiceActive,
+    voiceConnecting,
+    voiceSpeaking,
+    toggleVoice,
     settingsMobileHub,
     settingsTab,
     settingsWorkspaceId,
@@ -854,6 +859,36 @@ export function MobileAppChrome({ className }: { className?: string }) {
               />
             ) : hideNewChat ? (
               <span className="inline-flex h-11 w-11 shrink-0" aria-hidden />
+            ) : entitlements.hasVoice ? (
+              <button
+                type="button"
+                aria-pressed={voiceActive || voiceConnecting}
+                aria-busy={voiceConnecting}
+                aria-label={
+                  voiceConnecting
+                    ? "Connecting voice"
+                    : voiceActive
+                      ? "Stop voice"
+                      : "Start voice"
+                }
+                onClick={toggleVoice}
+                className={mobileChromeButtonClass}
+              >
+                <VoiceOrb
+                  active={voiceActive || voiceConnecting}
+                  speaking={voiceSpeaking}
+                  as="div"
+                  size={20}
+                  label={
+                    voiceConnecting
+                      ? "Connecting voice"
+                      : voiceActive
+                        ? "Stop voice"
+                        : "Start voice"
+                  }
+                  className="shrink-0"
+                />
+              </button>
             ) : (
               <button
                 type="button"

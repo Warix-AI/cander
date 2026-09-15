@@ -78,7 +78,11 @@ export function getDeviceCapabilities(): DeviceCapabilities {
           ? "Apple Health is not enabled in this build."
           : undefined,
     ),
-    notifications: avail(false, "not_installed"),
+    notifications: avail(
+      isCap,
+      isCap ? undefined : "unsupported_platform",
+      isCap ? undefined : "Notifications are available in the Cander mobile app.",
+    ),
     screenCapture: avail(
       isElectron,
       isElectron ? undefined : "unsupported_platform",
