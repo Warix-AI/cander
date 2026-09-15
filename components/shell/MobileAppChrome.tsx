@@ -292,7 +292,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       : mobileSurface === "panel"
         ? "panel"
         : "chat";
-  const headerBg = "bg-transparent";
+  const headerBg = "bg-white";
 
   const showCreateWorkspace =
     inSettings &&
@@ -767,7 +767,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
     <>
       <header
         data-no-swipe=""
-        style={{ backgroundColor: "transparent" }}
+        style={{ backgroundColor: "var(--app-canvas, #ffffff)" }}
         onTouchStart={stopSwipe}
         onTouchEnd={stopSwipe}
         className={cn(

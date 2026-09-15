@@ -14,7 +14,12 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = CanderBridgeViewController()
+        // Match the app canvas — a default/black window shows through the
+        // transparent mobile header as a dark status-bar gradient.
+        window.backgroundColor = .systemBackground
+        let bridge = CanderBridgeViewController()
+        bridge.view.backgroundColor = .systemBackground
+        window.rootViewController = bridge
         window.makeKeyAndVisible()
         self.window = window
 
