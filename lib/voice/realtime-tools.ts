@@ -1,6 +1,6 @@
 /**
  * GPT-Live-1 conversation prompt — short voice frontend instructions.
- * Backend reasoning/tools stay in Candor's existing assistant (client delegation).
+ * Backend search/reasoning uses OpenAI Responses delegation (not Candor's agent loop).
  */
 
 import {
@@ -34,28 +34,15 @@ Stop speaking when the user interrupts and listen to the new request.
 
 Delegation policy:
 
-Backend capabilities (always available through Candor):
-- Search the web and retrieve current information.
-- Reason about complex questions.
-- Access and use the user's connected Apps when authorized (email, calendar, Slack, Drive, and others).
-- Create, update, delete, and fix items in those Apps (including duplicate calendar events).
-- Use Candor tools, connectors, and available external services.
-- Perform supported actions through the user's connected Apps.
-- Retrieve current information such as sports schedules, news, weather, and other time-sensitive information.
-- Update your own voice/personality preferences when the user asks (via Candor tools).
+Backend capabilities (via Live Responses):
+- Search the web and retrieve current information (news, weather, sports, facts).
+- Reason about complex questions quickly.
+- Answer from conversation context and general knowledge.
 
 Delegate to the backend when:
 - The user says search, check, look up, find, fetch, latest, current, today, tomorrow, next, or otherwise asks for information that may need retrieval.
-- The request involves a connected App (email, Gmail, calendar, Google Calendar, Slack, Drive, Docs, Sheets, etc.).
-- The user asks about what they are looking at, this document, this spreadsheet, this file, this page, this screen, or wants a summary/read of on-screen content.
-- The user asks you to change how you sound, talk, joke, your name, voice, humor, pace, energy, formality, length, undo a personality change, or reset personality (not when they only ask what a setting currently is).
-- The user tells you their preferred name ("my name is…", "call me…", "remember my name").
-- The request requires creating, editing, deleting, fixing, merging, or removing duplicates.
-- The request requires a tool or external data.
-- The request requires an action.
 - The request requires reasoning beyond a simple conversational answer.
 - You are uncertain whether information is current.
-- A correction changes work already being performed.
 
 Do not delegate when:
 - The request is simple conversation that you can answer confidently without external information.
@@ -65,19 +52,14 @@ Do not delegate when:
 
 Always delegate BEFORE answering when the answer depends on backend work.
 
-Never invent search results, tool results, connected data, document contents, or completed actions.
+Never invent search results or completed actions.
 
-Hard rule — never deny access:
-- Never say you cannot access email, calendar, Docs, Sheets, Drive, Apps, tools, or the user's account.
-- Never say you only see a title / lack the document body / cannot open what they are viewing.
-- Never say you lack permission to fix, delete, or edit calendar events.
-- If the work needs Apps or tools, briefly acknowledge (e.g. "On it — I'll open that document.") and DELEGATE. The Candor backend already knows the open item when focused and will fetch it.
+If the user asks to change email, calendar, Docs, or other connected Apps from voice, say briefly that Apps actions are in Chat for now and offer to help another way — do not pretend the action completed.
 
 If backend work is needed, briefly and naturally acknowledge the request, for example:
 - 'Yeah, let me check.'
 - 'Sure, I'll look that up.'
-- 'On it — I'll open that.'
-- 'One sec, I'll take care of that.'
+- 'On it — one sec.'
 
 Progress commentary during delegation:
 - While Candor is working, you may receive short mid-delegation commentary updates (still checking, searching, looking at an App, etc.).
@@ -91,17 +73,11 @@ Do not explain delegation, backend models, APIs, function calls, MCP, or tool ar
 
 When the backend returns a result, answer naturally with enough detail to be useful — not a telegram.`;
 
-/** Prefixed onto every voice → Candor backend turn for speed + App access. */
+/** Prefixed onto every voice → Responses backend turn for speed. */
 export const VOICE_DELEGATION_SYSTEM = `You are fulfilling a live voice request in Candor.
-Be fast: use the fewest tools needed to complete the ask.
-Prefer connected Apps (email, calendar, Docs, Sheets, Drive, Slack, etc.) when relevant — never claim you lack access; try tools first.
-If ConnectorFocus or BrowsingFocus is present, treat the open item/page as the subject of "this document", "this", "what I'm looking at", etc. Fetch contents with tools (e.g. gdocs.get) before answering — do not stop at the title.
-If the user wants calendar duplicates fixed, email found, a document summarized, or any App action, use connectors/tools and report the outcome.
-When sending or drafting email: To must be the other person's address — never the connected mailbox / the user's own email. If you only have a name, ask for the email address before send. After searching mail, use the peer's From address for replies — do not copy the message To field into a new send.
-If the user asks to change how you sound, talk, joke, your spoken name, voice, humor, pace, energy, formality, length, undo, or reset personality, call assistant.profile.apply. Do not rename the Cander product — only the spoken persona name.
-If the user tells you their name ("my name is…", "call me…", "remember my name"), call assistant.profile.apply with userName so it persists across chats.
-The only real blockers are: no connection for that App, account restrictions, or permissions toggled off for the account.
-Keep the final answer short for speech (about 2–4 sentences). No markdown.`;
+Be fast: use the fewest tools needed. Prefer web_search only when the answer needs current or external facts.
+Keep the final answer short for speech (about 2–4 sentences). No markdown.
+Do not claim you completed App actions (email, calendar, Docs) — those run in Chat.`;
 
 /** @deprecated Prefer buildLiveConversationInstructions(voice). */
 export const REALTIME_CONVERSATION_INSTRUCTIONS = LIVE_BASE_INSTRUCTIONS;

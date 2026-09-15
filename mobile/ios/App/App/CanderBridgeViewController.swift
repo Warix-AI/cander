@@ -43,12 +43,13 @@ class CanderBridgeViewController: CAPBridgeViewController {
 
     override open func capacitorDidLoad() {
         super.capacitorDidLoad()
-        // Keep WKWebView opaque so iOS never shows a dark status-bar scrim
-        // behind the mobile chrome.
-        view.backgroundColor = .systemBackground
+        // Keep WKWebView opaque white so iOS never shows a dark status-bar
+        // scrim behind the mobile chrome (do not use .systemBackground — that
+        // follows OS dark mode even when the web app is light).
+        view.backgroundColor = .white
         webView?.isOpaque = true
-        webView?.backgroundColor = .systemBackground
-        webView?.scrollView.backgroundColor = .systemBackground
+        webView?.backgroundColor = .white
+        webView?.scrollView.backgroundColor = .white
         webView?.scrollView.contentInsetAdjustmentBehavior = .never
         bridge?.registerPluginInstance(CanderFoundationModelsPlugin())
         bridge?.registerPluginInstance(CanderBrowserPlugin())
@@ -62,7 +63,9 @@ class CanderBridgeViewController: CAPBridgeViewController {
     }
 
     override open var preferredStatusBarStyle: UIStatusBarStyle {
-        traitCollection.userInterfaceStyle == .dark ? .lightContent : .darkContent
+        // Default to dark icons for light chrome. Capacitor StatusBar.setStyle
+        // still updates appearance when the web app theme changes.
+        .darkContent
     }
 
     override open func viewDidAppear(_ animated: Bool) {

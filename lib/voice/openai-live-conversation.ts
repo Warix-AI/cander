@@ -1,6 +1,6 @@
 /**
  * GPT-Live-1 duplex conversation — WebRTC mic ↔ model audio.
- * Client delegation routes tool/search/reasoning through Candor's assistant.
+ * Search/reasoning uses OpenAI Responses delegation (fast Live path).
  *
  * Connection order matches OpenAI's Live WebRTC quickstart:
  * ontrack → getUserMedia → addTrack → oai-events → offer → ICE →
@@ -594,7 +594,18 @@ export async function startLiveConversation(
       if (parts.length) {
         pushFinalTranscript("user", parts.join(" "));
       }
-      const delegation = event.delegation as { id?: string } | undefined;
+      // Responses delegation: OpenAI runs the backend; no Candor agent loop.
+      const delegation = event.delegation as
+        | { id?: string; target?: string }
+        | undefined;
+      const target =
+        typeof delegation?.target === "string" ? delegation.target : "";
+      if (target === "responses" || !target) {
+        setStatus("thinking");
+        bumpIdle();
+        return;
+      }
+      // Legacy client-delegation sessions (should not start anymore).
       const delegationId =
         typeof delegation?.id === "string" ? delegation.id : "";
       if (delegationId) void runDelegation(delegationId);

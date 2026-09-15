@@ -339,6 +339,7 @@ export function syncNativeShellChrome(theme?: "light" | "dark") {
     (document.documentElement.classList.contains("dark") ? "dark" : "light");
   const cap = getCapacitor();
   const statusBar = cap?.Plugins?.StatusBar;
+  // Capacitor: LIGHT = dark icons (light bg), DARK = light icons (dark bg).
   if (statusBar?.setStyle) {
     void statusBar
       .setStyle({ style: resolved === "dark" ? "DARK" : "LIGHT" })
@@ -352,8 +353,9 @@ export function syncNativeShellChrome(theme?: "light" | "dark") {
       .catch(() => {});
   }
   if (typeof document !== "undefined") {
-    document.documentElement.style.backgroundColor =
-      resolved === "dark" ? "#000000" : "#ffffff";
+    const color = resolved === "dark" ? "#000000" : "#ffffff";
+    document.documentElement.style.backgroundColor = color;
+    document.body.style.backgroundColor = color;
   }
 }
 

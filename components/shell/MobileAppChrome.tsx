@@ -292,7 +292,7 @@ export function MobileAppChrome({ className }: { className?: string }) {
       : mobileSurface === "panel"
         ? "panel"
         : "chat";
-  const headerBg = "bg-white";
+  const headerBg = "bg-white dark:bg-black";
 
   const showCreateWorkspace =
     inSettings &&
@@ -767,11 +767,11 @@ export function MobileAppChrome({ className }: { className?: string }) {
     <>
       <header
         data-no-swipe=""
-        style={{ backgroundColor: "var(--app-canvas, #ffffff)" }}
+        style={{ backgroundColor: "var(--background, #ffffff)" }}
         onTouchStart={stopSwipe}
         onTouchEnd={stopSwipe}
         className={cn(
-          "absolute inset-x-0 top-0 z-30 shrink-0",
+          "absolute inset-x-0 top-0 z-30 shrink-0 text-foreground",
           headerBg,
           "pt-[calc(env(safe-area-inset-top,0px)+6px)]",
           className,

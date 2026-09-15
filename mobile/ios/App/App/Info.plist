@@ -59,7 +59,7 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<true/>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Cander uses the camera to attach photos and for video calls in the in-app browser.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

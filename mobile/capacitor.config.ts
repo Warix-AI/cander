@@ -33,7 +33,7 @@ const config = {
     },
   },
   ios: {
-    contentInset: "automatic",
+    contentInset: "never",
     preferredContentMode: "mobile",
   },
   android: {

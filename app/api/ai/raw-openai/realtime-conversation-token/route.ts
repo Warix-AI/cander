@@ -1,5 +1,5 @@
 /**
- * Create a GPT-Live-1 WebRTC session with client delegation.
+ * Create a GPT-Live-1 WebRTC session with Responses delegation.
  * POST /api/ai/raw-openai/realtime-conversation-token
  *
  * Body: { sdp, workspaceId?, voice? }
@@ -14,6 +14,7 @@ import { enforceUsageForRequest } from "@/lib/usage/server/guard-route";
 import { reconcileUsage } from "@/lib/usage/enforce";
 import {
   REALTIME_CONVERSATION_MODEL,
+  VOICE_DELEGATION_SYSTEM,
   buildLiveConversationInstructions,
 } from "@/lib/voice/realtime-tools";
 import { clampAssistantProfile } from "@/lib/voice/assistant-profile";
@@ -106,7 +107,7 @@ export async function POST(request: Request) {
     provider: "openai",
     model: LIVE_MODEL,
     metadata: {
-      mode: "gpt_live_client_delegation",
+      mode: "gpt_live_responses",
       voice: sessionVoice,
       persona: liveVoicePersonaName(sessionVoice),
       unit: "seconds",
@@ -129,8 +130,18 @@ export async function POST(request: Request) {
           audio: {
             output: { voice: sessionVoice },
           },
-          // Client owns Candor's assistant/tools; GPT-Live only converses.
-          delegation: { type: "client" },
+          // Normal Live: OpenAI Responses backend (fast) — not Candor's agent loop.
+          delegation: {
+            type: "responses",
+            responses: {
+              model: "gpt-5.6-terra",
+              instructions: VOICE_DELEGATION_SYSTEM,
+              tools: [{ type: "web_search" }],
+              tool_choice: "auto",
+              parallel_tool_calls: true,
+              reasoning: { effort: "low" },
+            },
+          },
         },
         transport: {
           type: "webrtc",

@@ -75,12 +75,10 @@ describe("GPT-Live voice helpers", () => {
     assert.match(realtimeToolsSrc, /answer with your persona name|spoken name|conversational name/i);
   });
 
-  it("requires Live to delegate document / looking-at asks", () => {
-    assert.match(realtimeToolsSrc, /what they are looking at/);
-    assert.match(realtimeToolsSrc, /this document/);
-    assert.match(realtimeToolsSrc, /only see a title/);
-    assert.match(realtimeToolsSrc, /ConnectorFocus/);
-    assert.match(realtimeToolsSrc, /gdocs\.get/);
+  it("keeps Live answers conversational and delegates search work", () => {
+    assert.match(realtimeToolsSrc, /Backend capabilities \(via Live Responses\)/);
+    assert.match(realtimeToolsSrc, /Search the web/);
+    assert.match(realtimeToolsSrc, /Apps actions are in Chat for now/);
   });
 
   it("instructs Live to speak mid-delegation progress commentary", () => {

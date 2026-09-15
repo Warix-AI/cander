@@ -153,7 +153,10 @@ html:not(.dark).cander-narrow {
 
 html.dark.cander-mobile,
 html.dark.cander-narrow {
-  background-color: var(--mobile-menu-canvas);
+  --app-canvas: #000;
+  --space-canvas: #000;
+  --background: #000;
+  background-color: #000;
 }
 
 @keyframes mobile-slide-in-from-right {

@@ -281,7 +281,6 @@ import {
 } from "@/lib/voice/assistant-profile";
 import { buildLivePersonalityInstructions } from "@/lib/voice/realtime-tools";
 import type { VoiceLiveStatus } from "@/lib/voice/voice-status";
-import { resolveActiveExpertVoiceTarget } from "@/lib/agents/active-expert-voice";
 import { searchWorkspaceKnowledge } from "@/lib/knowledge/search";
 import { typewriterReveal } from "@/lib/ai/typewriter";
 import { patchMessageWithProgress } from "@/lib/ai/turn-activity";
@@ -5507,22 +5506,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!isLiveConversationSupported()) {
           throw new Error("Live voice is not supported in this browser.");
         }
-        const expertVoice = resolveActiveExpertVoiceTarget({
-          workspaceId,
-          profileId: actor.id,
-          projectId,
-          spaceId: resolveProductSpaceId(spaceId),
-        });
         const voice = readLiveVoicePreference();
         liveVoiceIdRef.current = voice;
         const session = await startLiveConversation({
           workspaceId,
           threadId: tid,
           voice,
-          expertProjectId:
-            expertVoice?.voiceEnabled ? expertVoice.projectId : null,
-          expertAgentId:
-            expertVoice?.voiceEnabled ? expertVoice.agentId : null,
           onSpeakingChange: setVoiceSpeaking,
           onStatusChange: setVoiceStatus,
           onTranscript: appendVoiceTranscript,
@@ -5659,12 +5648,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setVoiceStatus("idle");
             return;
           }
-          const expertVoice = resolveActiveExpertVoiceTarget({
-            workspaceId,
-            profileId: actor.id,
-            projectId,
-            spaceId: resolveProductSpaceId(spaceId),
-          });
           const appendVoiceTranscript = (
             role: "user" | "assistant",
             text: string,
@@ -5698,10 +5681,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             workspaceId,
             threadId: tid,
             voice: nextVoice,
-            expertProjectId:
-              expertVoice?.voiceEnabled ? expertVoice.projectId : null,
-            expertAgentId:
-              expertVoice?.voiceEnabled ? expertVoice.agentId : null,
             onSpeakingChange: setVoiceSpeaking,
             onStatusChange: setVoiceStatus,
             onTranscript: appendVoiceTranscript,
