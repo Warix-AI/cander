@@ -6,11 +6,11 @@
 
 import { getMobilePlatform, isMobileShell } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { NotificationClientType } from "./types.ts";
-import {
-  parseNotifyDeepLink,
-  type NotificationTarget,
-} from "./resolve-notification-route.ts";
+import type {
+  NotificationClientType,
+  NotificationTarget,
+} from "./types.ts";
+import { parseNotifyDeepLink } from "./resolve-notification-route.ts";
 
 const DEVICE_ID_KEY = "cander:push-device-id:v1";
 

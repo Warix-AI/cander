@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "@agent-browser/sandbox": "^0.35.1",
+    "@capacitor/app": "^7.1.2",
     "@capacitor/push-notifications": "^7.0.7",
     "@composio/core": "0.18.0",
     "@octokit/app": "^16.1.4",

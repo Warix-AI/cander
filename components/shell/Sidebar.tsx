@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import {
   ArrowLeft,
   Activity,
+  Bell,
   Building2,
   ChartNoAxesColumn,
   CreditCard,
@@ -86,6 +87,7 @@ const settingsIcons: Record<SettingsTab, typeof Building2> = {
   plans: CreditCard,
   usage: ChartNoAxesColumn,
   voice: Mic,
+  notifications: Bell,
   general: UserRound,
   appearance: Palette,
 };

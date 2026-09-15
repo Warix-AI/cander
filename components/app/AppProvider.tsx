@@ -5511,7 +5511,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           workspaceId,
           profileId: actor.id,
           projectId,
-          spaceId,
+          spaceId: resolveProductSpaceId(spaceId),
         });
         const voice = readLiveVoicePreference();
         liveVoiceIdRef.current = voice;
@@ -5663,7 +5663,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             workspaceId,
             profileId: actor.id,
             projectId,
-            spaceId,
+            spaceId: resolveProductSpaceId(spaceId),
           });
           const appendVoiceTranscript = (
             role: "user" | "assistant",

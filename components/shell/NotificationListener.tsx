@@ -66,16 +66,30 @@ export function NotificationListener() {
 
     let removeAppListener: (() => void) | undefined;
     if (isMobileShell()) {
-      void import("@capacitor/app").then(({ App }) => {
-        void App.addListener("appUrlOpen", (event) => {
-          onAppUrl(event.url);
-        }).then((handle) => {
-          removeAppListener = () => handle.remove();
+      type CapacitorAppModule = {
+        App: {
+          addListener: (
+            event: "appUrlOpen",
+            cb: (event: { url: string }) => void,
+          ) => Promise<{ remove: () => void }>;
+          getLaunchUrl?: () => Promise<{ url?: string } | undefined>;
+        };
+      };
+      void import("@capacitor/app")
+        .then((mod) => {
+          const { App } = mod as CapacitorAppModule;
+          void App.addListener("appUrlOpen", (event: { url: string }) => {
+            onAppUrl(event.url);
+          }).then((handle: { remove: () => void }) => {
+            removeAppListener = () => handle.remove();
+          });
+          void App.getLaunchUrl?.().then((result) => {
+            if (result?.url) onAppUrl(result.url);
+          });
+        })
+        .catch(() => {
+          /* Capacitor App plugin only present in native shells */
         });
-        void App.getLaunchUrl?.().then((result) => {
-          if (result?.url) onAppUrl(result.url);
-        });
-      });
     }
 
     const desktop = (

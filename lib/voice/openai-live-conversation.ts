@@ -384,6 +384,7 @@ export async function startLiveConversation(
           const preflight = await preflightActiveBrowserContext(
             {
               content: requestText,
+              title: "Live voice",
               workspaceId: handlers.workspaceId,
               messages: [],
             },
