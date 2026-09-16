@@ -83,6 +83,10 @@ import {
   SHELL_PANEL_BODY,
   useShellStyle,
 } from "@/lib/shell-chrome";
+import {
+  SIDEBAR_ROW_HOVER,
+  SIDEBAR_SEGMENT_ACTIVE,
+} from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 /** Opaque only in classic shell — floating islands supply the glass surface. */
@@ -1016,10 +1020,15 @@ function ConnectorTabButton({
   return (
     <div
       className={cn(
-        "group relative flex h-8 max-w-[10.5rem] min-w-0 items-center gap-1.5 rounded-[8px] px-2 text-[12px] transition-colors",
+        "group relative flex h-8 min-w-[4.5rem] max-w-[10.5rem] items-center gap-1.5 px-2.5 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
+        SHELL_G3_RADIUS,
         active
-          ? cn(BROWSER_CHROME_CHIP, "text-foreground")
-          : cn("text-muted-foreground", BROWSER_CHROME_CHIP_HOVER, "hover:text-foreground"),
+          ? cn(SIDEBAR_SEGMENT_ACTIVE, "text-foreground")
+          : cn(
+              "text-muted-foreground",
+              SIDEBAR_ROW_HOVER,
+              "hover:text-foreground",
+            ),
       )}
     >
       <button

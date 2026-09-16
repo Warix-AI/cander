@@ -20,12 +20,18 @@ export const SHELL_G3_RADIUS = "shell-g3-radius";
 export const SHELL_ISLAND = "shell-island";
 /** G3 radius for compact controls where a 20px card radius would read as a pill. */
 export const CONNECTOR_CONTROL_RADIUS = "connector-control-radius";
-/** Floating shell inset — ~8–10px between islands and window edge. */
-export const SHELL_FLOAT_INSET_PX = 10;
-/** Tailwind gap/padding twin for SHELL_FLOAT_INSET_PX (10px). */
-export const SHELL_FLOAT_GAP = "gap-2.5";
-export const SHELL_FLOAT_PAD = "py-2.5 pr-2.5";
-export const SHELL_FLOAT_MARGIN = "my-2.5 mr-2.5";
+/** Floating shell inset — 8px between islands, chrome, and window edge. */
+export const SHELL_FLOAT_INSET_PX = 8;
+/** Tailwind gap/padding twin for SHELL_FLOAT_INSET_PX (8px). */
+export const SHELL_FLOAT_GAP = "gap-2";
+export const SHELL_FLOAT_PAD = "py-2 pr-2";
+export const SHELL_FLOAT_MARGIN = "my-2 mr-2";
+/**
+ * Desktop floating: titlebar icons sit ~10px above the chrome row’s bottom.
+ * Negative top margin yields an 8px gap from those icons to the menu island.
+ */
+export const SHELL_FLOAT_MENU_TOP =
+  "mt-[-2px] mb-2 mr-2";
 /** Sidebar column material — slightly denser than content islands in light mode. */
 export const SHELL_ISLAND_SIDEBAR = "shell-island shell-island-sidebar";
 /** Interior of a floating shell panel — inherits light-surface / composer-shell chrome. */

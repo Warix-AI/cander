@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
 import {
   SHELL_FLOAT_MARGIN,
+  SHELL_FLOAT_MENU_TOP,
   SHELL_G3_RADIUS,
   SHELL_ISLAND_SIDEBAR,
   useShellStyle,
@@ -396,8 +397,8 @@ export function Sidebar() {
         className={cn(
           "flex min-h-0",
           chromeOutside ? "flex-1" : "h-full",
-          floating && SHELL_FLOAT_MARGIN,
-          floating && !macDesktop && "mt-2.5",
+          floating && (macDesktop ? SHELL_FLOAT_MENU_TOP : SHELL_FLOAT_MARGIN),
+          floating && !macDesktop && "mt-2",
         )}
       >
       <WorkspaceRail />
@@ -410,10 +411,10 @@ export function Sidebar() {
                 SHELL_ISLAND_SIDEBAR,
                 SHELL_G3_RADIUS,
                 chromeOutside
-                  ? cn("h-full", !showRail && "ml-2.5")
+                  ? cn("h-full", !showRail && "ml-2")
                   : cn(
-                      "mb-2.5 mr-2 mt-[max(0.625rem,var(--desktop-titlebar))] h-[calc(100%-0.625rem-max(0.625rem,var(--desktop-titlebar)))]",
-                      !showRail && "ml-2.5",
+                      "mb-2 mr-2 mt-[max(0.5rem,var(--desktop-titlebar))] h-[calc(100%-0.5rem-max(0.5rem,var(--desktop-titlebar)))]",
+                      !showRail && "ml-2",
                     ),
               )
             : cn(
@@ -467,7 +468,7 @@ export function Sidebar() {
                     SHELL_G3_RADIUS,
                     active
                       ? cn(SIDEBAR_SEGMENT_ACTIVE, "flex-[1.35]")
-                      : "flex-1 text-muted-foreground",
+                      : cn("flex-1 text-muted-foreground", SIDEBAR_ROW_HOVER),
                   )}
                 >
                   <Icon className={SEGMENT_ICON_CLASS} strokeWidth={1.85} />

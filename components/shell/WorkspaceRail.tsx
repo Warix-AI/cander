@@ -73,7 +73,7 @@ export function WorkspaceRail() {
           ? cn(
               // Match menu island height (parent already applies vertical float margin).
               // mr-2 = 8px gap between workspace selector and menu.
-              "ml-2.5 mr-2 h-full overflow-hidden",
+              "ml-2 mr-2 h-full overflow-hidden",
               SHELL_ISLAND_SIDEBAR,
               SHELL_G3_RADIUS,
             )
