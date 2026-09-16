@@ -1,8 +1,19 @@
 "use client";
 
-import { NavToggle } from "@/components/shell/NavToggle";
-import { ShellWindowChromeBar } from "@/components/shell/ShellWindowChromeBar";
+import { useSyncExternalStore } from "react";
+import { Bell, CircleHelp } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  SHELL_HEADER_ICON_CLASS,
+  ShellWindowChromeBar,
+} from "@/components/shell/ShellWindowChromeBar";
+import {
+  getNotificationsServerSnapshot,
+  getNotificationsSnapshot,
+  subscribeNotifications,
+} from "@/lib/notifications/notification-sync";
+import { DESKTOP_NO_DRAG, useDesktopShell } from "@/lib/desktop-shell";
+import { cn } from "@/lib/utils";
 
 export function WindowChrome({
   clearTrafficLights = false,
@@ -15,15 +26,52 @@ export function WindowChrome({
   hideHistory?: boolean;
   className?: string;
 }) {
-  const { openOverlay } = useApp();
+  const { openSearch, openNotifications, openHelp } = useApp();
+  const desktop = useDesktopShell();
+  const { unreadCount } = useSyncExternalStore(
+    subscribeNotifications,
+    getNotificationsSnapshot,
+    getNotificationsServerSnapshot,
+  );
 
   return (
     <ShellWindowChromeBar
       clearTrafficLights={clearTrafficLights}
       hideHistory={hideHistory}
       className={className}
-      leading={<NavToggle />}
-      onSearch={() => openOverlay("search")}
+      onSearch={() => openSearch()}
+      afterSearch={
+        <>
+          <button
+            type="button"
+            aria-label={
+              unreadCount > 0
+                ? `Notifications, ${unreadCount} unread`
+                : "Notifications"
+            }
+            style={desktop ? DESKTOP_NO_DRAG : undefined}
+            onClick={() => openNotifications()}
+            className={cn(SHELL_HEADER_ICON_CLASS, "relative")}
+          >
+            <Bell className="h-4 w-4" strokeWidth={1.7} />
+            {unreadCount > 0 ? (
+              <span
+                aria-hidden
+                className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-[#0b4fc4]"
+              />
+            ) : null}
+          </button>
+          <button
+            type="button"
+            aria-label="Help"
+            style={desktop ? DESKTOP_NO_DRAG : undefined}
+            onClick={() => openHelp()}
+            className={SHELL_HEADER_ICON_CLASS}
+          >
+            <CircleHelp className="h-4 w-4" strokeWidth={1.7} />
+          </button>
+        </>
+      }
     />
   );
 }

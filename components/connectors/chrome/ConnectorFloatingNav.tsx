@@ -4,14 +4,17 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { setMobileFloatingNavReserve } from "@/lib/mobile-floating-nav-chrome";
 import { cn } from "@/lib/utils";
 
+/** Match ChatColumn / Composer dock bottom inset. */
+export const COMPOSER_DOCK_BOTTOM_PAD =
+  "pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:pb-4";
+
 /** Bottom padding so scroll content clears the floating nav (mobile + desktop panel). */
 export const CONNECTOR_FLOATING_NAV_PAD =
-  "pb-[calc(4rem+env(safe-area-inset-bottom,0px))]";
+  "pb-[calc(4.25rem+env(safe-area-inset-bottom,0px))]";
 
 /**
  * Floating bottom section nav for multi-section connectors.
- * Same pattern on mobile and desktop right-panel — no separate top tab strip.
- * Desktop: chat-bar height, content-width, centered (not full panel width).
+ * Same glass, height, and bottom inset as the chat composer bar.
  */
 export function ConnectorFloatingNav({
   children,
@@ -61,7 +64,8 @@ export function ConnectorFloatingNav({
     <div
       ref={wrapRef}
       className={cn(
-        "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(10px,calc(env(safe-area-inset-bottom)+10px))] sm:px-4",
+        "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 sm:px-4",
+        COMPOSER_DOCK_BOTTOM_PAD,
         className,
       )}
     >
@@ -69,10 +73,9 @@ export function ConnectorFloatingNav({
         ref={navRef}
         aria-label={label}
         className={cn(
-          // Match composer / chat-bar height; width hugs tabs, stays centered.
-          "mobile-floating-nav mobile-glass-pill pointer-events-auto flex h-11 w-fit max-w-full items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-full border border-border/60 px-1.5",
-          "bg-background/90 shadow-[0_8px_28px_oklch(0_0_0/0.08)] backdrop-blur-xl",
-          "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+          // Same frosted pill + vertical rhythm as .composer-shell (py-1.5 + ~32px row).
+          "shell-glass-pill mobile-floating-nav pointer-events-auto flex min-h-[44px] w-fit max-w-full items-center gap-0.5 overflow-x-auto overscroll-x-contain px-1.5 py-1.5",
+          "rounded-[20px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
       >
         {children}

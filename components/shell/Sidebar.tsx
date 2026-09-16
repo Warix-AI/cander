@@ -5,16 +5,17 @@ import {
   AudioLines,
   CircleUser,
   GripVertical,
+  LayoutGrid,
   MessageSquare,
   SquarePen,
   type LucideIcon,
 } from "lucide-react";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
-import { PinControl } from "@/components/shell/PinControl";
+import { ExpertsMoreSection } from "@/components/shell/ExpertsMoreSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
-import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
+import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { useApp } from "@/components/app/AppProvider";
 import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
 import { workspacesFor } from "@/lib/entitlements";
@@ -44,6 +45,7 @@ import {
   getWorkspaceCatalogSnapshot,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
+import { isNewChatScreen } from "@/lib/right-panel";
 import type { PinKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
@@ -58,8 +60,13 @@ import {
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 
-/** Top mode strip — Apps / Experts / Chats. */
-const SIDEBAR_SEGMENT_IDS = ["connectors", "agents", "chats"] as const;
+/** Top mode strip — Spaces / Apps / Experts / Chats (Apps remains default). */
+const SIDEBAR_SEGMENT_IDS = [
+  "workspaces",
+  "connectors",
+  "agents",
+  "chats",
+] as const;
 type SidebarSegmentId = (typeof SIDEBAR_SEGMENT_IDS)[number];
 const SEGMENT_STORAGE_KEY = "cander-sidebar-segment";
 
@@ -67,6 +74,10 @@ const SEGMENT_META: Record<
   SidebarSegmentId,
   { label: string; Icon: LucideIcon }
 > = {
+  workspaces: {
+    label: "Spaces",
+    Icon: LayoutGrid,
+  },
   connectors: {
     label: PIN_SECTION_LABEL.connectors,
     Icon: PIN_SECTION_ICONS.connectors,
@@ -100,6 +111,7 @@ export function Sidebar() {
     projectId,
     sidebarOpen,
     reorderPins,
+    setPin,
     openThread,
     openProject,
     openConnector,
@@ -107,13 +119,16 @@ export function Sidebar() {
     connectorId,
     entitlements,
     actor,
-    workspaceRailOpen,
     workspaceId,
+    workspace,
+    setWorkspace,
     view,
+    drafting,
+    thread,
     newChat,
-    toggleVoice,
-    voiceActive,
-    voiceConnecting,
+    openVoice,
+    openExpertSetup,
+    expertSetupId,
     openSettings,
   } = useApp();
 
@@ -229,12 +244,7 @@ export function Sidebar() {
    */
   const macDesktop = desktop;
   const chromeOutside = desktop || floating;
-  const workspaceCount = workspacesFor(actor, entitlements).length;
-  const showRail =
-    entitlements.hasWorkspaces &&
-    !entitlements.showInviteWall &&
-    workspaceRailOpen &&
-    workspaceCount >= 2;
+  const allowedWorkspaces = workspacesFor(actor, entitlements);
 
   const selectSegment = useCallback((next: SidebarSegmentId) => {
     setSegment(next);
@@ -310,17 +320,27 @@ export function Sidebar() {
       kind={item.kind}
       id={item.id}
       title={item.title}
-      leading={<PinPreviewThumb item={item} />}
+      leading={
+        item.kind === "thread" ? null : <PinPreviewThumb item={item} />
+      }
+      hideLeading={item.kind === "thread"}
       // Row background marks the active pin; pulse = Expert running.
-      inUse={pinRowActive(item)}
+      inUse={
+        item.expertCatalog
+          ? view === "expert" && expertSetupId === item.id
+          : pinRowActive(item)
+      }
       running={
         item.projectKind === "automation" &&
+        !item.expertCatalog &&
         runningExperts.projectIds.has(item.id)
       }
       onOpen={() => {
         if (item.kind === "thread") openThread(item.id);
         else if (item.kind === "connector") openConnector(item.id);
-        else if (item.projectKind === "automation") {
+        else if (item.expertCatalog) {
+          openExpertSetup(item.id);
+        } else if (item.projectKind === "automation") {
           openProject(item.id, {
             agentSurface: "overview",
             landOnPanel: true,
@@ -343,12 +363,52 @@ export function Sidebar() {
       group={group}
       renderPinnedRow={renderPinnedRow}
       onConnect={(id) => openConnectorConnect(id)}
+      onAddExpert={(id) => setPin("project", id, "primary")}
     />
+  );
+
+  const renderWorkspaceSegment = () => (
+    <div className="flex flex-col gap-0">
+      {allowedWorkspaces.map((item) => {
+        const active = item.id === workspace.id;
+        return (
+          <div
+            key={item.id}
+            className={cn(
+              "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
+              active ? "shell-select-active" : SIDEBAR_ROW_HOVER,
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => setWorkspace(item.id)}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-[7.2px] text-left text-[14px] tracking-[-0.01em]",
+                active && "font-medium",
+              )}
+            >
+              <span
+                data-pin-leading
+                className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
+              >
+                <WorkspaceMark
+                  id={item.id}
+                  name={item.name}
+                  active={active}
+                  size="nav"
+                />
+              </span>
+              <span className="min-w-0 flex-1 truncate">{item.name}</span>
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 
   return (
     <>
-      <LeftNavToggleDock showRail={showRail} peeking={peeking} />
+      <LeftNavToggleDock showRail={false} peeking={peeking} />
       {!sidebarOpen ? (
         <div
           ref={edgeRef}
@@ -401,21 +461,17 @@ export function Sidebar() {
           floating && !macDesktop && "mt-2",
         )}
       >
-      <WorkspaceRail />
       <div
         className={cn(
           "flex w-[min(253px,calc(100vw-3.5rem))] shrink-0 flex-col text-sidebar-foreground lg:w-[253px]",
           floating
             ? cn(
-                "overflow-hidden",
+                "ml-2 overflow-hidden",
                 SHELL_ISLAND_SIDEBAR,
                 SHELL_G3_RADIUS,
                 chromeOutside
-                  ? cn("h-full", !showRail && "ml-2")
-                  : cn(
-                      "mb-2 mr-2 mt-[max(0.5rem,var(--desktop-titlebar))] h-[calc(100%-0.5rem-max(0.5rem,var(--desktop-titlebar)))]",
-                      !showRail && "ml-2",
-                    ),
+                  ? "h-full"
+                  : "mb-2 mr-2 mt-[max(0.5rem,var(--desktop-titlebar))] h-[calc(100%-0.5rem-max(0.5rem,var(--desktop-titlebar)))]",
               )
             : cn(
                 "h-full overflow-hidden bg-sidebar",
@@ -471,12 +527,13 @@ export function Sidebar() {
                       : cn("flex-1 text-muted-foreground", SIDEBAR_ROW_HOVER),
                   )}
                 >
-                  <Icon className={SEGMENT_ICON_CLASS} strokeWidth={1.85} />
                   {active ? (
                     <span className="min-w-0 truncate text-[12px] tracking-[-0.01em]">
                       {label}
                     </span>
-                  ) : null}
+                  ) : (
+                    <Icon className={SEGMENT_ICON_CLASS} strokeWidth={1.85} />
+                  )}
                 </button>
               );
             })}
@@ -485,7 +542,9 @@ export function Sidebar() {
           <div className="relative mt-2.5 min-h-0 flex-1 overflow-hidden">
             <div className="h-full overflow-y-auto pb-1">
               <div className="flex flex-col gap-0.5">
-                {renderPinSectionChildren(activeSegmentGroup)}
+                {segment === "workspaces"
+                  ? renderWorkspaceSegment()
+                  : renderPinSectionChildren(activeSegmentGroup)}
               </div>
             </div>
           </div>
@@ -494,7 +553,18 @@ export function Sidebar() {
             <button
               type="button"
               onClick={() => newChat()}
-              className={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER)}
+              className={cn(
+                SIDEBAR_ROW,
+                SIDEBAR_ROW_HOVER,
+                isNewChatScreen({
+                  view,
+                  threadId,
+                  thread,
+                  spaceId,
+                  projectId,
+                  drafting,
+                }) && "shell-select-active",
+              )}
             >
               <SquarePen className={SIDEBAR_ROW_ICON} strokeWidth={2} />
               <span className="min-w-0 flex-1 truncate">New</span>
@@ -502,12 +572,12 @@ export function Sidebar() {
             {entitlements.hasVoice ? (
               <button
                 type="button"
-                aria-pressed={voiceActive || voiceConnecting}
-                onClick={() => toggleVoice()}
+                aria-pressed={view === "voice"}
+                onClick={() => openVoice()}
                 className={cn(
                   SIDEBAR_ROW,
                   SIDEBAR_ROW_HOVER,
-                  (voiceActive || voiceConnecting) && "shell-select-active",
+                  view === "voice" && "shell-select-active",
                 )}
               >
                 <AudioLines className={SIDEBAR_ROW_ICON} strokeWidth={2} />
@@ -541,17 +611,21 @@ function SidebarPinSectionBody({
   group,
   renderPinnedRow,
   onConnect,
+  onAddExpert,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   onConnect: (id: string) => void;
+  onAddExpert: (id: string) => void;
 }) {
   return (
     <>
       <div
         className={cn(
           "flex flex-col",
-          group.id === "connectors" ? "gap-0" : "gap-0.5",
+          group.id === "connectors" || group.id === "agents"
+            ? "gap-0"
+            : "gap-0.5",
         )}
       >
         {group.items.map((item) => renderPinnedRow(item))}
@@ -560,6 +634,13 @@ function SidebarPinSectionBody({
         <AppsMoreSection
           listedIds={group.items.map((item) => item.id)}
           onConnect={onConnect}
+          query=""
+        />
+      ) : null}
+      {group.id === "agents" ? (
+        <ExpertsMoreSection
+          listedIds={group.items.map((item) => item.id)}
+          onAdd={onAddExpert}
           query=""
         />
       ) : null}
@@ -576,6 +657,7 @@ function PinnedRow({
   onOpen,
   onReorder,
   leading,
+  hideLeading = false,
   dragActiveKey,
   onDragActiveKeyChange,
 }: {
@@ -591,6 +673,8 @@ function PinnedRow({
     placement?: "before" | "after",
   ) => void;
   leading?: ReactNode;
+  /** Chats: title only — no icon column. */
+  hideLeading?: boolean;
   dragActiveKey: string | null;
   onDragActiveKeyChange: (key: string | null) => void;
 }) {
@@ -663,23 +747,25 @@ function PinnedRow({
         type="button"
         onClick={onOpen}
         className={cn(
-          // Connected apps: ~10% tighter vertical padding than discover rows.
+          // Connected apps / experts: ~10% tighter vertical padding than discover rows.
           "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
-          kind === "connector" ? "py-[7.2px]" : "py-2",
+          kind === "connector" || kind === "project" ? "py-[7.2px]" : "py-2",
           inUse && "font-medium",
         )}
       >
-        <span
-          data-pin-leading
-          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
-        >
-          {leading ?? (
-            <MessageSquare
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
-            />
-          )}
-        </span>
+        {hideLeading ? null : (
+          <span
+            data-pin-leading
+            className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
+          >
+            {leading ?? (
+              <MessageSquare
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                strokeWidth={2}
+              />
+            )}
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate">{title}</span>
       </button>
       <button
@@ -709,28 +795,16 @@ function PinnedRow({
       >
         <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
-      {kind === "connector" ? (
-        running ? (
-          <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
-            <span
-              aria-hidden
-              title="Expert running"
-              className="pointer-events-none h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4]"
-            />
-          </div>
-        ) : null
-      ) : (
+      {/* Primary segments are auto-listed — no manual pin control. */}
+      {running ? (
         <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
-          {running ? (
-            <span
-              aria-hidden
-              title="Expert running"
-              className="pointer-events-none absolute h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
-            />
-          ) : null}
-          <PinControl kind={kind} id={id} />
+          <span
+            aria-hidden
+            title="Expert running"
+            className="pointer-events-none h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4]"
+          />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -246,29 +246,46 @@ html.dark.cander-narrow .mobile-glass-popover {
 
 html.cander-mobile .mobile-glass-pill,
 html.cander-narrow .mobile-glass-pill {
-  background: linear-gradient(145deg, oklch(1 0 0 / 0.92), oklch(0.96 0.006 265 / 0.78));
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  backdrop-filter: blur(18px) saturate(170%);
+  background: linear-gradient(
+    160deg,
+    oklch(0.99 0.003 265 / 0.78),
+    oklch(0.95 0.006 265 / 0.68)
+  );
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid oklch(0 0 0 / 0.1);
   box-shadow:
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.65),
-    0 1px 3px oklch(0 0 0 / 0.05);
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 8px 24px oklch(0 0 0 / 0.06),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.85);
 }
 
 html.dark.cander-mobile .mobile-glass-pill,
 html.dark.cander-narrow .mobile-glass-pill {
-  background: linear-gradient(145deg, oklch(0.24 0.012 265 / 0.92), oklch(0.14 0.01 265 / 0.84));
+  background: linear-gradient(
+    160deg,
+    oklch(0.38 0.012 265 / 0.52),
+    oklch(0.28 0.01 265 / 0.42)
+  );
   color: oklch(0.94 0.01 265);
-  border: 1px solid oklch(1 0 0 / 0.1);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  backdrop-filter: blur(18px) saturate(170%);
+  border: 1px solid oklch(1 0 0 / 0.14);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
   box-shadow:
-    inset 0 0 0 0.5px oklch(1 0 0 / 0.1),
-    0 2px 8px oklch(0 0 0 / 0.28);
+    0 1px 2px oklch(0 0 0 / 0.18),
+    0 8px 24px oklch(0 0 0 / 0.16),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.14);
 }
 
+/* Floating connector navs inherit glass from .shell-glass-pill / .mobile-glass-pill —
+ * never force opaque black over the chat-bar treatment. */
 html.dark.cander-mobile .mobile-floating-nav,
 html.dark.cander-narrow .mobile-floating-nav {
-  background: #000;
+  background: linear-gradient(
+    160deg,
+    oklch(0.38 0.012 265 / 0.52),
+    oklch(0.28 0.01 265 / 0.42)
+  );
   border-color: oklch(1 0 0 / 0.14);
 }
 
@@ -492,13 +509,17 @@ html.dark.cander-narrow .mobile-glass-inset {
 
 html.dark.cander-mobile .composer-shell,
 html.dark.cander-narrow .composer-shell {
-  background: linear-gradient(145deg, oklch(0.2 0.012 265 / 0.92), oklch(0.14 0.01 265 / 0.82)) !important;
+  background: linear-gradient(
+    145deg,
+    oklch(0.36 0.012 265 / 0.58),
+    oklch(0.26 0.01 265 / 0.46)
+  ) !important;
   -webkit-backdrop-filter: blur(22px) saturate(150%);
   backdrop-filter: blur(22px) saturate(150%);
   border: 1px solid oklch(1 0 0 / 0.14) !important;
   box-shadow:
-    0 10px 28px oklch(0 0 0 / 0.35),
-    inset 0 0 0 0.75px oklch(1 0 0 / 0.12) !important;
+    0 10px 28px oklch(0 0 0 / 0.28),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.14) !important;
 }
 
 html.dark.cander-mobile .composer-dock,
@@ -1435,22 +1456,70 @@ select:focus-visible {
   background-color: var(--background);
 }
 
+/*
+ * Shared frosted pill — composer, plus menu, connector floating navs.
+ * Light enough to pick up the canvas; not an opaque black/white slab.
+ */
+.shell-glass-pill {
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+  background-color: transparent !important;
+}
+
+html:not(.dark) .shell-glass-pill {
+  background: linear-gradient(
+    160deg,
+    oklch(0.99 0.003 265 / 0.78),
+    oklch(0.95 0.006 265 / 0.68)
+  ) !important;
+  border: 1px solid oklch(0 0 0 / 0.1) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 8px 24px oklch(0 0 0 / 0.06),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.85) !important;
+}
+
+html.dark .shell-glass-pill {
+  background: linear-gradient(
+    160deg,
+    oklch(0.4 0.012 265 / 0.48),
+    oklch(0.3 0.01 265 / 0.58)
+  ) !important;
+  border: 1px solid oklch(1 0 0 / 0.14) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.14),
+    0 8px 24px oklch(0 0 0 / 0.12),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.12) !important;
+}
+
 html:not(.dark) .composer-shell {
-  /* Desktop light: white fill, flat — no stroke / elevation.
-   * Mobile/narrow keep the glass rules (higher specificity) below. */
-  background-color: oklch(1 0 0) !important;
-  border: none !important;
-  box-shadow: none !important;
+  background: linear-gradient(
+    160deg,
+    oklch(0.99 0.003 265 / 0.62),
+    oklch(0.96 0.006 265 / 0.72)
+  ) !important;
+  background-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid oklch(0 0 0 / 0.1) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.03),
+    0 8px 24px oklch(0 0 0 / 0.05),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.8) !important;
   outline: none;
 }
 
 html:not(.dark) .composer-shell:hover,
 html:not(.dark) .composer-shell:focus-within {
-  border: none !important;
-  box-shadow: none !important;
+  background: linear-gradient(
+    160deg,
+    oklch(1 0 0 / 0.72),
+    oklch(0.97 0.006 265 / 0.8)
+  ) !important;
+  border-color: oklch(0 0 0 / 0.12) !important;
 }
 
-/* Mobile light: visible glass pill so the bar doesn't melt into white. */
+/* Mobile light: same glass family, slightly denser on pure white sheets. */
 html:not(.dark).cander-mobile .composer-shell,
 html:not(.dark).cander-narrow .composer-shell,
 html:not(.dark).cander-mobile .composer-shell:hover,
@@ -1459,8 +1528,8 @@ html:not(.dark).cander-mobile .composer-shell:focus-within,
 html:not(.dark).cander-narrow .composer-shell:focus-within {
   background: linear-gradient(
     160deg,
-    oklch(0.97 0.004 265 / 0.94),
-    oklch(0.93 0.008 265 / 0.88)
+    oklch(0.97 0.004 265 / 0.9),
+    oklch(0.93 0.008 265 / 0.82)
   ) !important;
   -webkit-backdrop-filter: blur(22px) saturate(160%);
   backdrop-filter: blur(22px) saturate(160%);
@@ -1646,11 +1715,30 @@ html:not(.dark) .menu-row-hover[data-active="true"] {
 }
 
 html.dark .composer-shell {
-  background-color: var(--input) !important;
-  background-image: none !important;
-  /* Extremely dark stroke — barely there */
-  border: 1px solid oklch(1 0 0 / 0.06) !important;
-  box-shadow: none !important;
+  /* Lighter frost — transcript peeks through as it scrolls under. */
+  background: linear-gradient(
+    160deg,
+    oklch(0.4 0.012 265 / 0.48),
+    oklch(0.3 0.01 265 / 0.58)
+  ) !important;
+  background-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid oklch(1 0 0 / 0.14) !important;
+  box-shadow:
+    0 1px 2px oklch(0 0 0 / 0.14),
+    0 8px 24px oklch(0 0 0 / 0.12),
+    inset 0 0 0 0.75px oklch(1 0 0 / 0.12) !important;
+}
+
+html.dark .composer-shell:hover,
+html.dark .composer-shell:focus-within {
+  background: linear-gradient(
+    160deg,
+    oklch(0.44 0.012 265 / 0.55),
+    oklch(0.32 0.01 265 / 0.64)
+  ) !important;
+  border-color: oklch(1 0 0 / 0.18) !important;
 }
 
 html.dark .light-surface {

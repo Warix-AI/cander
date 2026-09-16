@@ -160,11 +160,11 @@ export function AdminChatColumn({ className }: { className?: string }) {
   return (
     <section
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col bg-background",
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
         className,
       )}
     >
-      <div className="chat-scroll flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      <div className="chat-scroll absolute inset-0 overflow-y-auto px-4 pt-5 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:px-6 sm:pt-6 sm:pb-24 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <div
           className={cn(
             "mx-auto flex w-full flex-col gap-5",
@@ -195,23 +195,24 @@ export function AdminChatColumn({ className }: { className?: string }) {
         </div>
       </div>
 
-      <div className="composer-keyboard-pad shrink-0 px-4 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:px-6 sm:pb-4">
-        <form
-          onSubmit={onSubmit}
-          className={cn("mx-auto w-full", SPLIT_CHAT_MAX_WIDTH)}
-        >
-          <div className="composer-shell bg-transparent px-2.5 py-1.5 dark:bg-input">
-            <div className="flex min-h-8 items-end gap-1">
-              <button
-                type="button"
-                aria-label="Add"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-foreground/5 hover:text-foreground"
-                tabIndex={-1}
-              >
-                <Plus className="h-5 w-5" strokeWidth={2.25} />
-              </button>
-              <textarea
-                ref={textRef}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+        <div className="composer-keyboard-pad pointer-events-auto shrink-0 px-4 pb-[max(0.75rem,calc(env(safe-area-inset-bottom)+0.7rem))] sm:px-6 sm:pb-4">
+          <form
+            onSubmit={onSubmit}
+            className={cn("mx-auto w-full", SPLIT_CHAT_MAX_WIDTH)}
+          >
+            <div className="composer-shell bg-transparent px-2.5 py-1.5">
+              <div className="flex min-h-8 items-end gap-1">
+                <button
+                  type="button"
+                  aria-label="Add"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-foreground/5 hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  <Plus className="h-5 w-5" strokeWidth={2.25} />
+                </button>
+                <textarea
+                  ref={textRef}
                 value={draft}
                 onChange={(e) => {
                   setDraft(e.target.value);
@@ -231,9 +232,10 @@ export function AdminChatColumn({ className }: { className?: string }) {
               {canSend ? (
                 <ComposerSendButton onClick={() => void send(draft)} />
               ) : null}
+              </div>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
     </section>
   );

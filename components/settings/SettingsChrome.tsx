@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
-import { CONNECTOR_CONTROL_RADIUS, SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { CONNECTOR_CONTROL_RADIUS, SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import {
   MOBILE_APP_BG,
   MOBILE_SETTINGS_SURFACE,
@@ -22,12 +22,16 @@ export function SettingsPage({
   className?: string;
 }) {
   const mobile = useMobileShell();
+  const floating = useShellStyle() === "floating";
   return (
     <div
       className={cn(
-        "settings-screen-canvas",
-        mobile ? MOBILE_APP_BG : "bg-background",
-        // Unified all-settings scroll uses .unified-settings-stack to flatten height.
+        // Floating shell: sit on the island — no second canvas band under the segments.
+        mobile
+          ? cn("settings-screen-canvas", MOBILE_APP_BG)
+          : floating
+            ? "bg-transparent"
+            : cn("settings-screen-canvas", "bg-background"),
         "min-h-full [.unified-settings-stack_&]:min-h-0 [.unified-settings-stack_&]:bg-transparent",
       )}
     >

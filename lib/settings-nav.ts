@@ -2,11 +2,9 @@ import type { Entitlements } from "./entitlements";
 import type { SettingsTab } from "./types";
 
 export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
-  { id: "organization", label: "Organization" },
-  { id: "workspaces", label: "Workspaces" },
+  { id: "workspaces", label: "Spaces" },
   { id: "plans", label: "Plans" },
   { id: "usage", label: "Usage" },
-  { id: "voice", label: "Voice" },
   { id: "notifications", label: "Notifications" },
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
@@ -14,15 +12,7 @@ export const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
 
 export function visibleSettingsTabs(entitlements: Entitlements) {
   return SETTINGS_TABS.filter((tab) => {
-    if (tab.id === "organization") {
-      return (
-        entitlements.showOrgAdmin ||
-        entitlements.showOrgManaged ||
-        entitlements.canActivateOrganization
-      );
-    }
     if (tab.id === "workspaces") return entitlements.hasWorkspaces;
-    if (tab.id === "voice") return entitlements.hasVoice;
     return true;
   });
 }

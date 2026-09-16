@@ -28,6 +28,11 @@ export type CourierView =
   | "settings"
   | "shared"
   | "recents"
+  | "notifications"
+  | "help"
+  | "search"
+  | "voice"
+  | "expert"
   | "browser";
 
 export type PinKind = "thread" | "project" | "connector";

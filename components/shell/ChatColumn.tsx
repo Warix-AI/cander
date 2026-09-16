@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useApp } from "@/components/app/AppProvider";
 import { useSpaceApi, useWorkspaceCtx } from "@/components/app/SpaceDataProvider";
@@ -33,6 +33,16 @@ import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 
 /** Gap between the last bubble and the composer when scrolled to the end. */
 const TRANSCRIPT_BOTTOM_GAP_PX = 30;
+
+/**
+ * Extra scroll padding so the transcript can travel under the floating
+ * composer (bar + bottom inset + fade).
+ */
+const COMPOSER_SCROLL_UNDER_PAD =
+  "pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] sm:pb-[6rem]";
+
+/** Approximate dock height used when sizing pin-room against the full viewport. */
+const COMPOSER_OVERLAY_CLEARANCE_PX = 96;
 
 /** Offset of `el` within a scroll container's content coordinates. */
 function offsetWithinScrollParent(el: HTMLElement, parent: HTMLElement) {
@@ -75,6 +85,15 @@ function afterKeyboardCollapsed(run: () => void) {
     if (fallback) window.clearTimeout(fallback);
     if (settle) window.clearTimeout(settle);
   };
+}
+
+/** Floating composer over the transcript — messages scroll underneath. */
+function ComposerOverlay({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20">
+      <div className="pointer-events-auto w-full">{children}</div>
+    </div>
+  );
 }
 
 function ComposerDock({
@@ -258,7 +277,11 @@ export function ChatColumn() {
       offsetWithinScrollParent(endEl, parent) -
         offsetWithinScrollParent(userEl, parent),
     );
-    const pinRoom = parent.clientHeight - scrollMargin - fromUserToEnd;
+    const pinRoom =
+      parent.clientHeight -
+      COMPOSER_OVERLAY_CLEARANCE_PX -
+      scrollMargin -
+      fromUserToEnd;
     return Math.max(TRANSCRIPT_BOTTOM_GAP_PX, Math.ceil(pinRoom));
   };
 
@@ -585,10 +608,13 @@ export function ChatColumn() {
 
   if (browserMode) {
     return (
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+      <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background">
         <div
           ref={bindScrollParent}
-          className="chat-scroll flex-1 overflow-y-auto px-4 py-5 sm:px-6 sm:py-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className={cn(
+            "chat-scroll absolute inset-0 overflow-y-auto px-4 pt-5 sm:px-6 sm:pt-6 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            COMPOSER_SCROLL_UNDER_PAD,
+          )}
         >
           {thread ? (
             <div className={cn("mx-auto flex w-full flex-col gap-5", chatMaxWidthClass)}>
@@ -614,7 +640,9 @@ export function ChatColumn() {
             />
           </>
         ) : (
-          <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
+          <ComposerOverlay>
+            <ComposerDock onSend={send} hideSpaceTools autoFocus={autofocusComposer} />
+          </ComposerOverlay>
         )}
       </section>
     );
@@ -632,7 +660,10 @@ export function ChatColumn() {
       >
         <div
           ref={bindScrollParent}
-          className="chat-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pt-[calc(env(safe-area-inset-top,0px)+4.375rem)] pb-4 touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className={cn(
+            "chat-scroll absolute inset-0 overflow-y-auto overscroll-contain px-4 pt-[calc(env(safe-area-inset-top,0px)+4.375rem)] touch-pan-y [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            COMPOSER_SCROLL_UNDER_PAD,
+          )}
         >
           {hasChatTurns || thread ? (
             <div className="mx-auto flex w-full max-w-none flex-col gap-5">
@@ -658,9 +689,9 @@ export function ChatColumn() {
             />
           </>
         ) : (
-          <div className={cn("sticky bottom-0 z-20 shrink-0", MOBILE_APP_BG)}>
+          <ComposerOverlay>
             <ComposerDock onSend={send} autoFocus={autofocusComposer} />
-          </div>
+          </ComposerOverlay>
         )}
       </section>
     );
@@ -679,7 +710,8 @@ export function ChatColumn() {
         <div
           ref={bindScrollParent}
           className={cn(
-            "chat-scroll flex-1 overflow-y-auto pt-4 pb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            "chat-scroll absolute inset-0 overflow-y-auto pt-4 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+            COMPOSER_SCROLL_UNDER_PAD,
             floating
               ? centered
                 ? "px-4 sm:px-6"
@@ -715,7 +747,9 @@ export function ChatColumn() {
           />
         </>
       ) : (
-        <ComposerDock onSend={send} autoFocus={autofocusComposer} />
+        <ComposerOverlay>
+          <ComposerDock onSend={send} autoFocus={autofocusComposer} />
+        </ComposerOverlay>
       )}
     </section>
   );

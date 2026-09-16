@@ -172,7 +172,7 @@ export function OnboardingAppPreview() {
               style={{ padding: pad, gap }}
             >
               <div
-                className="max-w-[85%] self-end bg-primary px-3 py-2 text-[11px] text-primary-foreground"
+                className="max-w-[85%] self-end bg-[var(--shell-select)] px-3 py-2 text-[11px] text-[var(--shell-select-foreground)]"
                 style={{ borderRadius: radius }}
               >
                 Summarize my inbox for today

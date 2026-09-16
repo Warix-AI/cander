@@ -124,12 +124,12 @@ export function WorkspacesSettings({
   return (
     <SettingsPage>
       <SettingsHeader
-        title="Workspaces"
+        title="Spaces"
         actions={
           canCreate ? (
             <button
               type="button"
-              aria-label="Create workspace"
+              aria-label="Create space"
               onClick={() => openOverlay("workspace")}
               className={cn(
                 "inline-flex h-9 w-9 items-center justify-center bg-black text-white hover:bg-black/85 dark:bg-black dark:text-white dark:hover:bg-black/85 max-lg:hidden",
@@ -562,7 +562,7 @@ function WorkspacePage({
         }
         actions={workspaceActions}
         breadcrumbs={[
-          { label: "Workspaces", onClick: onBack },
+          { label: "Spaces", onClick: onBack },
           { label: workspace.name },
         ]}
       />

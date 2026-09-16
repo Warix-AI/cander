@@ -15,6 +15,7 @@ import {
   getConnectorConnectionsSnapshot,
   subscribeConnectorConnections,
 } from "@/lib/connector-connections-store";
+import { expertCatalogEntry } from "@/lib/expert-catalog";
 import { ensureConnectedAppsPinned } from "@/lib/ensure-connected-apps-pinned";
 import { threadHasTurns } from "@/lib/persistent-chat";
 import {
@@ -33,6 +34,8 @@ export type PinnedItem = {
   spaceId?: SpaceId;
   /** Set for project pins — drives Agents / Websites / Apps / … folders. */
   projectKind?: ProjectKind;
+  /** Catalog expert pin (sidebar Experts) — not a real space project yet. */
+  expertCatalog?: boolean;
   /** Live preview image URL (project cover or chat image). */
   coverImage?: string;
   /** Banner gradient class when cover is a preset (projects). */
@@ -174,11 +177,24 @@ export function usePinnedItems() {
           coverGradient: projectCoverGradientClass(project.cover),
         });
       } else {
-        resolved.push({
-          kind: "project",
-          id: pin.id,
-          title: "Pinned project",
-        });
+        const expert = expertCatalogEntry(pin.id);
+        if (expert) {
+          resolved.push({
+            kind: "project",
+            id: expert.id,
+            title: expert.name,
+            projectKind: "automation",
+            expertCatalog: true,
+            icon: expert.icon,
+            coverImage: expert.icon,
+          });
+        } else {
+          resolved.push({
+            kind: "project",
+            id: pin.id,
+            title: "Pinned project",
+          });
+        }
       }
     }
 

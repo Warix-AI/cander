@@ -2,13 +2,11 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  Building2,
   ChartNoAxesColumn,
   ChevronRight,
   CreditCard,
   ImagePlus,
   LayoutGrid,
-  Mic,
   Bell,
   Palette,
   UserRound,
@@ -23,7 +21,6 @@ import { AppearanceSettings } from "@/components/settings/AppearanceSettings";
 import { PlansSettings } from "@/components/settings/PlansSettings";
 import { AccountSecuritySettings } from "@/components/settings/AccountSecuritySettings";
 import { UsageSettings } from "@/components/settings/UsageSettings";
-import { VoiceSettings } from "@/components/settings/VoiceSettings";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import {
   SettingsField,
@@ -58,7 +55,12 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Member, SettingsTab } from "@/lib/types";
-import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
+import {
+  MOBILE_APP_BG,
+  SIDEBAR_ROW_HOVER,
+  SIDEBAR_SEGMENT_ACTIVE,
+} from "@/lib/mobile-menu-styles";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import {
@@ -81,16 +83,18 @@ import {
   upsertOrgMember,
 } from "@/lib/workspace-policy";
 
-const settingsIcons: Record<SettingsTab, typeof Building2> = {
-  organization: Building2,
+const settingsIcons: Record<SettingsTab, typeof LayoutGrid> = {
+  organization: LayoutGrid,
   workspaces: LayoutGrid,
   plans: CreditCard,
   usage: ChartNoAxesColumn,
-  voice: Mic,
+  voice: Bell,
   notifications: Bell,
   general: UserRound,
   appearance: Palette,
 };
+
+const SETTINGS_SEGMENT_ICON = "h-[18px] w-[18px] shrink-0";
 
 /** Full-screen account settings — hub on mobile, tabs in sidebar on desktop. */
 export function SettingsView() {
@@ -115,18 +119,12 @@ export function SettingsView() {
     if (settingsTab === "workspaces" && !entitlements.hasWorkspaces) {
       setSettingsTab("plans");
     }
-    if (
-      settingsTab === "organization" &&
-      !entitlements.showOrgSettings &&
-      !entitlements.canActivateOrganization
-    ) {
-      setSettingsTab("plans");
+    if (settingsTab === "organization" || settingsTab === "voice") {
+      setSettingsTab("general");
     }
   }, [
     settingsTab,
     entitlements.hasWorkspaces,
-    entitlements.showOrgSettings,
-    entitlements.canActivateOrganization,
     setSettingsTab,
   ]);
 
@@ -186,21 +184,6 @@ export function SettingsView() {
     </div>
   ) : (
     <div className={cn("settings-screen-canvas min-h-0 flex-1 overflow-y-auto mobile-header-content", MOBILE_APP_BG)}>
-      {settingsTab === "organization" ? (
-        entitlements.showOrgManaged ? (
-          <ManagedOrganizationSettings />
-        ) : settingsOrgMemberId ? (
-          <OrgMemberDetailSettings
-            memberId={settingsOrgMemberId}
-            onBack={() => setSettingsOrgMemberId(null)}
-          />
-        ) : (
-          <OrganizationSettings
-            onSelectMember={(memberId) => setSettingsOrgMemberId(memberId)}
-          />
-        )
-      ) : null}
-
       {settingsTab === "workspaces" ? (
         <WorkspacesSettings
           selectedId={settingsWorkspaceId}
@@ -211,8 +194,6 @@ export function SettingsView() {
       {settingsTab === "plans" ? <PlansSettings /> : null}
 
       {settingsTab === "usage" ? <UsageSettings /> : null}
-
-      {settingsTab === "voice" ? <VoiceSettings /> : null}
 
       {settingsTab === "notifications" ? <NotificationSettings /> : null}
 
@@ -260,34 +241,70 @@ export function SettingsView() {
           />
         </div>
       ) : (
-        <div className="unified-settings-stack min-h-0 flex-1 overflow-y-auto">
-          {entitlements.showOrgManaged ? (
-            <ManagedOrganizationSettings />
-          ) : entitlements.showOrgAdmin ||
-            entitlements.canActivateOrganization ? (
-            <OrganizationSettings
-              onSelectMember={(memberId) => setSettingsOrgMemberId(memberId)}
-            />
-          ) : null}
-
-          {entitlements.hasWorkspaces ? (
-            <WorkspacesSettings
-              selectedId={settingsWorkspaceId}
-              onSelect={setSettingsWorkspaceId}
-            />
-          ) : null}
-
-          <PlansSettings />
-
-          <UsageSettings />
-
-          {entitlements.hasVoice ? <VoiceSettings /> : null}
-
-          <NotificationSettings />
-
-          <GeneralSettings onAfterSignOut={() => leave()} />
-
-          <AppearanceSettings />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {/* Segments + body share one column so icons float on the island. */}
+            <div className="mx-auto w-full max-w-[53.2rem] px-5 pt-1.5 sm:px-8 lg:px-10">
+              <div
+                role="tablist"
+                aria-label="Settings section"
+                className="flex w-full items-center justify-start gap-2 overflow-visible"
+              >
+                {settingsNav.map((tab) => {
+                  const Icon = settingsIcons[tab.id];
+                  const active = settingsTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="tab"
+                      aria-label={tab.label}
+                      aria-selected={active}
+                      title={tab.label}
+                      onClick={() => {
+                        setSettingsWorkspaceId(null);
+                        setSettingsOrgMemberId(null);
+                        setSettingsTab(tab.id);
+                      }}
+                      className={cn(
+                        "relative z-10 flex shrink-0 items-center justify-center gap-1.5 px-2 py-2 transition-[background-color,box-shadow,color,backdrop-filter,padding] duration-150",
+                        SHELL_G3_RADIUS,
+                        active
+                          ? cn(SIDEBAR_SEGMENT_ACTIVE, "px-2.5")
+                          : cn("text-muted-foreground", SIDEBAR_ROW_HOVER),
+                      )}
+                    >
+                      {active ? (
+                        <span className="max-w-[7.5rem] truncate text-[12px] tracking-[-0.01em]">
+                          {tab.label}
+                        </span>
+                      ) : (
+                        <Icon
+                          className={SETTINGS_SEGMENT_ICON}
+                          strokeWidth={1.85}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {settingsTab === "workspaces" && entitlements.hasWorkspaces ? (
+              <WorkspacesSettings
+                selectedId={settingsWorkspaceId}
+                onSelect={setSettingsWorkspaceId}
+              />
+            ) : null}
+            {settingsTab === "plans" ? <PlansSettings /> : null}
+            {settingsTab === "usage" ? <UsageSettings /> : null}
+            {settingsTab === "notifications" ? (
+              <NotificationSettings />
+            ) : null}
+            {settingsTab === "general" ? (
+              <GeneralSettings onAfterSignOut={() => leave()} />
+            ) : null}
+            {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+          </div>
         </div>
       )}
     </div>
@@ -836,7 +853,7 @@ function GeneralSettings({
   onAfterSignOut: () => void;
 }) {
   const mobile = useMobileShell();
-  const { actor, entitlements } = useApp();
+  const { actor } = useApp();
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [fullName, setFullName] = useState(() => actor.name);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -1032,20 +1049,8 @@ function GeneralSettings({
 
   return (
     <SettingsPage>
-      <SettingsHeader title="General" />
-
-      {!entitlements.showOrgSettings ? (
-        <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
-          Organization and Workspaces admin tabs are for owners and admins.
-        </p>
-      ) : null}
-
-      <div
-        className={cn(
-          !entitlements.showOrgSettings ? "mt-4" : "mt-2",
-        )}
-      >
-        <SettingsSection className="mt-2 lg:mt-8">
+      <div className="mt-2 lg:mt-4">
+        <SettingsSection>
           <SettingsGroup>
             {profilePhotoCard}
             {profileFieldCards}

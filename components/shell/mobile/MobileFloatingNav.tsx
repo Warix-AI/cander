@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { COMPOSER_DOCK_BOTTOM_PAD } from "@/components/connectors/chrome/ConnectorFloatingNav";
 import { setMobileFloatingNavReserve } from "@/lib/mobile-floating-nav-chrome";
+import { cn } from "@/lib/utils";
 
 /** Composer-sized floating nav over panel content (mobile-only; connectors use ConnectorFloatingNav). */
 export function MobileFloatingNav({ children, activeId, label = "Sections" }: {
@@ -46,10 +48,16 @@ export function MobileFloatingNav({ children, activeId, label = "Sections" }: {
   return (
     <div
       ref={wrapRef}
-      className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-[21px] pb-[max(10px,calc(env(safe-area-inset-bottom)+10px))] sm:px-[29px] lg:hidden"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 bottom-0 z-20 px-[21px] sm:px-[29px] lg:hidden",
+        COMPOSER_DOCK_BOTTOM_PAD,
+      )}
     >
-      <nav ref={navRef} aria-label={label}
-        className="mobile-floating-nav mobile-glass-pill pointer-events-auto mx-auto flex h-14 w-full max-w-3xl items-center gap-1 overflow-x-auto overscroll-x-contain rounded-[28px] border border-border/60 px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <nav
+        ref={navRef}
+        aria-label={label}
+        className="shell-glass-pill mobile-floating-nav pointer-events-auto mx-auto flex min-h-[44px] w-full max-w-3xl items-center gap-1 overflow-x-auto overscroll-x-contain rounded-[20px] px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {children}
       </nav>
     </div>

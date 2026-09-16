@@ -11,6 +11,11 @@ import { MobileMenuScaffold } from "@/components/shell/MobileMenuScaffold";
 import { SpaceChatLayout } from "@/components/shell/SpaceChatLayout";
 import { BrowserPipOverlay } from "@/components/browser/BrowserPipOverlay";
 import { RecentsView } from "@/components/shell/RecentsView";
+import { NotificationsView } from "@/components/shell/NotificationsView";
+import { HelpView } from "@/components/shell/HelpView";
+import { SearchView } from "@/components/shell/SearchView";
+import { VoiceView } from "@/components/shell/VoiceView";
+import { ExpertSetupView } from "@/components/agents/ExpertSetupView";
 import { SplitMainLayout } from "@/components/shell/SplitMainLayout";
 import { SettingsView } from "@/components/settings/SettingsView";
 import { SharedPanel } from "@/components/panels/SharedPanel";
@@ -103,12 +108,10 @@ function SpaceDataBridge({ children }: { children: React.ReactNode }) {
 
 function Root() {
   const {
-    overlay,
     view,
     openSettings,
     openSpace,
-    openOverlay,
-    closeOverlay,
+    openSearch,
     canGoBack,
     goBack,
     newChat,
@@ -211,19 +214,19 @@ function Root() {
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        if (overlay === "search") closeOverlay();
-        else openOverlay("search");
+        if (view === "search") {
+          if (canGoBack) goBack();
+          else newChat();
+        } else openSearch();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [
     signedIn,
-    overlay,
     view,
     openSettings,
-    openOverlay,
-    closeOverlay,
+    openSearch,
     canGoBack,
     goBack,
     newChat,
@@ -322,6 +325,7 @@ function CourierMain() {
     jobId,
     connectorId,
     spaceLibraryOpen,
+    expertSetupId,
   } = useApp();
 
   if (view === "settings") {
@@ -343,6 +347,56 @@ function CourierMain() {
       <SplitMainLayout>
         <div className="flex min-h-0 flex-1 flex-col">
           <RecentsView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "notifications") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <NotificationsView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "help") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <HelpView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "search") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <SearchView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "voice") {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <VoiceView />
+        </div>
+      </SplitMainLayout>
+    );
+  }
+
+  if (view === "expert" && expertSetupId) {
+    return (
+      <SplitMainLayout>
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <ExpertSetupView expertId={expertSetupId} />
         </div>
       </SplitMainLayout>
     );

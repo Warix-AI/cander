@@ -1,13 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import {
   AppWindow,
-  Blocks,
-  Brain,
   Image as ImageIcon,
+  Layers,
   Layout,
   MessageSquare,
   Search,
+  Zap,
 } from "lucide-react";
+import { isExpertCatalogId } from "@/lib/expert-catalog";
 import type { ProjectKind } from "@/lib/space-entities";
 import type { PinKind, SpaceId } from "@/lib/types";
 
@@ -55,8 +56,8 @@ export const PIN_SECTION_LABEL: Record<PinSectionId, string> = {
 
 /** Each folder uses a distinct glyph. */
 export const PIN_SECTION_ICONS: Record<PinSectionId, LucideIcon> = {
-  connectors: Blocks,
-  agents: Brain,
+  connectors: Layers,
+  agents: Zap,
   websites: Layout,
   apps: AppWindow,
   images: ImageIcon,
@@ -76,6 +77,7 @@ export type PinSectionItem = {
 export function pinSectionForItem(item: PinSectionItem): PinSectionId {
   if (item.kind === "connector") return "connectors";
   if (item.kind === "thread") return "chats";
+  if (item.kind === "project" && isExpertCatalogId(item.id)) return "agents";
   switch (item.projectKind) {
     case "automation":
       return "agents";

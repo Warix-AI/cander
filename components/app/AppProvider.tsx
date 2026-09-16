@@ -446,6 +446,12 @@ type AppContextValue = {
   continueAfterClarification: (result: ClarificationSubmitResult) => void;
   openSpace: (id: NavDestinationId) => void;
   openRecents: () => void;
+  openNotifications: () => void;
+  openHelp: () => void;
+  openSearch: () => void;
+  openVoice: () => void;
+  openExpertSetup: (expertId: string) => void;
+  expertSetupId: string | null;
   openBrowser: (opts?: { chat?: boolean; query?: string }) => void;
   /** Open an http(s) citation in the in-app browser (not a new OS tab). */
   openInAppBrowser: (url: string, opts?: { title?: string }) => void;
@@ -666,6 +672,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const [view, setView] = useState<CourierView>("chat");
+  const [expertSetupId, setExpertSetupId] = useState<string | null>(null);
   const chatStore = useSyncExternalStore(
     subscribeChatStore,
     getChatStoreSnapshot,
@@ -747,7 +754,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [connectorId, setConnectorId] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [scheduledFilter, setScheduledFilter] = useState("upcoming");
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>("organization");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("general");
   const [settingsMobileHub, setSettingsMobileHub] = useState(true);
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(
     null,
@@ -1133,27 +1140,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleLeftPanel = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
     if (!desktop) return;
-
-    const canRail =
-      entitlements.hasWorkspaces &&
-      !entitlements.showInviteWall &&
-      workspacesFor(actor, entitlements).length >= 2;
-
-    // With a workspace rail: this control only opens/closes the selector.
-    // Without one: fall back to toggling the menu itself.
-    if (!canRail) {
-      setSidebarOpen((open) => !open);
-      return;
-    }
-
-    if (!sidebarOpen) {
-      setSidebarOpen(true);
-      setWorkspaceRailOpen(true);
-      return;
-    }
-
-    setWorkspaceRailOpen((open) => !open);
-  }, [sidebarOpen, actor, entitlements]);
+    setSidebarOpen((open) => !open);
+  }, []);
 
   const toggleRightPanel = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
@@ -4428,6 +4416,139 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [pushTarget]);
 
+  const openNotifications = useCallback(() => {
+    setView("notifications");
+    setSpaceId(null);
+    setProjectId(null);
+    setThreadId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setMobileSurface("chat");
+    pushTarget({
+      view: "notifications",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [pushTarget]);
+
+  const openHelp = useCallback(() => {
+    setView("help");
+    setSpaceId(null);
+    setProjectId(null);
+    setThreadId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setMobileSurface("chat");
+    pushTarget({
+      view: "help",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [pushTarget]);
+
+  const openSearch = useCallback(() => {
+    setView("search");
+    setSpaceId(null);
+    setProjectId(null);
+    setThreadId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setMobileSurface("chat");
+    setOverlay(null);
+    pushTarget({
+      view: "search",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [pushTarget]);
+
+  const openVoice = useCallback(() => {
+    setView("voice");
+    setExpertSetupId(null);
+    setSpaceId(null);
+    setProjectId(null);
+    setThreadId(null);
+    setConnectorId(null);
+    setJobId(null);
+    setSkillId(null);
+    setDrafting(false);
+    setPanelIntent("browse");
+    setPanelMode("collapsed");
+    setMobileSurface("chat");
+    setOverlay(null);
+    pushTarget({
+      view: "voice",
+      spaceId: null,
+      threadId: null,
+      projectId: null,
+      panelMode: "collapsed",
+      panelIntent: "browse",
+      connectorId: null,
+      jobId: null,
+      skillId: null,
+    });
+  }, [pushTarget]);
+
+  const openExpertSetup = useCallback(
+    (expertId: string) => {
+      setExpertSetupId(expertId);
+      setView("expert");
+      setSpaceId(null);
+      setProjectId(null);
+      setThreadId(null);
+      setConnectorId(null);
+      setJobId(null);
+      setSkillId(null);
+      setDrafting(false);
+      setPanelIntent("browse");
+      setPanelMode("collapsed");
+      setMobileSurface("chat");
+      setOverlay(null);
+      pushTarget({
+        view: "expert",
+        spaceId: null,
+        threadId: null,
+        projectId: null,
+        panelMode: "collapsed",
+        panelIntent: "browse",
+        connectorId: null,
+        jobId: null,
+        skillId: null,
+      });
+    },
+    [pushTarget],
+  );
+
   useEffect(() => {
     if (entitlements.hasVoice) return;
     queueMicrotask(() => {
@@ -5015,9 +5136,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSettingsMobileHub(true);
     } else {
       setSettingsMobileHub(false);
-      setSettingsTab(
-        tab ?? (entitlements.showOrgSettings ? "organization" : "plans"),
-      );
+      setSettingsTab(tab ?? "general");
     }
     setView("settings");
     setSpaceId(null);
@@ -5039,7 +5158,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       jobId: null,
       skillId: null,
     });
-  }, [entitlements.showOrgSettings, pushTarget]);
+  }, [pushTarget]);
 
   useEffect(() => {
     registerAppActionHandlers({
@@ -6491,6 +6610,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       continueAfterClarification,
       openSpace,
       openRecents,
+      openNotifications,
+      openHelp,
+      openSearch,
+      openVoice,
+      openExpertSetup,
+      expertSetupId,
       openBrowser,
       openInAppBrowser,
       standaloneBrowserOpen,
@@ -6660,6 +6785,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       continueAfterClarification,
       openSpace,
       openRecents,
+      openNotifications,
+      openHelp,
+      openSearch,
+      openVoice,
+      openExpertSetup,
+      expertSetupId,
       openBrowser,
       openInAppBrowser,
       standaloneBrowserOpen,

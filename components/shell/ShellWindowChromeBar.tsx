@@ -41,9 +41,9 @@ export function ShellWindowChromeBar({
   /** Show back/forward (admin). Product chrome uses afterSearch for voice instead. */
   showHistory?: boolean;
   className?: string;
-  /** Usually NavToggle or a PanelLeft collapse control. */
-  leading: ReactNode;
-  /** Immediately after Search (e.g. voice + new chat). */
+  /** Optional leading control (e.g. PanelLeft). Product chrome may omit this. */
+  leading?: ReactNode;
+  /** Immediately after Search (e.g. notifications). */
   afterSearch?: ReactNode;
   /** Far-right cluster (e.g. General/Settings) — separated from primary actions. */
   trailing?: ReactNode;
@@ -86,8 +86,7 @@ export function ShellWindowChromeBar({
       {leading}
       {!hideHistory ? (
         <>
-          {/* Tight gap — Search sits next to the panel toggle */}
-          <div className="w-1 shrink-0" aria-hidden />
+          {leading ? <div className="w-1 shrink-0" aria-hidden /> : null}
           <div
             className="flex shrink-0 items-center gap-1.5"
             style={desktop ? DESKTOP_NO_DRAG : undefined}

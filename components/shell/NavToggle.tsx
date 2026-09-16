@@ -11,7 +11,6 @@ import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
-const WORKSPACE_RAIL_WIDTH_PX = 58;
 const CHROME_PAD_PX = 12;
 
 export function NavToggle({
@@ -24,35 +23,18 @@ export function NavToggle({
   /** Fixed on the main canvas when the sidebar is collapsed. */
   docked?: boolean;
 }) {
-  const {
-    sidebarOpen,
-    workspaceRailOpen,
-    toggleLeftPanel,
-    entitlements,
-  } = useApp();
+  const { sidebarOpen, setSidebarOpen } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
 
   if (mobile) return null;
 
-  const canRail =
-    entitlements.hasWorkspaces && !entitlements.showInviteWall;
-  const open = canRail ? workspaceRailOpen && sidebarOpen : sidebarOpen;
-
   return (
     <button
       type="button"
       style={desktop ? DESKTOP_NO_DRAG : undefined}
-      aria-label={
-        canRail
-          ? open
-            ? "Close workspaces"
-            : "Open workspaces"
-          : open
-            ? "Close left panel"
-            : "Open left panel"
-      }
-      onClick={() => toggleLeftPanel()}
+      aria-label={sidebarOpen ? "Close left panel" : "Open left panel"}
+      onClick={() => setSidebarOpen(!sidebarOpen)}
       className={cn(
         "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
         docked
@@ -74,7 +56,7 @@ export function NavToggle({
  * Fully closed → only this control remains.
  */
 export function LeftNavToggleDock({
-  showRail,
+  showRail: _showRail,
   peeking,
 }: {
   showRail: boolean;
@@ -100,11 +82,7 @@ export function LeftNavToggleDock({
   }
 
   const leftPx =
-    (showRail
-      ? WORKSPACE_RAIL_WIDTH_PX
-      : floating
-        ? SHELL_FLOAT_INSET_PX
-        : 0) + CHROME_PAD_PX;
+    (floating ? SHELL_FLOAT_INSET_PX : 0) + CHROME_PAD_PX;
 
   return (
     <div

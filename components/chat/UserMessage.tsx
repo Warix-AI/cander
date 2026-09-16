@@ -66,7 +66,7 @@ function InlineConnectorChip({ item }: { item: UserConnector }) {
   const iconId =
     connectors.find((c) => c.id === item.connectorId)?.icon ?? item.connectorId;
   return (
-    <span className="mx-[0.05em] text-[1em] leading-[inherit] text-sky-500/95 dark:text-sky-400/95">
+    <span className="mx-[0.05em] text-[1em] leading-[inherit] text-[var(--shell-select-foreground)]/95">
       <ConnectorMark
         id={iconId}
         size="nav"
@@ -141,8 +141,8 @@ export function UserMessage({
         </div>
       ) : null}
       {content ? (
-        <div className="rounded-[22px] border-0 bg-[#ebebeb] px-3.5 py-2.5 shadow-none dark:bg-[#2e2e2e]">
-          <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em] text-foreground">
+        <div className="rounded-[22px] border-0 bg-[var(--shell-select)] px-3.5 py-2.5 shadow-none">
+          <p className="whitespace-pre-wrap text-[14.5px] leading-relaxed tracking-[-0.01em] text-[var(--shell-select-foreground)]">
             {parts.map((part, index) =>
               part.kind === "text" ? (
                 <span key={`t-${index}`}>{part.text}</span>

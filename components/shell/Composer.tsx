@@ -1954,7 +1954,7 @@ export function Composer({
         ) : null}
 
         {compact ? (
-          <div className="composer-shell bg-transparent py-1.5 pr-1.5 pl-3 dark:bg-input">
+          <div className="composer-shell bg-transparent py-1.5 pr-1.5 pl-3">
             <div className={cn("relative", dictatingActive && "h-9")}>
               {dictatingActive ? (
                 <div className="absolute inset-0 z-10 flex items-center">
@@ -2028,7 +2028,7 @@ export function Composer({
         ) : (
           <div
             className={cn(
-              "composer-shell bg-transparent px-2.5 py-1.5 dark:bg-input",
+              "composer-shell bg-transparent px-2.5 py-1.5",
             )}
           >
             {files.length || images.length ? (
@@ -2525,13 +2525,14 @@ function ComposerMenu({
         event.preventDefault();
       }}
       className={cn(
-        "absolute z-50 flex flex-col gap-1 overflow-y-auto overscroll-contain px-1.5 py-2 shadow-[0_12px_40px_rgba(0,0,0,0.28)]",
+        "absolute z-50 flex flex-col gap-1 overflow-y-auto overscroll-contain px-1.5 py-2",
+        "shell-glass-pill shell-g3-radius",
         openAbove
           ? "inset-x-0 bottom-[calc(100%+8px)]"
           : "inset-x-0 top-[calc(100%+8px)]",
         mobile
-          ? "max-h-[min(28rem,60vh)] rounded-[18px] border border-white/10 bg-popover/92 backdrop-blur-xl dark:bg-zinc-900/90"
-          : "max-h-[min(30rem,62vh)] light-surface shell-g3-radius bg-popover dark:bg-zinc-900",
+          ? "max-h-[min(28rem,60vh)]"
+          : "max-h-[min(30rem,62vh)]",
       )}
     >
       {children}

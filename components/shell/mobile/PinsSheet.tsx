@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
+import { ExpertsMoreSection } from "@/components/shell/ExpertsMoreSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { PinSectionFolder } from "@/components/shell/PinSectionFolder";
 import { PinSectionSearch } from "@/components/shell/PinSectionSearch";
@@ -62,7 +63,8 @@ export function PinsSheet({
     openProject,
     openConnector,
     openConnectorConnect,
-    newChat,
+    setPin,
+    openExpertSetup,
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
@@ -83,7 +85,9 @@ export function PinsSheet({
   const openItem = (item: PinnedItem) => {
     if (item.kind === "thread") openThread(item.id);
     else if (item.kind === "connector") openConnector(item.id);
-    else if (item.projectKind === "automation") {
+    else if (item.expertCatalog) {
+      openExpertSetup(item.id);
+    } else if (item.projectKind === "automation") {
       openProject(item.id, {
         agentSurface: "overview",
         landOnPanel: true,
@@ -97,6 +101,10 @@ export function PinsSheet({
   const connectFromMore = (id: string) => {
     openConnectorConnect(id);
     onSelect({ landOnPanel: true });
+  };
+
+  const addExpertFromMore = (id: string) => {
+    setPin("project", id, "primary");
   };
 
   const isActive = (item: PinnedItem) => {
@@ -245,6 +253,7 @@ export function PinsSheet({
               isActive={isActive}
               openItem={openItem}
               connectFromMore={connectFromMore}
+              addExpertFromMore={addExpertFromMore}
             />
           </PinSectionFolder>
         );
@@ -258,11 +267,13 @@ function MobilePinSectionBody({
   isActive,
   openItem,
   connectFromMore,
+  addExpertFromMore,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   isActive: (item: PinnedItem) => boolean;
   openItem: (item: PinnedItem) => void;
   connectFromMore: (id: string) => void;
+  addExpertFromMore: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
@@ -280,6 +291,7 @@ function MobilePinSectionBody({
       />
       {items.map((item) => {
         const inUse = isActive(item);
+        const hideLeading = item.kind === "thread";
         return (
           <button
             key={`${item.kind}-${item.id}`}
@@ -292,12 +304,14 @@ function MobilePinSectionBody({
               inUse && mobileMenuRowActiveClass,
             )}
           >
-            <span
-              data-pin-leading
-              className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
-            >
-              <PinPreviewThumb item={item} />
-            </span>
+            {hideLeading ? null : (
+              <span
+                data-pin-leading
+                className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
+              >
+                <PinPreviewThumb item={item} />
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate text-left">
               {item.title}
             </span>
@@ -308,6 +322,13 @@ function MobilePinSectionBody({
         <AppsMoreSection
           listedIds={group.items.map((item) => item.id)}
           onConnect={connectFromMore}
+          query={query}
+        />
+      ) : null}
+      {group.id === "agents" ? (
+        <ExpertsMoreSection
+          listedIds={group.items.map((item) => item.id)}
+          onAdd={addExpertFromMore}
           query={query}
         />
       ) : null}
