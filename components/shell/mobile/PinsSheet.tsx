@@ -65,6 +65,7 @@ export function PinsSheet({
     openConnectorConnect,
     setPin,
     openExpertSetup,
+    newChat,
   } = useApp();
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
