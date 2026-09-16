@@ -79,7 +79,6 @@ import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import {
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
-  CONNECTOR_CONTROL_RADIUS,
   SHELL_G3_RADIUS,
   SHELL_PANEL_BODY,
   useShellStyle,
@@ -1021,8 +1020,9 @@ function ConnectorTabButton({
   return (
     <div
       className={cn(
-        "group relative flex h-7 min-w-[4.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 px-2 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
-        CONNECTOR_CONTROL_RADIUS,
+        // Match Apps / Experts / Chats segment height + radius.
+        "group relative flex min-w-[4.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 px-2 py-2 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
+        SHELL_G3_RADIUS,
         active
           ? cn(SIDEBAR_SEGMENT_ACTIVE, "text-foreground")
           : cn(

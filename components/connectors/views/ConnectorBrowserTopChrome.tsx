@@ -37,7 +37,7 @@ import {
 } from "@/lib/connector-browser-session";
 import {
   BROWSER_CHROME_CHIP_HOVER,
-  CONNECTOR_CONTROL_RADIUS,
+  SHELL_G3_RADIUS,
   useShellStyle,
 } from "@/lib/shell-chrome";
 import {
@@ -235,14 +235,20 @@ function ConnectorTopTabButton({
   onClose: () => void;
   accountIconUrl?: string | null;
 }) {
+  const floating = useShellStyle() === "floating";
   const canClose = !tab.pinned && tab.kind !== "connector";
   return (
     <div
       className={cn(
-        "group relative flex h-7 min-w-[4.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 px-2 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
-        CONNECTOR_CONTROL_RADIUS,
+        // Match Apps / Experts / Chats segment height + radius.
+        "group relative flex min-w-[4.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 px-2 py-2 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
+        SHELL_G3_RADIUS,
         active
-          ? cn(SIDEBAR_SEGMENT_ACTIVE, "text-foreground")
+          ? cn(
+              SIDEBAR_SEGMENT_ACTIVE,
+              floating && "shell-segment-on-canvas",
+              "text-foreground",
+            )
           : cn(
               "text-muted-foreground",
               SIDEBAR_ROW_HOVER,
