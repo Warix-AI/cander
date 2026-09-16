@@ -178,7 +178,7 @@ export function RightPanelToggleDock() {
         // not the outer float gap above it.
         "pointer-events-none absolute z-50 hidden items-center lg:flex",
         floating
-          ? "top-2 right-2 h-[45px] pr-2"
+          ? "top-0 right-2 h-[var(--desktop-titlebar,52px)] pr-2"
           : "top-0 right-0 h-11 pr-3",
       )}
       onPointerLeave={clearBrowserChromeHovers}

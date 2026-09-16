@@ -27,7 +27,8 @@ import {
 } from "@/lib/right-panel";
 import {
   BROWSER_CHROME_BG,
-  SHELL_FLOAT_PAD,
+  SHELL_FLOAT_CHROME_BAND,
+  SHELL_FLOAT_MAIN_PAD,
   SHELL_G3_RADIUS,
   SHELL_ISLAND,
   useShellStyle,
@@ -222,102 +223,111 @@ export function SpaceChatLayout() {
   // Keep tab chrome mounted whenever a connector is active so the right-panel
   // toggle stays put (no jump to the floating dock when the panel collapses).
   const spanConnectorChrome = floating && Boolean(connectorId);
+  const floatingMain = floating && (liveChatPct > 0 || spaceOpen);
 
   return (
     <div
       id="courier-main"
       className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden",
-        floating && SHELL_FLOAT_PAD,
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+        floating && SHELL_FLOAT_MAIN_PAD,
       )}
     >
       <RightPanelToggleDock />
+      {/* Tabs / close-chat / panel toggle — titlebar band, above the island. */}
+      {spanConnectorChrome && connectorId ? (
+        <div className={cn("pointer-events-none pr-2", SHELL_FLOAT_CHROME_BAND)}>
+          <div className="pointer-events-auto min-w-0 flex-1">
+            <ConnectorBrowserTopChrome connectorId={connectorId} />
+          </div>
+        </div>
+      ) : null}
+      {/* One conjoined island: chat | separator | app — not two floating cards. */}
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-          floating
-            ? cn(SHELL_ISLAND, SHELL_G3_RADIUS)
-            : "bg-background",
+          "flex min-h-0 min-w-0 flex-1 overflow-hidden",
+          floatingMain && cn(SHELL_ISLAND, SHELL_G3_RADIUS),
+          !floating && "bg-background",
         )}
       >
-        {spanConnectorChrome && connectorId ? (
-          <ConnectorBrowserTopChrome connectorId={connectorId} />
-        ) : null}
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div
-            className={cn(
-              "flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden @container",
-              !floating && "bg-background",
-              animateLayout &&
-                "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              liveChatPct === 0 && "pointer-events-none",
-            )}
-            style={{ width: `${liveChatPct}%` }}
-            aria-hidden={liveChatPct === 0}
-          >
-            {chatArmed ? (
-              <div
-                className={cn(
-                  "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-                  !chatReady && "pointer-events-none invisible",
-                )}
-                aria-hidden={!chatReady}
-              >
-                <TopRail />
-                {/* Stay mounted while armed so send→pin survives panel width animation. */}
-                <ChatColumn />
-              </div>
-            ) : null}
-          </div>
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 shrink-0 flex-col overflow-hidden @container",
+            !floating && "bg-background",
+            animateLayout &&
+              "transition-[width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            liveChatPct === 0 && "pointer-events-none",
+          )}
+          style={{ width: `${liveChatPct}%` }}
+          aria-hidden={liveChatPct === 0}
+        >
+          {chatArmed ? (
+            <div
+              className={cn(
+                "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+                !chatReady && "pointer-events-none invisible",
+              )}
+              aria-hidden={!chatReady}
+            >
+              <TopRail />
+              {/* Stay mounted while armed so send→pin survives panel width animation. */}
+              <ChatColumn />
+            </div>
+          ) : null}
+        </div>
 
-          {showResize ? <ResizeHandle overlay={floating} /> : null}
+        {showResize ? <ResizeHandle overlay={floating} /> : null}
 
-          <div
-            className={cn(
-              "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container",
-              !floating &&
-                (projectId || connectorId || showStandaloneBrowser
-                  ? BROWSER_CHROME_BG
-                  : SPACE_CANVAS_BG),
-              !floating && chatOpen && liveChatPct > 0 && "border-l border-border/40",
-              !spaceOpen && "invisible pointer-events-none",
-            )}
-            aria-hidden={!spaceOpen}
-          >
-            <SpaceRenderModeProvider mode={spaceMode}>
-              <div
-                className={cn(
-                  "flex min-h-0 flex-1 flex-col",
-                  projectId || connectorId || showStandaloneBrowser
-                    ? "overflow-hidden"
-                    : "overflow-y-auto",
-                )}
-              >
-                {projectId ? (
-                  <div
-                    key={projectId}
-                    className="flex min-h-0 flex-1 flex-col"
-                  >
-                    <ProjectBrowserPanel />
-                  </div>
-                ) : connectorId ? (
-                  <div
-                    key={connectorId}
-                    className="flex min-h-0 flex-1 flex-col"
-                  >
-                    <ConnectorViewHost
-                      connectorId={connectorId}
-                      hideTopChrome={spanConnectorChrome}
-                    />
-                  </div>
-                ) : showStandaloneBrowser ? (
-                  <StandaloneBrowserPanel />
-                ) : (
-                  <SpaceDashboard enterDirection={getMobilePanelStackDirection()} />
-                )}
-              </div>
-            </SpaceRenderModeProvider>
-          </div>
+        <div
+          className={cn(
+            "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container",
+            !floating &&
+              (projectId || connectorId || showStandaloneBrowser
+                ? BROWSER_CHROME_BG
+                : SPACE_CANVAS_BG),
+            !floating &&
+              chatOpen &&
+              liveChatPct > 0 &&
+              "border-l border-border/40",
+            !spaceOpen && "invisible pointer-events-none",
+          )}
+          aria-hidden={!spaceOpen}
+        >
+          <SpaceRenderModeProvider mode={spaceMode}>
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col",
+                projectId || connectorId || showStandaloneBrowser
+                  ? "overflow-hidden"
+                  : "overflow-y-auto",
+              )}
+            >
+              {projectId ? (
+                <div
+                  key={projectId}
+                  className="flex min-h-0 flex-1 flex-col"
+                >
+                  <ProjectBrowserPanel />
+                </div>
+              ) : connectorId ? (
+                <div
+                  key={connectorId}
+                  className="flex min-h-0 flex-1 flex-col"
+                >
+                  <ConnectorViewHost
+                    connectorId={connectorId}
+                    hideTopChrome={spanConnectorChrome}
+                  />
+                </div>
+              ) : showStandaloneBrowser ? (
+                <StandaloneBrowserPanel />
+              ) : (
+                <SpaceDashboard
+                  enterDirection={getMobilePanelStackDirection()}
+                />
+              )}
+            </div>
+          </SpaceRenderModeProvider>
         </div>
       </div>
     </div>

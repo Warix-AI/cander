@@ -79,6 +79,7 @@ import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import {
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
+  CONNECTOR_CONTROL_RADIUS,
   SHELL_G3_RADIUS,
   SHELL_PANEL_BODY,
   useShellStyle,
@@ -457,7 +458,7 @@ export function ConnectorBrowserPanel({
             </BrowserChromeIconButton>
           </BrowserChromeTooltip>
         ) : null}
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-visible">
           {session.tabs.map((tab) => (
             <ConnectorTabButton
               key={tab.id}
@@ -1020,8 +1021,8 @@ function ConnectorTabButton({
   return (
     <div
       className={cn(
-        "group relative flex h-8 min-w-[4.5rem] max-w-[10.5rem] items-center gap-1.5 px-2.5 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
-        SHELL_G3_RADIUS,
+        "group relative flex h-7 min-w-[4.5rem] max-w-[10.5rem] shrink-0 items-center gap-1.5 px-2 text-[12px] tracking-[-0.01em] transition-[background-color,box-shadow,color,backdrop-filter] duration-150",
+        CONNECTOR_CONTROL_RADIUS,
         active
           ? cn(SIDEBAR_SEGMENT_ACTIVE, "text-foreground")
           : cn(

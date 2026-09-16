@@ -32,6 +32,15 @@ export const SHELL_FLOAT_MARGIN = "my-2 mr-2";
  */
 export const SHELL_FLOAT_MENU_TOP =
   "mt-[-2px] mb-2 mr-2";
+/**
+ * Main column islands — same top edge as the menu (titlebar − 2px), 8px
+ * bottom/right inset. Connector tab chrome floats in the titlebar band above.
+ */
+export const SHELL_FLOAT_MAIN_PAD =
+  "pt-[calc(var(--desktop-titlebar,52px)-2px)] pb-2 pr-2";
+/** Titlebar band where detached connector tabs / panel toggles float. */
+export const SHELL_FLOAT_CHROME_BAND =
+  "absolute inset-x-0 top-0 z-20 flex h-[var(--desktop-titlebar,52px)] items-center";
 /** Sidebar column material — slightly denser than content islands in light mode. */
 export const SHELL_ISLAND_SIDEBAR = "shell-island shell-island-sidebar";
 /** Interior of a floating shell panel — inherits light-surface / composer-shell chrome. */

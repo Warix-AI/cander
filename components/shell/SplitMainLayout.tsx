@@ -15,7 +15,13 @@ import {
 } from "@/lib/right-panel";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
-import { SHELL_G3_RADIUS, SHELL_FLOAT_PAD, SHELL_ISLAND, useShellStyle } from "@/lib/shell-chrome";
+import {
+  SHELL_FLOAT_CHROME_BAND,
+  SHELL_FLOAT_MAIN_PAD,
+  SHELL_G3_RADIUS,
+  SHELL_ISLAND,
+  useShellStyle,
+} from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import type { MobileSurface } from "@/lib/types";
 
@@ -158,57 +164,66 @@ export function SplitMainLayout({ children }: { children: ReactNode }) {
     <div
       id="courier-main"
       className={cn(
-        "relative flex min-h-0 min-w-0 flex-1 overflow-hidden",
-        floating && SHELL_FLOAT_PAD,
+        "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+        floating && SHELL_FLOAT_MAIN_PAD,
       )}
     >
       <RightPanelToggleDock />
+      {spanConnectorChrome && connectorId ? (
+        <div className={cn("pointer-events-none pr-2", SHELL_FLOAT_CHROME_BAND)}>
+          <div className="pointer-events-auto min-w-0 flex-1">
+            <ConnectorBrowserTopChrome connectorId={connectorId} />
+          </div>
+        </div>
+      ) : null}
       <div
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
-          floating && SHELL_ISLAND,
-          floating && SHELL_G3_RADIUS,
+          "flex min-h-0 min-w-0 flex-1 overflow-hidden",
+          floating && cn(SHELL_ISLAND, SHELL_G3_RADIUS),
         )}
       >
-        {spanConnectorChrome && connectorId ? (
-          <ConnectorBrowserTopChrome connectorId={connectorId} />
-        ) : null}
-        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-          <div
-            className={cn(
-              "flex min-h-0 min-w-0 flex-col overflow-hidden",
-              immersive ? PINNED_CHAT_WIDTH : "min-w-0 flex-1",
-              !immersive &&
-                showPanelColumn &&
-                animateLayout &&
-                "transition-[flex-basis] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
-            )}
-          >
-            {hideTopRail ? null : <TopRail />}
-            {children}
-          </div>
-          {showPanelColumn ? (
-            <>
-              {showResize ? <ResizeHandle overlay={floating} /> : null}
-              <div
-                onTransitionEnd={onPanelWidthTransitionEnd}
-                className={cn(
-                  "flex min-h-0 min-w-0 flex-col overflow-hidden will-change-[width]",
-                  immersive ? "flex-1" : "shrink-0",
-                  !immersive &&
-                    animateLayout &&
-                    "transition-[width] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
-                  livePanelWidth === 0 && !panelOn && "pointer-events-none",
-                )}
-                style={immersive ? undefined : { width: `${livePanelWidth}%` }}
-              >
-                {showPanelBody ? (
-                  <ContextPanel hideConnectorTopChrome={spanConnectorChrome} />
-                ) : null}
-              </div>
-            </>
-          ) : null}
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-col overflow-hidden",
+            immersive ? PINNED_CHAT_WIDTH : "min-w-0 flex-1",
+            !immersive &&
+              showPanelColumn &&
+              animateLayout &&
+              "transition-[flex-basis] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
+          )}
+        >
+          {hideTopRail ? null : <TopRail />}
+          {children}
         </div>
+        {showPanelColumn ? (
+          <>
+            {showResize ? <ResizeHandle overlay={floating} /> : null}
+            <div
+              onTransitionEnd={onPanelWidthTransitionEnd}
+              className={cn(
+                "flex min-h-0 min-w-0 flex-col overflow-hidden will-change-[width]",
+                immersive ? "flex-1" : "shrink-0",
+                !floating &&
+                  showPanelBody &&
+                  livePanelWidth > 0 &&
+                  "border-l border-border/40",
+                !immersive &&
+                  animateLayout &&
+                  "transition-[width] duration-[550ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
+                livePanelWidth === 0 && !panelOn && "pointer-events-none",
+              )}
+              style={
+                immersive
+                  ? undefined
+                  : { width: `${livePanelWidth}%` }
+              }
+            >
+              {showPanelBody ? (
+                <ContextPanel hideConnectorTopChrome={spanConnectorChrome} />
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
