@@ -150,9 +150,9 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     userDailyExpensiveActionCeilingMicros: 200_000,
     billAmountMicros: 0,
     usableBudgetMicros: 1_000_000, // $1 usable (internal)
-    includedMinutes: 20,
-    minimumMinutes: 20,
-    maximumMinutes: 20,
+    includedMinutes: 25,
+    minimumMinutes: 25,
+    maximumMinutes: 25,
     usageLimitBehavior: "hard",
   },
   light: {
@@ -160,14 +160,14 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     label: "Light",
     marketingUnlimited: true,
     features: lightFeatures(),
-    workspaceDailyCostCeilingMicros: 11_000_000,
-    workspaceMonthlyCostCeilingMicros: 110_000_000,
-    userDailyExpensiveActionCeilingMicros: 4_000_000,
-    billAmountMicros: 15_000_000, // $15
-    usableBudgetMicros: 11_000_000, // $11 usable (internal)
-    includedMinutes: 30,
-    minimumMinutes: 30,
-    maximumMinutes: 30,
+    workspaceDailyCostCeilingMicros: 22_000_000,
+    workspaceMonthlyCostCeilingMicros: 220_000_000,
+    userDailyExpensiveActionCeilingMicros: 8_000_000,
+    billAmountMicros: 30_000_000, // $30
+    usableBudgetMicros: 22_000_000, // $22 usable (internal)
+    includedMinutes: 100,
+    minimumMinutes: 100,
+    maximumMinutes: 100,
     usageLimitBehavior: "hard",
   },
   moderate: {
@@ -175,14 +175,14 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     label: "Moderate",
     marketingUnlimited: true,
     features: moderateFeatures(),
-    workspaceDailyCostCeilingMicros: 37_000_000,
-    workspaceMonthlyCostCeilingMicros: 370_000_000,
-    userDailyExpensiveActionCeilingMicros: 12_000_000,
-    billAmountMicros: 50_000_000, // $50
-    usableBudgetMicros: 37_000_000, // $37 usable (internal)
-    includedMinutes: 100,
-    minimumMinutes: 100,
-    maximumMinutes: 100,
+    workspaceDailyCostCeilingMicros: 55_000_000,
+    workspaceMonthlyCostCeilingMicros: 550_000_000,
+    userDailyExpensiveActionCeilingMicros: 18_000_000,
+    billAmountMicros: 75_000_000, // $75
+    usableBudgetMicros: 55_000_000, // $55 usable (internal)
+    includedMinutes: 250,
+    minimumMinutes: 250,
+    maximumMinutes: 250,
     usageLimitBehavior: "hard",
   },
   heavy: {
@@ -190,14 +190,14 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     label: "Heavy",
     marketingUnlimited: true,
     features: moderateFeatures(),
-    workspaceDailyCostCeilingMicros: 92_000_000,
-    workspaceMonthlyCostCeilingMicros: 920_000_000,
-    userDailyExpensiveActionCeilingMicros: 30_000_000,
-    billAmountMicros: 125_000_000, // $125
-    usableBudgetMicros: 92_000_000, // $92 usable (internal)
-    includedMinutes: 250,
-    minimumMinutes: 250,
-    maximumMinutes: 250,
+    workspaceDailyCostCeilingMicros: 110_000_000,
+    workspaceMonthlyCostCeilingMicros: 1_100_000_000,
+    userDailyExpensiveActionCeilingMicros: 36_000_000,
+    billAmountMicros: 150_000_000, // $150
+    usableBudgetMicros: 110_000_000, // $110 usable (internal)
+    includedMinutes: 500,
+    minimumMinutes: 500,
+    maximumMinutes: 500,
     usageLimitBehavior: "hard",
   },
   limitless: {
@@ -211,7 +211,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     billAmountMicros: 0, // custom contract
     usableBudgetMicros: 250_000_000, // $250 default internal (overridable)
     includedMinutes: 1000,
-    minimumMinutes: 251,
+    minimumMinutes: 501,
     maximumMinutes: null,
     usageLimitBehavior: "hard",
   },

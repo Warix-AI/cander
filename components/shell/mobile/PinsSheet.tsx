@@ -298,6 +298,9 @@ function MobilePinSectionBody({
             key={`${item.kind}-${item.id}`}
             type="button"
             data-pin-tree-key={`${item.kind}:${item.id}`}
+            title={
+              item.expertKind ? `${item.expertKind} expert` : undefined
+            }
             onClick={() => openItem(item)}
             className={cn(
               mobileMenuRowClass,

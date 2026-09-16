@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import {
+  expertHoverLabel,
   listSidebarAvailableExperts,
   type ExpertCatalogEntry,
 } from "@/lib/expert-catalog";
@@ -35,7 +36,11 @@ export function ExpertsMoreSection({
 
   const needle = query.trim().toLowerCase();
   const matches = needle
-    ? available.filter((expert) => expert.name.toLowerCase().includes(needle))
+    ? available.filter(
+        (expert) =>
+          expert.name.toLowerCase().includes(needle) ||
+          expert.kind.toLowerCase().includes(needle),
+      )
     : available;
   if (!matches.length) return null;
 
@@ -62,7 +67,10 @@ function AvailableExpertRow({
         "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]">
+      <div
+        title={expertHoverLabel(expert)}
+        className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]"
+      >
         <span className="inline-flex h-4 w-4 shrink-0 overflow-hidden rounded-[4px]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img

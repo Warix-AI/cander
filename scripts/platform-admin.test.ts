@@ -93,10 +93,10 @@ describe("pricing preview", () => {
 
 describe("plan minute defaults", () => {
   it("keeps minimal/light/moderate/heavy/limitless defaults", () => {
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal.includedMinutes, 20);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.light.includedMinutes, 30);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate.includedMinutes, 100);
-    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy.includedMinutes, 250);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.minimal.includedMinutes, 25);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.light.includedMinutes, 100);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate.includedMinutes, 250);
+    assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy.includedMinutes, 500);
     assert.equal(DEFAULT_AI_PLAN_MINUTE_CONFIGS.limitless.maximumMinutes, null);
   });
 });

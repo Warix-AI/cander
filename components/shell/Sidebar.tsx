@@ -320,6 +320,9 @@ export function Sidebar() {
       kind={item.kind}
       id={item.id}
       title={item.title}
+      hoverTitle={
+        item.expertKind ? `${item.expertKind} expert` : undefined
+      }
       leading={
         item.kind === "thread" ? null : <PinPreviewThumb item={item} />
       }
@@ -652,6 +655,7 @@ function PinnedRow({
   kind,
   id,
   title,
+  hoverTitle,
   inUse,
   running,
   onOpen,
@@ -664,6 +668,8 @@ function PinnedRow({
   kind: PinKind;
   id: string;
   title: string;
+  /** Native tooltip — experts show “Summarize expert” on hover. */
+  hoverTitle?: string;
   inUse: boolean;
   running?: boolean;
   onOpen: () => void;
@@ -745,6 +751,7 @@ function PinnedRow({
       ) : null}
       <button
         type="button"
+        title={hoverTitle}
         onClick={onOpen}
         className={cn(
           // Connected apps / experts: ~10% tighter vertical padding than discover rows.

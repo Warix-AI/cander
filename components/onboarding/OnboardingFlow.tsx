@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import { ArrowLeft, Check, Loader2 } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { useApp } from "@/components/app/AppProvider";
-import { connectors } from "@/lib/data";
 import {
   getAuthServerSnapshot,
   getAuthSnapshot,
@@ -43,51 +42,39 @@ import {
   readPendingSignupEmail,
 } from "@/lib/auth/email-confirmed";
 import { syncSupabaseAuthUser } from "@/lib/supabase/auth-store";
-import { setupOrgOnSupabase } from "@/lib/supabase/setup-org-onboarding";
-import { AppearanceControls } from "@/components/settings/AppearanceControls";
-import { HostingModePicker } from "@/components/settings/HostingModePicker";
-import { OnboardingAppPreview } from "@/components/onboarding/OnboardingAppPreview";
+import { OnboardingAppsStep } from "@/components/onboarding/OnboardingAppsStep";
+import { OAuthButtons } from "@/components/onboarding/OAuthButtons";
+import {
+  composerHintForConnectedApps,
+  setOnboardingComposerHint,
+} from "@/lib/onboarding/composer-hint";
+import {
+  getConnectorConnectionsSnapshot,
+} from "@/lib/connector-connections-store";
+import { isUiConnectedStatus } from "@/lib/connectors/authz";
 import { VerifyCodeInput, SIGNUP_OTP_LENGTH } from "@/components/onboarding/VerifyCodeInput";
 import {
   LIMITLESS_CONTACT_HREF,
-  PLAN_CATALOG_LIST,
+  PLAN_CATALOG,
+  SELF_SERVE_PLANS,
   formatPlanPrice,
   formatPlanUsageLevel,
   isSelfServePlan,
 } from "@/lib/billing/plan-catalog";
-import {
-  requestedPlanForNativeFinish,
-  resolveOnboardingFinishPlan,
-} from "@/lib/billing/resolve-onboarding-plan";
-import { planLabel } from "@/lib/billing";
-import { isTeamPlan, normalizePlan } from "@/lib/plans";
+import { resolveOnboardingFinishPlan } from "@/lib/billing/resolve-onboarding-plan";
+import { normalizePlan } from "@/lib/plans";
 
 function digitsOnly(raw: string, length = SIGNUP_OTP_LENGTH) {
   return raw.replace(/\D/g, "").slice(0, length);
 }
 import { AppearanceScope } from "@/components/theme/AppearanceProvider";
-import { resetAppearance, setColorMode } from "@/lib/appearance";
-import type { AccountPresetId, BillingPlan, Member } from "@/lib/types";
+import { setColorMode } from "@/lib/appearance";
+import type { AccountPresetId, BillingPlan } from "@/lib/types";
 import { createWorkspace } from "@/lib/workspace-catalog";
-import {
-  addPendingOrgInvite,
-  upsertOrgMember,
-} from "@/lib/workspace-policy";
-import {
-  clearOrgOnboardingDraft,
-  emptyOrgInvite,
-  inviteDisplayName,
-  getOrgInviteDraftSnapshot,
-  getOrgNameSnapshot,
-  persistOrgInviteDraft,
-  persistOrgName,
-  persistOrgSetupDeferred,
-  type OrgInviteDraft,
-} from "@/lib/org-onboarding";
-import { isMobileShell } from "@/lib/mobile-shell";
 import {
   clearOnboardingCheckpoint,
   getOnboardingCheckpointSnapshot,
+  normalizeOnboardingStep,
   persistOnboardingCheckpoint,
   resumeStepForPlan,
   type OnboardingCheckpoint,
@@ -97,7 +84,6 @@ import { completeEmailVerificationFromUrl } from "@/lib/auth/email-verify-landin
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
-const INVITE_SEND_WARNING_KEY = "cander-invite-send-warning";
 const supabaseMode = () => isSupabaseConfigured();
 
 function presetForPlan(plan: BillingPlan): AccountPresetId {
@@ -106,72 +92,43 @@ function presetForPlan(plan: BillingPlan): AccountPresetId {
   return "max-owner";
 }
 
-type MaxIntent = "personal" | "org-now" | "org-later";
-
 type Step =
   | "welcome"
   | "sign-in"
   | "forgot"
   | "create"
   | "verify"
-  | "profile"
   | "plan"
-  | "max-intent"
-  | "org-setup"
-  | "workspace"
-  | "appearance"
-  | "hosting"
-  | "connectors";
+  | "apps";
 
-function createStepsFor(
-  nativeShell: boolean,
-  plan: BillingPlan | null,
-  maxIntent: MaxIntent | null,
-): Step[] {
-  // Name/email already collected on create — skip the old profile/short-name step.
-  const steps: Step[] = ["create"];
-  if (!nativeShell) {
-    steps.push("plan");
-    if (plan && isTeamPlan(plan) && plan !== "limitless") {
-      steps.push("max-intent");
-    }
-    if (maxIntent === "org-now") steps.push("org-setup");
-    if (plan && plan !== "minimal") steps.push("workspace");
-  }
-  if (SHOW_ONBOARDING_CONNECTORS) steps.push("connectors");
-  steps.push("appearance");
-  if (nativeShell) steps.push("hosting");
-  return steps;
+function createStepsFor(): Step[] {
+  return ["create", "plan", "apps"];
 }
 
-/** After email verify: web may pick a plan; native skips checkout UI only. */
-function stepAfterEmailVerified(nativeShell: boolean): Step {
-  if (nativeShell) {
-    return SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance";
-  }
+/** After email verify: always continue to plan selection. */
+function stepAfterEmailVerified(): Step {
   return "plan";
 }
 
-const DEFAULT_FREE_WORKSPACE_NAME = "First Workspace";
+const DEFAULT_PERSONAL_WORKSPACE_NAME = "Personal";
 
-/** Rows with any field filled — persisted as org invite drafts. */
-function invitesToPersist(rows: OrgInviteDraft[]) {
-  return rows.filter(
-    (row) =>
-      row.firstName.trim() ||
-      row.lastName.trim() ||
-      row.email.trim(),
-  );
+async function bootstrapPersonalWorkspace(accessToken: string): Promise<string> {
+  const response = await fetch("/api/onboarding/bootstrap", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(
+      typeof data.error === "string" ? data.error : "Could not prepare workspace.",
+    );
+  }
+  return data.workspaceId as string;
 }
 
-function validInviteRows(rows: OrgInviteDraft[]) {
-  return rows.filter((row) => row.email.trim().includes("@"));
+function workspaceIdFromUserId(userId: string) {
+  return `ws-${userId.replace(/-/g, "")}`;
 }
-
-const ONBOARDING_CONNECTORS = ["gmail", "slack", "gcal", "notion", "github", "linear"];
-
-/** Connectors onboarding is hidden until real installs ship. */
-const SHOW_ONBOARDING_CONNECTORS = false;
 
 function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
   if (typeof window !== "undefined") {
@@ -188,33 +145,23 @@ function resolveInitialOnboardingStep(initialSignedIn: boolean): Step {
 
 const PLAN_PANEL_BULLETS: Record<BillingPlan, string[]> = {
   minimal: [
-    "Free · light AI usage",
-    "Unlimited apps · 1 account per app",
-    "Personal use — no organizations",
-    "Upgrade anytime for full Cander",
+    "Free · 25 AI minutes/month",
+    "Unlimited Apps · 1 account per App",
   ],
   light: [
-    "$15/month · everyday AI usage",
-    "Full Cander product access",
-    "Organizations & shared workspaces",
-    "Multiple accounts per app",
+    "$30/month · 100 AI minutes",
+    "Multiple accounts per App",
   ],
   moderate: [
-    "$50/month · higher AI usage",
-    "Full Cander product access",
-    "Organizations & shared workspaces",
-    "Same features as Light — more AI",
+    "$75/month · 250 AI minutes",
+    "Multiple accounts per App",
   ],
   heavy: [
-    "$125/month · highest self-serve AI",
-    "Full Cander product access",
-    "Organizations & shared workspaces",
-    "Same features as Light — more AI",
+    "$150/month · 500 AI minutes",
+    "Multiple accounts per App",
   ],
   limitless: [
     "Custom pricing & AI usage",
-    "Full Cander product access",
-    "Built for larger organizations",
     "Contact us to get started",
   ],
 };
@@ -237,43 +184,19 @@ const PANEL_COPY: Record<
   },
   create: {
     title: "Create an account, then finish setup.",
-    body: "We’ll walk through plan and appearance — then open the app.",
+    body: "We’ll walk through plan and apps — then open Cander.",
   },
   verify: {
     title: "Confirm it’s you.",
     body: "Enter the code we emailed to finish confirming your account.",
   },
-  profile: {
-    title: "It should sound like it knows you.",
-    body: "A short name keeps replies personal without cluttering every thread.",
-  },
   plan: {
     title: "Choose a plan.",
-    body: "Minimal is personal. Paid plans unlock full Cander — they differ by AI usage.",
+    body: "Plans differ by AI minutes and how many accounts you can connect per App.",
   },
-  "max-intent": {
-    title: "How will you use this plan?",
-    body: "Personal power or a team organization — you can change this later.",
-  },
-  "org-setup": {
-    title: "Set up your organization.",
-    body: "Invite teammates now or later. Emails send when Resend is configured; otherwise you’ll get invite links.",
-  },
-  workspace: {
-    title: "Name the place you’ll work from.",
-    body: "Name the workspace you’ll land in.",
-  },
-  connectors: {
-    title: "Apps you’ll use.",
-    body: "Mark what you care about. Real connections happen later in Apps — nothing is installed yet.",
-  },
-  appearance: {
-    title: "Make it feel like yours.",
-    body: "Pick a color mode — watch the preview update as you go.",
-  },
-  hosting: {
-    title: "Where should AI run?",
-    body: "Cloud always works. On device uses Apple Intelligence on this phone when available. Auto picks for you.",
+  apps: {
+    title: "Connect your Apps.",
+    body: "Link the tools you use — you can always add more later.",
   },
 };
 
@@ -284,14 +207,8 @@ const MOBILE_PANEL_LINE: Record<Step, string> = {
   forgot: "Reset your password with an email link.",
   create: "Create an account, then finish setup.",
   verify: "Enter the code we sent to your email.",
-  profile: "Choose a name Cander should use for you.",
-  plan: "Minimal is free; paid unlocks full Cander.",
-  "max-intent": "Personal use or set up an organization?",
-  "org-setup": "Set up your organization and invite teammates.",
-  workspace: "Name the workspace you'll land in.",
-  connectors: "Apps you'll use with Cander later.",
-  appearance: "Make it feel like yours.",
-  hosting: "Choose Cloud, Auto, or On device.",
+  plan: "Pick a plan that matches your usage.",
+  apps: "Connect the Apps you use most.",
 };
 
 /**
@@ -320,7 +237,6 @@ function OnboardingShell({
   initialSignedIn?: boolean;
 }) {
   const { setPreview, setWorkspace } = useApp();
-  const nativeShell = isMobileShell();
   const mobile = useMobileShell();
   const usingSupabase = supabaseMode();
   const [step, setStep] = useState<Step>(() =>
@@ -331,18 +247,13 @@ function OnboardingShell({
   const [verifyCode, setVerifyCode] = useState("");
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
-  const [workspaceName, setWorkspaceName] = useState("");
   const [plan, setPlan] = useState<BillingPlan | null>(null);
-  const [maxIntent, setMaxIntent] = useState<MaxIntent | null>(null);
-  const [orgName, setOrgName] = useState("");
-  const [orgInvites, setOrgInvites] = useState<OrgInviteDraft[]>([]);
-  const [selectedConnectors, setSelectedConnectors] = useState<string[]>([]);
+  const [workspaceId, setWorkspaceId] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState("");
   // Never assume verify is done from a refresh — prove it via OTP / confirmed session.
   const [passedVerify, setPassedVerify] = useState(false);
-  const orgDraftHydrated = useRef(false);
 
   // Onboarding always opens in light — ignore prior session / system dark.
   useLayoutEffect(() => {
@@ -371,7 +282,7 @@ function OnboardingShell({
         clearPendingSignupEmail();
         setPassedVerify(true);
         if (user.id) await syncPlanFromProfile(user.id);
-        setStep(stepAfterEmailVerified(nativeShell));
+        setStep(stepAfterEmailVerified());
         setError("");
         if (user.email) setEmail(user.email);
         const metaName = user.user_metadata?.name;
@@ -390,7 +301,7 @@ function OnboardingShell({
         setStep("sign-in");
       }
     });
-  }, [usingSupabase, nativeShell]);
+  }, [usingSupabase]);
 
   // Hard gate: never allow post-verify steps without a confirmed email.
   useEffect(() => {
@@ -420,22 +331,13 @@ function OnboardingShell({
           const entered = await tryEnterExistingAccount().catch(() => false);
           if (cancelled || entered) return;
           if (user?.id) await syncPlanFromProfile(user.id);
-          setStep(stepAfterEmailVerified(nativeShell));
+          setStep(stepAfterEmailVerified());
         }
         return;
       }
 
       setPassedVerify(false);
-      const postVerify: Step[] = [
-        "profile",
-        "plan",
-        "max-intent",
-        "org-setup",
-        "workspace",
-        "connectors",
-        "appearance",
-        "hosting",
-      ];
+      const postVerify: Step[] = ["plan", "apps"];
       // Only yank forward steps — allow create/sign-in so they can fix email.
       if (!postVerify.includes(step)) return;
       setStep("verify");
@@ -452,7 +354,7 @@ function OnboardingShell({
     };
     // Re-run when step advances past verify so a refresh mid-flow is pulled back.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- gate on auth + step family
-  }, [usingSupabase, initialSignedIn, step, nativeShell]);
+  }, [usingSupabase, initialSignedIn, step]);
 
   useEffect(() => {
     captureAcquisitionContext();
@@ -479,58 +381,71 @@ function OnboardingShell({
   }, [initialSignedIn]);
 
   useEffect(() => {
-    if (step !== "org-setup") {
-      orgDraftHydrated.current = false;
-      return;
-    }
-    if (orgDraftHydrated.current) return;
-    orgDraftHydrated.current = true;
-    const savedName = getOrgNameSnapshot();
-    if (savedName && !orgName.trim()) setOrgName(savedName);
-    const savedInvites = getOrgInviteDraftSnapshot();
-    if (savedInvites.length && !orgInvites.length) setOrgInvites(savedInvites);
-  }, [step, orgName, orgInvites.length]);
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const hasConnectorsReturn =
+      params.has("connectors") ||
+      params.get("result") === "success" ||
+      params.get("onboarding") === "apps";
+    if (!hasConnectorsReturn || !getOnboardingPendingSnapshot()) return;
 
-  useEffect(() => {
-    if (step !== "org-setup") return;
-    persistOrgName(orgName);
-    persistOrgInviteDraft(invitesToPersist(orgInvites));
-  }, [step, orgName, orgInvites]);
+    setStep("apps");
+    const local = getOnboardingCheckpointSnapshot();
+    if (local?.plan) setPlan(local.plan);
+    if (local?.workspaceId) {
+      setWorkspaceId(local.workspaceId);
+    } else if (isSupabaseConfigured()) {
+      void createSupabaseBrowserClient()
+        .auth.getUser()
+        .then(({ data }) => {
+          if (data.user?.id) setWorkspaceId(workspaceIdFromUserId(data.user.id));
+        });
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     if (params.get("onboarding") !== "resume") return;
 
-    const restore = (cp: OnboardingCheckpoint, emailConfirmed: boolean) => {
+    const restore = (
+      cp: OnboardingCheckpoint,
+      emailConfirmed: boolean,
+      userId?: string,
+    ) => {
       if (cp.plan) setPlan(cp.plan);
-      if (cp.maxIntent) setMaxIntent(cp.maxIntent);
-      if (cp.orgName) setOrgName(cp.orgName);
-      if (Array.isArray(cp.orgInvites)) {
-        setOrgInvites(cp.orgInvites as OrgInviteDraft[]);
-      }
-      if (cp.workspaceName) setWorkspaceName(cp.workspaceName);
       if (cp.shortName) setShortName(cp.shortName);
       if (cp.name) setName(cp.name);
       if (cp.email) setEmail(cp.email);
-      if (cp.selectedConnectors) setSelectedConnectors(cp.selectedConnectors);
+      const restoredWs =
+        cp.workspaceId ||
+        (userId ? workspaceIdFromUserId(userId) : "");
+      if (restoredWs) setWorkspaceId(restoredWs);
       // Never resume past verify without a confirmed email.
       if (!emailConfirmed && usingSupabase) {
         setPassedVerify(false);
         setStep("verify");
         return;
       }
-      setStep(resumeStepForPlan(cp.plan) as Step);
+      const normalized = normalizeOnboardingStep(cp.step) as Step;
+      if (normalized === "apps" || cp.plan) {
+        setStep(cp.plan ? "apps" : normalized);
+        if (!restoredWs && userId) setWorkspaceId(workspaceIdFromUserId(userId));
+        return;
+      }
+      setStep(normalized === "welcome" ? resumeStepForPlan(cp.plan) as Step : normalized);
     };
 
     void (async () => {
       let emailConfirmed = !usingSupabase;
+      let userId: string | undefined;
       if (isSupabaseConfigured()) {
         const supabase = createSupabaseBrowserClient();
         const {
           data: { user },
         } = await supabase.auth.getUser();
         emailConfirmed = isAuthEmailConfirmed(user);
+        userId = user?.id;
         if (user?.email) setEmail(user.email);
 
         if (user) {
@@ -541,7 +456,7 @@ function OnboardingShell({
             .maybeSingle();
           const cp = profile?.onboarding_checkpoint as OnboardingCheckpoint | null;
           if (cp?.plan) {
-            restore(cp, emailConfirmed);
+            restore(cp, emailConfirmed, user.id);
             return;
           }
           if (profile?.plan && profile.plan !== "minimal" && profile.plan !== "free") {
@@ -550,6 +465,7 @@ function OnboardingShell({
               setPassedVerify(false);
               setStep("verify");
             } else {
+              setWorkspaceId(workspaceIdFromUserId(user.id));
               setStep(resumeStepForPlan(profile.plan as BillingPlan) as Step);
             }
             return;
@@ -558,7 +474,7 @@ function OnboardingShell({
       }
 
       const local = getOnboardingCheckpointSnapshot();
-      if (local?.plan) restore(local, emailConfirmed);
+      if (local?.plan) restore(local, emailConfirmed, userId);
     })();
 
     window.history.replaceState({}, "", window.location.pathname);
@@ -567,14 +483,10 @@ function OnboardingShell({
   const buildCheckpoint = (): OnboardingCheckpoint => ({
     step,
     plan: plan ?? "minimal",
-    maxIntent,
-    orgName,
-    orgInvites,
-    workspaceName,
     shortName,
     name,
     email,
-    selectedConnectors,
+    workspaceId: workspaceId || undefined,
   });
 
   const simulateSubscribeAndContinue = async (chosen: BillingPlan) => {
@@ -590,9 +502,12 @@ function OnboardingShell({
     persistOnboardingCheckpoint({
       ...buildCheckpoint(),
       plan: chosen,
+      step: "apps",
     });
 
     try {
+      let nextWorkspaceId = workspaceId;
+
       if (isSupabaseConfigured()) {
         const supabase = createSupabaseBrowserClient();
         const {
@@ -620,19 +535,30 @@ function OnboardingShell({
         if (typeof data.plan === "string") {
           setPlan(data.plan as BillingPlan);
         }
+
+        nextWorkspaceId = await bootstrapPersonalWorkspace(session.access_token);
+        setWorkspaceId(nextWorkspaceId);
+        persistWorkspace(nextWorkspaceId);
+      } else {
+        const created = createWorkspace({
+          name: DEFAULT_PERSONAL_WORKSPACE_NAME,
+          kind: "personal",
+        });
+        nextWorkspaceId = created?.id ?? workspaceIdFromUserId("local");
+        setWorkspaceId(nextWorkspaceId);
+        if (created) {
+          persistWorkspace(created.id);
+          setWorkspace(created.id);
+        }
       }
 
-      if (chosen === "minimal") {
-        setStep(
-          SHOW_ONBOARDING_CONNECTORS ? "connectors" : "appearance",
-        );
-        return;
-      }
-      if (isTeamPlan(chosen) && chosen !== "limitless") {
-        setStep("max-intent");
-        return;
-      }
-      setStep("workspace");
+      persistOnboardingCheckpoint({
+        ...buildCheckpoint(),
+        plan: chosen,
+        step: "apps",
+        workspaceId: nextWorkspaceId,
+      });
+      setStep("apps");
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not save your selection.",
@@ -642,70 +568,7 @@ function OnboardingShell({
     }
   };
 
-  const createSteps = useMemo(
-    () => createStepsFor(nativeShell, plan, maxIntent),
-    [nativeShell, plan, maxIntent],
-  );
-
-  const applyOrgOwnerMember = (
-    memberId: string,
-    workspaceIds: string[],
-    orgId?: string,
-  ) => {
-    const initials =
-      name
-        .trim()
-        .split(/\s+/)
-        .map((part) => part[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase() || "ME";
-    const isOrgNow = maxIntent === "org-now";
-    const isDeferred = maxIntent === "org-later";
-    const owner: Member = {
-      id: memberId,
-      name: name.trim() || "Owner",
-      email: email.trim(),
-      short: shortName.trim() || "You",
-      initials,
-      role: "Owner",
-      workspaceIds,
-      plan: isOrgNow || isDeferred ? (plan ?? "moderate") : plan ?? "moderate",
-      seatStatus: "active",
-      kind: isOrgNow ? "org" : "personal",
-      ...(orgId ? { orgId } : {}),
-      ...(isDeferred ? { orgSetupDeferred: true } : {}),
-    };
-    upsertOrgMember(owner);
-
-    if (isOrgNow && orgName.trim()) {
-      persistOrgName(orgName.trim());
-      persistOrgSetupDeferred(false);
-      persistOrgInviteDraft(orgInvites);
-      for (const invite of validInviteRows(orgInvites)) {
-        if (!invite.email.trim().includes("@")) continue;
-        addPendingOrgInvite({
-          email: invite.email,
-          name: inviteDisplayName(invite),
-          plan: invite.plan,
-          orgName: orgName.trim(),
-          workspaceIds,
-        });
-      }
-      clearOrgOnboardingDraft();
-    }
-    if (isDeferred) {
-      persistOrgSetupDeferred(true);
-    }
-  };
-
-  const connectorOptions = useMemo(
-    () =>
-      ONBOARDING_CONNECTORS.map((id) => connectors.find((item) => item.id === id)).filter(
-        (item): item is (typeof connectors)[number] => Boolean(item),
-      ),
-    [],
-  );
+  const createSteps = useMemo(() => createStepsFor(), []);
 
   const enterWithPlan = async (chosen: BillingPlan = "moderate") => {
     persistOnboardingPending(false);
@@ -756,8 +619,6 @@ function OnboardingShell({
   };
 
   const finishLocalAccount = async () => {
-    // Connectors step only records interest — real OAuth installs happen later.
-    // Plan comes from account state + optional web selection — never from platform alone.
     let existingPlan: BillingPlan | null = null;
     if (isSupabaseConfigured()) {
       const supabase = createSupabaseBrowserClient();
@@ -776,24 +637,14 @@ function OnboardingShell({
       }
     }
 
-    const requestedPlan = nativeShell
-      ? requestedPlanForNativeFinish(existingPlan)
-      : (plan ?? "minimal");
+    const requestedPlan = plan ?? "minimal";
     const signupPlan = resolveOnboardingFinishPlan({
       existingPlan,
       requestedPlan,
     });
-    const isOrgNow = isTeamPlan(signupPlan) && maxIntent === "org-now";
-    const workspaceKind = isOrgNow ? "business" : "personal";
     const resolvedName = name.trim();
     const resolvedShort =
       shortName.trim() || resolvedName.split(/\s+/)[0] || "You";
-    const finalWorkspaceName =
-      signupPlan === "minimal"
-        ? DEFAULT_FREE_WORKSPACE_NAME
-        : isOrgNow && orgName.trim()
-          ? orgName.trim()
-          : workspaceName.trim() || DEFAULT_FREE_WORKSPACE_NAME;
 
     if (isSupabaseConfigured()) {
       // Drop sticky prototype catalog/pins before writing the real account.
@@ -818,92 +669,38 @@ function OnboardingShell({
         shortName: resolvedShort,
         email,
         plan: signupPlan,
-        workspaceName: finalWorkspaceName,
-        workspaceKind,
+        workspaceName: DEFAULT_PERSONAL_WORKSPACE_NAME,
+        workspaceKind: "personal",
       });
-      const wsId = `ws-${user.id.replace(/-/g, "")}`;
-      let orgId: string | undefined;
-      let inviteSendError = "";
-      if (isOrgNow && orgName.trim()) {
-        try {
-          orgId = await setupOrgOnSupabase({
-            orgName: orgName.trim(),
-            workspaceId: wsId,
-            invites: [],
-          });
-          const draftInvites = validInviteRows(orgInvites);
-          if (draftInvites.length) {
-            const {
-              data: { session },
-            } = await supabase.auth.getSession();
-            if (!session?.access_token || !orgId) {
-              inviteSendError =
-                "Could not send invites (missing session). Retry from Settings → Organization.";
-            } else {
-              const inviteRes = await fetch("/api/org/invites/send", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${session.access_token}`,
-                },
-                body: JSON.stringify({
-                  orgId,
-                  workspaceIds: [wsId],
-                  invites: draftInvites,
-                }),
-              });
-              const inviteData = await inviteRes.json().catch(() => ({}));
-              if (!inviteRes.ok) {
-                inviteSendError =
-                  typeof inviteData.error === "string" && inviteData.error.trim()
-                    ? inviteData.error
-                    : "Could not create invites. Retry from Settings → Organization.";
-              } else {
-                const results = Array.isArray(inviteData.results)
-                  ? (inviteData.results as {
-                      email: string;
-                      inviteUrl: string;
-                      sent: boolean;
-                    }[])
-                  : [];
-                const unsent = results.filter((row) => !row.sent);
-                if (unsent.length) {
-                  const links = unsent
-                    .map((row) => `${row.email}: ${row.inviteUrl}`)
-                    .join(" · ");
-                  inviteSendError = `Invites saved, but email was not sent (Resend not configured). Share these links: ${links}`;
-                }
-              }
-            }
-          }
-        } catch (orgErr) {
-          throw orgErr instanceof Error
-            ? orgErr
-            : new Error("Could not set up organization.");
-        }
-      }
-      if (isTeamPlan(signupPlan) && maxIntent && maxIntent !== "personal") {
-        applyOrgOwnerMember(user.id, [wsId], orgId);
-      }
-      if (inviteSendError && typeof window !== "undefined") {
-        window.sessionStorage.setItem(INVITE_SEND_WARNING_KEY, inviteSendError);
-      }
+      const wsId = workspaceId || workspaceIdFromUserId(user.id);
+      setWorkspaceId(wsId);
+      persistWorkspace(wsId);
+      const connectedIds = (
+        getConnectorConnectionsSnapshot()[wsId] ?? []
+      )
+        .filter((row) => isUiConnectedStatus(row.status))
+        .map((row) => row.connectorId);
+      setOnboardingComposerHint(composerHintForConnectedApps(connectedIds));
       await enterWithPlan(signupPlan);
       return;
     }
 
     const created = createWorkspace({
-      name: finalWorkspaceName,
-      kind: workspaceKind,
+      name: DEFAULT_PERSONAL_WORKSPACE_NAME,
+      kind: "personal",
     });
     if (created) {
       persistWorkspace(created.id);
       setWorkspace(created.id);
-      if (isTeamPlan(signupPlan) && maxIntent && maxIntent !== "personal") {
-        const ownerId = `local-${email.trim().toLowerCase().replace(/[^a-z0-9]/gi, "") || "owner"}`;
-        applyOrgOwnerMember(ownerId, [created.id]);
-        persistActor(ownerId);
-      }
+      setWorkspaceId(created.id);
+      const connectedIds = (
+        getConnectorConnectionsSnapshot()[created.id] ?? []
+      )
+        .filter((row) => isUiConnectedStatus(row.status))
+        .map((row) => row.connectorId);
+      setOnboardingComposerHint(composerHintForConnectedApps(connectedIds));
+    } else {
+      setOnboardingComposerHint(composerHintForConnectedApps([]));
     }
     await enterWithPlan(signupPlan);
   };
@@ -1008,7 +805,7 @@ function OnboardingShell({
           persistOnboardingPending(true);
           setPassedVerify(true);
           if (signInResult.user?.id) await syncPlanFromProfile(signInResult.user.id);
-          setStep(stepAfterEmailVerified(nativeShell));
+          setStep(stepAfterEmailVerified());
           return;
         } catch (err) {
           const message =
@@ -1041,7 +838,7 @@ function OnboardingShell({
         clearPendingSignupEmail();
         setPassedVerify(true);
         if (result.session.user.id) await syncPlanFromProfile(result.session.user.id);
-        setStep(stepAfterEmailVerified(nativeShell));
+        setStep(stepAfterEmailVerified());
         return;
       }
 
@@ -1070,7 +867,7 @@ function OnboardingShell({
           persistOnboardingPending(true);
           setPassedVerify(true);
           if (signInResult.user?.id) await syncPlanFromProfile(signInResult.user.id);
-          setStep(stepAfterEmailVerified(nativeShell));
+          setStep(stepAfterEmailVerified());
           return;
         } catch (signInErr) {
           const signInMessage =
@@ -1128,7 +925,7 @@ function OnboardingShell({
       const entered = await tryEnterExistingAccount().catch(() => false);
       if (entered) return;
       if (result.user?.id) await syncPlanFromProfile(result.user.id);
-      setStep(stepAfterEmailVerified(nativeShell));
+      setStep(stepAfterEmailVerified());
     } catch (err) {
       setError(
         err instanceof Error
@@ -1204,7 +1001,7 @@ function OnboardingShell({
         persistOnboardingPending(true);
         setPassedVerify(true);
         if (result.user?.id) await syncPlanFromProfile(result.user.id);
-        setStep(stepAfterEmailVerified(nativeShell));
+        setStep(stepAfterEmailVerified());
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Sign in failed.";
@@ -1257,98 +1054,54 @@ function OnboardingShell({
     }
   };
 
-  const skipOrgSetup = () => {
-    setError("");
-    persistOrgName(orgName.trim());
-    persistOrgInviteDraft(invitesToPersist(orgInvites));
-    if (!workspaceName.trim() && orgName.trim()) {
-      setWorkspaceName(orgName.trim());
-    }
-    setStep("workspace");
-  };
 
-  const validateOrgInvites = (rows: OrgInviteDraft[]): string | null => {
-    const self = email.trim().toLowerCase();
-    if (!self) return null;
-    for (const row of rows) {
-      const inviteEmail = row.email.trim().toLowerCase();
-      if (inviteEmail.includes("@") && inviteEmail === self) {
-        return "You cannot invite yourself.";
+  useEffect(() => {
+    if (step !== "apps" || workspaceId || !isSupabaseConfigured()) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.access_token || cancelled) return;
+        const id = await bootstrapPersonalWorkspace(session.access_token);
+        if (cancelled) return;
+        setWorkspaceId(id);
+        persistWorkspace(id);
+        persistOnboardingCheckpoint({
+          ...buildCheckpoint(),
+          step: "apps",
+          workspaceId: id,
+        });
+      } catch (err) {
+        if (!cancelled) {
+          // Fall back to deterministic id so Apps UI can still render.
+          const {
+            data: { user },
+          } = await createSupabaseBrowserClient().auth.getUser();
+          if (user?.id) {
+            const fallback = workspaceIdFromUserId(user.id);
+            setWorkspaceId(fallback);
+          } else {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Could not prepare workspace.",
+            );
+          }
+        }
       }
-    }
-    return null;
-  };
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bootstrap once per apps entry
+  }, [step, workspaceId]);
 
   const goCreateNext = () => {
     if (step === "create") {
       void beginSignup();
-      return;
-    }
-    if (step === "plan") {
-      return;
-    }
-    if (step === "max-intent") {
-      if (!maxIntent) {
-        setError("Choose how you’ll use this plan.");
-        return;
-      }
-      setError("");
-      if (maxIntent === "org-now") {
-        setStep("org-setup");
-        return;
-      }
-      if (maxIntent === "org-later") {
-        if (!workspaceName.trim() && orgName.trim()) {
-          setWorkspaceName(orgName.trim());
-        }
-      }
-      setStep("workspace");
-      return;
-    }
-    if (step === "org-setup") {
-      if (!orgName.trim()) {
-        setError("Add your organization name.");
-        return;
-      }
-      const inviteError = validateOrgInvites(orgInvites);
-      if (inviteError) {
-        setError(inviteError);
-        return;
-      }
-      setError("");
-      persistOrgName(orgName.trim());
-      persistOrgInviteDraft(invitesToPersist(orgInvites));
-      if (!workspaceName.trim()) {
-        setWorkspaceName(orgName.trim());
-      }
-      setStep("workspace");
-      return;
-    }
-    if (step === "workspace") {
-      if (!workspaceName.trim()) {
-        setError("Name your first workspace.");
-        return;
-      }
-      setError("");
-      setStep("appearance");
-      return;
-    }
-    if (step === "connectors") {
-      setError("");
-      setStep("appearance");
-      return;
-    }
-    if (step === "appearance") {
-      if (nativeShell) {
-        setError("");
-        setStep("hosting");
-        return;
-      }
-      void applySetup();
-      return;
-    }
-    if (step === "hosting") {
-      void applySetup();
     }
   };
 
@@ -1371,23 +1124,7 @@ function OnboardingShell({
       // Verified session — don't send them back through create/verify.
       return;
     }
-    if (step === "org-setup") {
-      setStep("max-intent");
-      return;
-    }
-    if (step === "max-intent") {
-      setStep("plan");
-      return;
-    }
-    if (step === "workspace") {
-      if (plan && isTeamPlan(plan) && maxIntent === "org-now") {
-        setStep("org-setup");
-        return;
-      }
-      if (plan && isTeamPlan(plan) && plan !== "limitless") {
-        setStep("max-intent");
-        return;
-      }
+    if (step === "apps") {
       setStep("plan");
       return;
     }
@@ -1397,25 +1134,35 @@ function OnboardingShell({
 
   const showBack =
     step !== "welcome" &&
-    !(usingSupabase && passedVerify && step === "plan");
+    !(usingSupabase && passedVerify && (step === "plan" || step === "apps"));
 
   const panel = PANEL_COPY[step];
-  const showAppearancePreview = step === "appearance";
+  const fullWidthStep = step === "apps";
 
   return (
     <AppearanceScope
       syncSideEffects
       className="flex h-svh w-full flex-col overflow-hidden bg-background text-foreground lg:flex-row"
     >
-      {/* Left: auth / onboarding — 50% on desktop; clears traffic lights on Mac. */}
-      <div className="relative flex min-h-0 w-full flex-1 flex-col pt-[var(--desktop-titlebar)] lg:w-1/2 lg:flex-none">
+      {/* Left: auth / onboarding — 50% on desktop; full width for apps. */}
+      <div
+        className={cn(
+          "relative flex min-h-0 w-full flex-1 flex-col pt-[var(--desktop-titlebar)] lg:flex-none",
+          fullWidthStep ? "lg:w-full" : "lg:w-1/2",
+        )}
+      >
         <div
           className={cn(
             "flex min-h-0 flex-1 flex-col overflow-y-auto px-6 sm:px-10",
             mobile ? "pt-[calc(env(safe-area-inset-top,0px)+50px)] pb-36" : "pt-8 sm:pt-10 pb-10",
           )}
         >
-          <div className="mx-auto w-full max-w-[26rem]">
+          <div
+            className={cn(
+              "mx-auto w-full",
+              fullWidthStep ? "max-w-3xl" : "max-w-[26rem]",
+            )}
+          >
             {/* Fixed-height back row — same top edge on every step. */}
             <div className="mb-8 flex h-9 items-center">
               {showBack ? (
@@ -1442,10 +1189,11 @@ function OnboardingShell({
                 onCreate={() => {
                   setError("");
                   setInfo("");
-                  resetAppearance();
                   setStep("create");
                 }}
+                onOAuthError={setError}
                 error={error}
+                busy={busy}
               />
             ) : null}
 
@@ -1469,6 +1217,7 @@ function OnboardingShell({
                   setInfo("");
                   setStep("forgot");
                 }}
+                onOAuthError={setError}
               />
             ) : null}
 
@@ -1507,6 +1256,7 @@ function OnboardingShell({
                   setError("");
                 }}
                 onSubmit={goCreateNext}
+                onOAuthError={setError}
               />
             ) : null}
 
@@ -1543,259 +1293,116 @@ function OnboardingShell({
               />
             ) : null}
 
-            {step === "max-intent" ? (
-              <MaxIntentStep
-                intent={maxIntent}
-                planLabelText={plan ? planLabel(plan) : "your plan"}
-                error={error}
-                onIntent={(value) => {
-                  setMaxIntent(value);
-                  setError("");
-                }}
-                onSubmit={goCreateNext}
-              />
-            ) : null}
-
-            {step === "org-setup" ? (
-              <OrgSetupStep
-                orgName={orgName}
-                invites={orgInvites}
-                ownerEmail={email}
-                error={error}
-                onOrgName={(value) => {
-                  setOrgName(value);
-                  setError("");
-                }}
-                onInvites={(value) => {
-                  setOrgInvites(value);
-                  setError("");
-                }}
-                onSubmit={goCreateNext}
-                onSkip={skipOrgSetup}
-                onValidationError={setError}
-              />
-            ) : null}
-
-            {step === "workspace" ? (
-              <WorkspaceStep
-                workspaceName={workspaceName}
-                error={error}
-                onWorkspaceName={(value) => {
-                  setWorkspaceName(value);
-                  setError("");
-                }}
-                onSubmit={goCreateNext}
-              />
-            ) : null}
-
-            {step === "connectors" && SHOW_ONBOARDING_CONNECTORS ? (
-              <ConnectorsStep
-                options={connectorOptions}
-                selected={selectedConnectors}
+            {step === "apps" && workspaceId ? (
+              <OnboardingAppsStep
+                workspaceId={workspaceId}
+                plan={plan ?? "minimal"}
                 busy={busy}
-                error={error}
-                onToggle={(id) => {
-                  setSelectedConnectors((current) =>
-                    current.includes(id)
-                      ? current.filter((item) => item !== id)
-                      : [...current, id],
-                  );
-                }}
-                onSubmit={goCreateNext}
-                onSkip={() => {
-                  setSelectedConnectors([]);
-                  setError("");
-                  setStep("appearance");
-                }}
+                onContinue={() => void applySetup()}
+                onSkip={() => void applySetup()}
               />
             ) : null}
 
-            {step === "appearance" ? (
-              <AppearanceStep
-                busy={busy}
-                error={error}
-                submitLabel={nativeShell ? "Continue" : "Enter Cander"}
-                onSubmit={goCreateNext}
-              />
-            ) : null}
-
-            {step === "hosting" ? (
-              <HostingStep
-                busy={busy}
-                error={error}
-                onSubmit={goCreateNext}
-              />
+            {step === "apps" && !workspaceId ? (
+              <div className="space-y-3">
+                <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
+                  Preparing workspace…
+                </h1>
+                <p className="text-[14.5px] leading-relaxed text-muted-foreground">
+                  Hang tight while we set up your personal workspace.
+                </p>
+                {error ? (
+                  <p className="text-[12.5px] text-destructive">{error}</p>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void applySetup()}
+                  className={cn("inline-flex items-center gap-2", primaryBtnClass)}
+                >
+                  Enter Cander
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : null}
+                </button>
+              </div>
             ) : null}
           </div>
         </div>
       </div>
 
-      {mobile && step !== "plan" && step !== "appearance" && step !== "hosting" ? (
+      {mobile && step !== "plan" && step !== "apps" ? (
         <OnboardingMobilePanel step={step} />
       ) : null}
 
-      {/* Right: full half-screen preview — flush top/right/bottom */}
-      <div className="hidden min-h-0 w-1/2 lg:block">
-        <div
-          className="relative h-full min-h-0 overflow-hidden border-l border-border"
-          aria-hidden={!showAppearancePreview}
-        >
-          <CanderMark
-            tone="white"
-            className="absolute top-6 right-6 z-20 h-7 w-7"
-          />
-          {showAppearancePreview ? (
-            <div className="absolute inset-0 bg-gradient-to-br from-black/50 via-black/30 to-black/55">
-              <div className="absolute inset-0 panel-wash-price opacity-60" />
-              <div className="panel-grain opacity-40" />
-              <OnboardingAppPreview />
-            </div>
-          ) : (
-            <>
-              <div className="absolute inset-0 panel-wash-price" />
-              <div className="panel-grain" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
-              <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
-                <p
-                  className={cn(
-                    "font-medium tracking-[-0.03em] text-white",
-                    step === "welcome"
-                      ? "whitespace-nowrap text-[1.45rem] xl:text-[1.65rem]"
-                      : "max-w-lg text-[1.75rem] xl:text-[2rem]",
-                  )}
+      {/* Right: full half-screen preview — hidden on apps */}
+      {!fullWidthStep ? (
+        <div className="hidden min-h-0 w-1/2 lg:block">
+          <div
+            className="relative h-full min-h-0 overflow-hidden border-l border-border"
+            aria-hidden
+          >
+            <CanderMark
+              tone="white"
+              className="absolute top-6 right-6 z-20 h-7 w-7"
+            />
+            <div className="absolute inset-0 panel-wash-price" />
+            <div className="panel-grain" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/10" />
+            <div className="absolute inset-x-0 bottom-0 p-10 xl:p-14">
+              <p
+                className={cn(
+                  "font-medium tracking-[-0.03em] text-white",
+                  step === "welcome"
+                    ? "whitespace-nowrap text-[1.45rem] xl:text-[1.65rem]"
+                    : "max-w-lg text-[1.75rem] xl:text-[2rem]",
+                )}
+              >
+                {panel.title}
+              </p>
+              {step === "plan" && plan ? (
+                <ul
+                  key={plan}
+                  className="mt-6 max-w-md space-y-2.5 transition-all duration-300"
+                  style={{
+                    animation: "landing-enter 280ms ease-out",
+                  }}
                 >
-                  {panel.title}
-                </p>
-                {step === "plan" && plan ? (
-                  <ul
-                    key={plan}
-                    className="mt-6 max-w-md space-y-2.5 transition-all duration-300"
-                    style={{
-                      animation: "landing-enter 280ms ease-out",
-                    }}
-                  >
-                    {PLAN_PANEL_BULLETS[plan].map((item) => (
-                      <li
-                        key={item}
-                        className="flex gap-2.5 text-[14px] leading-snug text-white/85"
-                      >
-                        <span
-                          className="mt-2 h-1 w-1 shrink-0 rounded-full bg-white/80"
-                          aria-hidden
-                        />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            </>
-          )}
+                  {PLAN_PANEL_BULLETS[plan].map((item) => (
+                    <li
+                      key={item}
+                      className="flex gap-2.5 text-[14px] leading-snug text-white/85"
+                    >
+                      <span
+                        className="mt-2 h-1 w-1 shrink-0 rounded-full bg-white/80"
+                        aria-hidden
+                      />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </div>
         </div>
-      </div>
+      ) : null}
     </AppearanceScope>
   );
 }
 
-function AppearanceStep({
-  onSubmit,
-  busy = false,
-  error = "",
-  submitLabel = "Enter Cander",
-}: {
-  onSubmit: () => void;
-  busy?: boolean;
-  error?: string;
-  submitLabel?: string;
-}) {
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Make it yours
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Pick a color mode. The preview on the right updates as you go — continue
-        when it feels right.
-      </p>
-      <div className="mt-8">
-        <AppearanceControls compact />
-      </div>
-      {error ? (
-        <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
-      ) : null}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onSubmit}
-        className={cn("mt-8 inline-flex items-center gap-2", primaryBtnClass)}
-      >
-        {submitLabel}
-        {busy ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        ) : null}
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          resetAppearance();
-        }}
-        className={cn("mt-2", ghostBtnClass)}
-      >
-        Reset defaults
-      </button>
-    </>
-  );
-}
-
-function HostingStep({
-  onSubmit,
-  busy = false,
-  error = "",
-}: {
-  onSubmit: () => void;
-  busy?: boolean;
-  error?: string;
-}) {
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Where should AI run?
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Cloud always works. On device uses Apple Intelligence on this phone when
-        available. Auto prefers on-device, then falls back to Cloud. You can
-        change this later in Settings → Hosting.
-      </p>
-      <div className="mt-8">
-        <HostingModePicker />
-      </div>
-      {error ? (
-        <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
-      ) : null}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onSubmit}
-        className={cn("mt-8 inline-flex items-center gap-2", primaryBtnClass)}
-      >
-        Enter Cander
-        {busy ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-        ) : null}
-      </button>
-    </>
-  );
-}
 
 function WelcomeStep({
   onSignIn,
   onCreate,
+  onOAuthError,
   error,
+  busy = false,
 }: {
   onSignIn: () => void;
   onCreate: () => void;
+  onOAuthError?: (message: string) => void;
   error?: string;
+  busy?: boolean;
 }) {
   return (
     <>
@@ -1803,27 +1410,29 @@ function WelcomeStep({
         Welcome
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Sign in to your account, or create one to get started.
+        Sign in or create an account to get started.
       </p>
-      <div className="mt-8 space-y-2.5">
-        <button
-          type="button"
-          onClick={onSignIn}
-          className={primaryBtnClass}
-        >
-          Sign in
+      <div className="mt-8 space-y-4">
+        <OAuthButtons disabled={busy} onError={onOAuthError} />
+        <div className="flex items-center gap-3">
+          <div className="h-px flex-1 bg-foreground/10" />
+          <span className="text-[12px] text-muted-foreground">or</span>
+          <div className="h-px flex-1 bg-foreground/10" />
+        </div>
+        <button type="button" onClick={onCreate} className={primaryBtnClass}>
+          Continue with Email
         </button>
-        <button
-          type="button"
-          onClick={onCreate}
-          className={secondaryBtnClass}
-        >
-          Create account
+        <button type="button" onClick={onSignIn} className={secondaryBtnClass}>
+          Sign in
         </button>
       </div>
       {error ? (
         <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
       ) : null}
+      <p className="mt-8 text-[12.5px] leading-relaxed text-muted-foreground">
+        Simple to join. Simple to leave. Your account and connected data stay
+        under your control.
+      </p>
     </>
   );
 }
@@ -1837,6 +1446,7 @@ function SignInStep({
   onPassword,
   onSubmit,
   onForgot,
+  onOAuthError,
 }: {
   email: string;
   password: string;
@@ -1846,6 +1456,7 @@ function SignInStep({
   onPassword: (value: string) => void;
   onSubmit: () => void;
   onForgot?: () => void;
+  onOAuthError?: (message: string) => void;
 }) {
   return (
     <>
@@ -1853,10 +1464,18 @@ function SignInStep({
         Sign in
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Use the email and password for your Cander account.
+        Use Apple, Google, or the email and password for your Cander account.
       </p>
+      <div className="mt-8">
+        <OAuthButtons disabled={busy} onError={onOAuthError} />
+      </div>
+      <div className="my-5 flex items-center gap-3">
+        <div className="h-px flex-1 bg-foreground/10" />
+        <span className="text-[12px] text-muted-foreground">or</span>
+        <div className="h-px flex-1 bg-foreground/10" />
+      </div>
       <form
-        className="mt-8 space-y-3"
+        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
@@ -1974,6 +1593,7 @@ function CreateStep({
   onEmail,
   onPassword,
   onSubmit,
+  onOAuthError,
 }: {
   name: string;
   email: string;
@@ -1984,6 +1604,7 @@ function CreateStep({
   onEmail: (value: string) => void;
   onPassword: (value: string) => void;
   onSubmit: () => void;
+  onOAuthError?: (message: string) => void;
 }) {
   return (
     <>
@@ -1994,8 +1615,16 @@ function CreateStep({
         Basics first. Next we&apos;ll email you a code — paste it here
         to confirm, then finish setup.
       </p>
+      <div className="mt-8">
+        <OAuthButtons disabled={busy} onError={onOAuthError} />
+      </div>
+      <div className="my-5 flex items-center gap-3">
+        <div className="h-px flex-1 bg-foreground/10" />
+        <span className="text-[12px] text-muted-foreground">or</span>
+        <div className="h-px flex-1 bg-foreground/10" />
+      </div>
       <form
-        className="mt-8 space-y-3"
+        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
@@ -2124,55 +1753,6 @@ function VerifyStep({
   );
 }
 
-function WorkspaceStep({
-  workspaceName,
-  error,
-  onWorkspaceName,
-  onSubmit,
-}: {
-  workspaceName: string;
-  error: string;
-  onWorkspaceName: (value: string) => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        First workspace
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Name the workspace you’ll land in.
-      </p>
-      <form
-        className="mt-8 space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <input
-          value={workspaceName}
-          onChange={(event) => onWorkspaceName(event.target.value)}
-          placeholder="Company"
-          aria-label="First workspace"
-          autoComplete="organization"
-          autoFocus
-          className={inputClass}
-        />
-        {error ? (
-          <p className="text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-        <button
-          type="submit"
-          className={primaryBtnClass}
-        >
-          Continue
-        </button>
-      </form>
-    </>
-  );
-}
-
 function PlanStep({
   selectedPlan,
   busy,
@@ -2192,11 +1772,11 @@ function PlanStep({
         Choose a plan
       </h1>
       <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Minimal is for personal use. Paid plans unlock the full product and
-        differ by AI usage.
+        Pick access. You can change this later.
       </p>
       <div className="mt-8 space-y-2.5">
-        {PLAN_CATALOG_LIST.map((entry) => {
+        {SELF_SERVE_PLANS.map((planId) => {
+          const entry = PLAN_CATALOG[planId];
           const active = selectedPlan === entry.id;
           return (
             <button
@@ -2224,10 +1804,8 @@ function PlanStep({
               <span className="text-[12.5px] leading-relaxed text-muted-foreground">
                 {formatPlanUsageLevel(entry.id)}
                 {entry.id === "minimal"
-                  ? " · 1 account per app"
-                  : entry.id === "limitless"
-                    ? ""
-                    : " · full Cander"}
+                  ? " · 1 account per App"
+                  : " · multiple accounts per App"}
               </span>
               <span className="mt-1 text-[12px] font-medium text-foreground/80">
                 {busy && active ? "Saving…" : entry.ctaLabel}
@@ -2236,417 +1814,22 @@ function PlanStep({
           );
         })}
       </div>
+      <p className="mt-5 text-[12.5px] text-muted-foreground">
+        Need something custom?{" "}
+        <a
+          href={LIMITLESS_CONTACT_HREF}
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Contact us about Limitless
+        </a>
+        .
+      </p>
       {error ? (
         <p className="mt-4 text-[12.5px] text-destructive">{error}</p>
       ) : null}
       {info ? (
         <p className="mt-4 text-[12.5px] text-muted-foreground">{info}</p>
       ) : null}
-    </>
-  );
-}
-
-const MAX_INTENT_OPTIONS: {
-  id: MaxIntent;
-  title: string;
-  body: string;
-}[] = [
-  {
-    id: "personal",
-    title: "Personal",
-    body: "For one person — your workspaces, your pace.",
-  },
-  {
-    id: "org-now",
-    title: "Set up organization",
-    body: "Company signup — invite Light or Moderate teammates now.",
-  },
-  {
-    id: "org-later",
-    title: "Set up later",
-    body: "Use this plan now; finish org setup anytime in Settings.",
-  },
-];
-
-function MaxIntentStep({
-  intent,
-  error,
-  onIntent,
-  onSubmit,
-  planLabelText = "your plan",
-}: {
-  intent: MaxIntent | null;
-  error: string;
-  onIntent: (value: MaxIntent) => void;
-  onSubmit: () => void;
-  planLabelText?: string;
-}) {
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        How will you use {planLabelText}?
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Personal power or a team organization — you can change this later.
-      </p>
-      <form
-        className="mt-8 space-y-5"
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-      >
-        <div className="grid gap-2">
-          {MAX_INTENT_OPTIONS.map((item) => {
-            const active = intent === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onIntent(item.id)}
-                className={cn(
-                  "flex min-h-[4.5rem] flex-col justify-center border px-3.5 py-3 text-left transition-colors duration-200",
-                  SHELL_G3_RADIUS,
-                  active
-                    ? onboardingSelectorActiveClass
-                    : onboardingSelectorIdleClass,
-                )}
-              >
-                <span className="text-[13.5px] font-medium tracking-[-0.01em]">
-                  {item.title}
-                </span>
-                <span className="mt-0.5 line-clamp-2 text-[12.5px] leading-relaxed text-muted-foreground">
-                  {item.body}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-        {error ? (
-          <p className="text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-        <button type="submit" className={primaryBtnClass}>
-          Continue
-        </button>
-      </form>
-    </>
-  );
-}
-
-function PlanSeatToggle({
-  value,
-  onChange,
-  label,
-}: {
-  value: OrgInviteDraft["plan"];
-  onChange: (value: OrgInviteDraft["plan"]) => void;
-  label?: string;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={label ?? "Seat plan"}
-      className={cn(
-        "inline-flex h-9 shrink-0 border border-border bg-muted/50 p-0.5",
-        SHELL_G3_RADIUS,
-      )}
-    >
-      {(["light", "moderate"] as const).map((plan) => (
-        <button
-          key={plan}
-          type="button"
-          aria-pressed={value === plan}
-          onClick={() => onChange(plan)}
-          className={cn(
-            "inline-flex h-full min-w-[3.5rem] items-center justify-center px-3.5 text-[12.5px] font-medium tracking-[-0.01em] transition-colors duration-200",
-            SHELL_G3_RADIUS,
-            value === plan
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {plan === "light" ? "Light" : "Moderate"}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function OrgSetupStep({
-  orgName,
-  invites,
-  ownerEmail,
-  error,
-  onOrgName,
-  onInvites,
-  onSubmit,
-  onSkip,
-  onValidationError,
-}: {
-  orgName: string;
-  invites: OrgInviteDraft[];
-  ownerEmail: string;
-  error: string;
-  onOrgName: (value: string) => void;
-  onInvites: (value: OrgInviteDraft[]) => void;
-  onSubmit: () => void;
-  onSkip: () => void;
-  onValidationError: (message: string) => void;
-}) {
-  const rows = invites.length ? invites : [emptyOrgInvite()];
-  const validInvites = validInviteRows(rows);
-
-  const updateRow = (index: number, patch: Partial<OrgInviteDraft>) => {
-    const next = rows.map((row, i) => (i === index ? { ...row, ...patch } : row));
-    onInvites(next);
-  };
-
-  const addRow = () => {
-    onInvites([...rows, emptyOrgInvite()]);
-  };
-
-  const removeRow = (index: number) => {
-    onInvites(rows.filter((_, i) => i !== index));
-  };
-
-  const validate = (): string | null => {
-    const self = ownerEmail.trim().toLowerCase();
-    if (!self) return null;
-    for (const row of rows) {
-      const inviteEmail = row.email.trim().toLowerCase();
-      if (inviteEmail.includes("@") && inviteEmail === self) {
-        return "You cannot invite yourself.";
-      }
-    }
-    return null;
-  };
-
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    const message = validate();
-    if (message) {
-      onValidationError(message);
-      return;
-    }
-    onInvites(invitesToPersist(rows));
-    onSubmit();
-  };
-
-  const primaryLabel = validInvites.length
-    ? "Save teammates & continue"
-    : "Continue";
-
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Set up your organization
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Invite Light or Moderate teammates now, or add people later in Settings.
-      </p>
-      <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
-        <div className="space-y-2">
-          <label className="text-[12.5px] font-medium tracking-[-0.01em] text-muted-foreground">
-            Organization name
-          </label>
-          <input
-            value={orgName}
-            onChange={(event) => onOrgName(event.target.value)}
-            placeholder="Company"
-            aria-label="Organization name"
-            autoComplete="organization"
-            autoFocus
-            className={inputClass}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-[12.5px] font-medium tracking-[-0.01em] text-muted-foreground">
-            Invite teammates (optional)
-          </label>
-          <div className="max-h-[min(280px,38vh)] space-y-2.5 overflow-y-auto pr-0.5">
-            {rows.map((row, index) => (
-              <div
-                key={index}
-                className={cn(
-                  "space-y-2 border border-border bg-background/60 p-3",
-                  SHELL_G3_RADIUS,
-                )}
-              >
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    value={row.firstName}
-                    onChange={(event) =>
-                      updateRow(index, { firstName: event.target.value })
-                    }
-                    placeholder="First name"
-                    aria-label={`First name ${index + 1}`}
-                    autoComplete="given-name"
-                    className={inputClass}
-                  />
-                  <input
-                    value={row.lastName}
-                    onChange={(event) =>
-                      updateRow(index, { lastName: event.target.value })
-                    }
-                    placeholder="Last name"
-                    aria-label={`Last name ${index + 1}`}
-                    autoComplete="family-name"
-                    className={inputClass}
-                  />
-                </div>
-                <input
-                  value={row.email}
-                  onChange={(event) =>
-                    updateRow(index, { email: event.target.value })
-                  }
-                  placeholder="name@company.com"
-                  aria-label={`Email ${index + 1}`}
-                  autoComplete="email"
-                  className={inputClass}
-                />
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[12.5px] text-muted-foreground">Plan</span>
-                  <div className="flex items-center gap-2">
-                    <PlanSeatToggle
-                      value={row.plan}
-                      onChange={(plan) => updateRow(index, { plan })}
-                      label={`Seat plan ${index + 1}`}
-                    />
-                    {rows.length > 1 ? (
-                      <button
-                        type="button"
-                        onClick={() => removeRow(index)}
-                        className="text-[12.5px] text-muted-foreground hover:text-foreground"
-                      >
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={addRow}
-            className={cn(
-              "mt-1 inline-flex h-9 w-full items-center justify-center border border-dashed border-foreground/15 text-[13px] font-medium tracking-[-0.01em] text-muted-foreground hover:border-foreground/25 hover:text-foreground",
-              SHELL_G3_RADIUS,
-            )}
-          >
-            Add another
-          </button>
-        </div>
-
-        {error ? (
-          <p className="text-[12.5px] text-destructive">{error}</p>
-        ) : null}
-        <div className="space-y-2.5">
-          <button type="submit" className={primaryBtnClass}>
-            {primaryLabel}
-          </button>
-          <button type="button" onClick={onSkip} className={secondaryBtnClass}>
-            Skip for now
-          </button>
-          <p className="text-center text-[12px] leading-relaxed text-muted-foreground">
-            Invites are created in your org. Email is sent when Resend is
-            configured; otherwise you’ll get shareable invite links after setup.
-            Nothing is charged during signup until billing is connected.
-          </p>
-        </div>
-      </form>
-    </>
-  );
-}
-
-function ConnectorsStep({
-  options,
-  selected,
-  busy = false,
-  error = "",
-  onToggle,
-  onSubmit,
-  onSkip,
-}: {
-  options: (typeof connectors)[number][];
-  selected: string[];
-  busy?: boolean;
-  error?: string;
-  onToggle: (id: string) => void;
-  onSubmit: () => void;
-  onSkip: () => void;
-}) {
-  return (
-    <>
-      <h1 className="heading-display text-[1.85rem] tracking-[-0.03em]">
-        Apps you’ll use
-      </h1>
-      <p className="mt-3 text-[14.5px] leading-relaxed text-muted-foreground">
-        Mark what you care about. Nothing is connected yet — you’ll authorize
-        apps later from Apps.
-      </p>
-      <div className="mt-8 grid gap-2">
-        {options.map((item) => {
-          const active = selected.includes(item.id);
-          return (
-            <button
-              key={item.id}
-              type="button"
-              disabled={busy}
-              onClick={() => onToggle(item.id)}
-              className={cn(
-                "flex items-start gap-3 border px-3.5 py-3 text-left transition-colors duration-200",
-                SHELL_G3_RADIUS,
-                active
-                  ? "border-foreground/25 bg-muted"
-                  : "border-border hover:border-foreground/20 hover:bg-muted/40",
-                busy && "opacity-60",
-              )}
-            >
-              <span
-                className={cn(
-                  "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-[6px] border",
-                  active
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border",
-                )}
-              >
-                {active ? <Check className="h-3 w-3" strokeWidth={2.4} /> : null}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[13.5px] font-medium tracking-[-0.01em]">
-                  {item.name}
-                </span>
-                <span className="mt-0.5 block text-[12.5px] leading-relaxed text-muted-foreground">
-                  {item.description}
-                </span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      {error ? (
-        <p className="mt-4 text-[12.5px] leading-relaxed text-destructive">{error}</p>
-      ) : null}
-      <div className="mt-6 space-y-2.5">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onSubmit}
-          className={primaryBtnClass}
-        >
-          {busy ? "Creating account…" : "Continue"}
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onSkip}
-          className={ghostBtnClass}
-        >
-          Skip for now
-        </button>
-      </div>
     </>
   );
 }

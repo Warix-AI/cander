@@ -239,7 +239,12 @@ function Root() {
   }
 
   if (!signedIn || onboardingPending) {
-    return <OnboardingFlow />;
+    return (
+      <>
+        <ConnectorOAuthDeepLinkListener />
+        <OnboardingFlow />
+      </>
+    );
   }
 
   return (

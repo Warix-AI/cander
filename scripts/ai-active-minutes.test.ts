@@ -160,31 +160,31 @@ describe("AI active minutes — hierarchy", () => {
 });
 
 describe("AI minutes plan configuration", () => {
-  it("Minimal defaults to 20 Active AI Minutes", () => {
-    assert.equal(defaultAiPlanMinuteConfig("minimal").includedMinutes, 20);
-    assert.equal(planUsagePolicy("minimal").includedMinutes, 20);
+  it("Minimal defaults to 25 Active AI Minutes", () => {
+    assert.equal(defaultAiPlanMinuteConfig("minimal").includedMinutes, 25);
+    assert.equal(planUsagePolicy("minimal").includedMinutes, 25);
   });
 
-  it("Light includes 30 Active AI Minutes", () => {
+  it("Light includes 100 Active AI Minutes", () => {
     const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.light;
-    assert.equal(cfg.includedMinutes, 30);
-    assert.equal(planUsagePolicy("light").includedMinutes, 30);
-  });
-
-  it("Moderate includes 100 Active AI Minutes", () => {
-    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate;
     assert.equal(cfg.includedMinutes, 100);
+    assert.equal(planUsagePolicy("light").includedMinutes, 100);
   });
 
-  it("Heavy includes 250 Active AI Minutes", () => {
-    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy;
+  it("Moderate includes 250 Active AI Minutes", () => {
+    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.moderate;
     assert.equal(cfg.includedMinutes, 250);
+  });
+
+  it("Heavy includes 500 Active AI Minutes", () => {
+    const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.heavy;
+    assert.equal(cfg.includedMinutes, 500);
   });
 
   it("Limitless uses metering fallback with no hard maximum", () => {
     const cfg = DEFAULT_AI_PLAN_MINUTE_CONFIGS.limitless;
     assert.equal(cfg.isEnterprise, true);
-    assert.ok((cfg.minimumMinutes ?? 0) > 250);
+    assert.ok((cfg.minimumMinutes ?? 0) > 500);
     assert.equal(cfg.maximumMinutes, null);
     assert.ok(cfg.includedMinutes >= 1000);
   });
@@ -196,7 +196,7 @@ describe("AI minutes plan configuration", () => {
   });
 
   it("period snapshot fields exist independently of live defaults", () => {
-    assert.equal(planUsagePolicy("light").includedMinutes, 30);
+    assert.equal(planUsagePolicy("light").includedMinutes, 100);
     assert.notEqual(
       planUsagePolicy("light").includedMinutes,
       planUsagePolicy("light").usableBudgetMicros / 1_000_000,

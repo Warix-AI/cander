@@ -5,9 +5,8 @@ import { supabaseAnonKey, supabaseUrl } from "@/lib/supabase/env";
 import { isSupabaseConfigured } from "@/lib/data-backend";
 import { normalizePlan, isTeamPlan, isPaidPlan } from "@/lib/plans";
 import { resolveOnboardingFinishPlan } from "@/lib/billing/resolve-onboarding-plan";
+import { ensurePersonalWorkspace } from "@/lib/onboarding/ensure-personal-workspace";
 import type { BillingPlan, WorkspaceKind } from "@/lib/types";
-
-const NAV_SPACES = ["work", "build", "research", "studio"] as const;
 
 /**
  * Completes onboarding writes with the service role so missing client GRANTs
@@ -126,7 +125,6 @@ export async function POST(request: Request) {
     const workspaceName =
       body.workspaceName?.trim() ||
       (kind === "personal" ? "Personal" : "Workspace");
-    const navSpaces = [...NAV_SPACES];
 
     const profilePatch: Record<string, unknown> = {
       name,
@@ -194,61 +192,12 @@ export async function POST(request: Request) {
       console.warn("[cander] usage period init failed", periodErr);
     }
 
-    // Only touch the personal bootstrap workspace — never rewrite shared
-    // memberships or promote invitees to Owner across every workspace.
-    const wsId = `ws-${user.id.replace(/-/g, "")}`;
-    const { data: personalMembership } = await admin
-      .from("workspace_members")
-      .select("workspace_id")
-      .eq("profile_id", user.id)
-      .eq("workspace_id", wsId)
-      .maybeSingle();
-
-    if (!personalMembership) {
-      const { error: createWsError } = await admin.from("workspaces").upsert({
-        id: wsId,
-        name: workspaceName,
-        kind,
-        personal: kind === "personal",
-        spaces: navSpaces,
-      });
-      if (createWsError) {
-        return NextResponse.json(
-          { error: createWsError.message },
-          { status: 500 },
-        );
-      }
-      const { error: createMemError } = await admin
-        .from("workspace_members")
-        .upsert({
-          workspace_id: wsId,
-          profile_id: user.id,
-          role: "Owner",
-          spaces: navSpaces,
-        });
-      if (createMemError) {
-        return NextResponse.json(
-          { error: createMemError.message },
-          { status: 500 },
-        );
-      }
-    } else {
-      await admin
-        .from("workspaces")
-        .update({
-          name: workspaceName,
-          spaces: navSpaces,
-          kind,
-          personal: kind === "personal",
-        })
-        .eq("id", wsId);
-
-      await admin
-        .from("workspace_members")
-        .update({ spaces: navSpaces })
-        .eq("workspace_id", wsId)
-        .eq("profile_id", user.id);
-    }
+    const { workspaceId: wsId } = await ensurePersonalWorkspace({
+      admin,
+      userId: user.id,
+      workspaceName,
+      kind,
+    });
 
     return NextResponse.json({
       ok: true,

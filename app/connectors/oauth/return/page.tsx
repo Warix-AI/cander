@@ -5,8 +5,9 @@ import Link from "next/link";
 import { CanderMark } from "@/components/brand/CanderMark";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
 import { isOauthConnectorId } from "@/lib/connectors/oauth-connectors";
-import { publishOAuthHandoff } from "@/lib/connectors/oauth-handoff";
+import { publishOAuthHandoff, OAUTH_HANDOFF_STORAGE_KEY } from "@/lib/connectors/oauth-handoff";
 import { closeOAuthBrowser, isMobileShell } from "@/lib/mobile-shell";
+import { getOnboardingPendingSnapshot } from "@/lib/session";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +32,24 @@ function accountHref(connector: string | null, result: "success" | "error"): str
     params.set("connectors", "1");
   }
   params.set("result", result);
+  // Keep onboarding Apps step when OAuth returns mid-setup.
+  if (getOnboardingPendingSnapshot()) {
+    params.set("onboarding", "apps");
+  }
   return `/?${params.toString()}`;
+}
+
+function clearOAuthHandoff() {
+  try {
+    localStorage.removeItem(OAUTH_HANDOFF_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function goHomeClean(connector: string | null, result: "success" | "error") {
+  clearOAuthHandoff();
+  window.location.replace(accountHref(connector, result));
 }
 
 async function completeVerifyWithSession(sessionUri: string): Promise<boolean> {
@@ -81,9 +99,10 @@ export default function ConnectorOAuthReturnPage() {
         const ok = await completeVerifyWithSession(nextSessionUri);
         if (ok) {
           await closeOAuthBrowser();
+          clearOAuthHandoff();
           setPhase("success");
           window.setTimeout(() => {
-            window.location.replace(accountHref(connectorId, "success"));
+            goHomeClean(connectorId, "success");
           }, 600);
           return;
         }
@@ -171,6 +190,10 @@ export default function ConnectorOAuthReturnPage() {
           <a
             href={appHomeHref}
             className="mt-8 inline-flex h-10 items-center justify-center rounded-full bg-foreground px-5 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+            onClick={(event) => {
+              event.preventDefault();
+              goHomeClean(connector, "success");
+            }}
           >
             Back to Cander home
           </a>

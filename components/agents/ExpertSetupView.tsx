@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import { Bell, ChevronDown, Mail, Plus, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
@@ -27,6 +34,13 @@ type AppPick = {
 type Destination = "notifications" | "email";
 type Cadence = "day" | "week" | "month";
 
+type ExpertJob = {
+  id: string;
+  apps: AppPick[];
+  destination: Destination;
+  cadence: Cadence;
+};
+
 const DEST_LABEL: Record<Destination, string> = {
   notifications: "notification center",
   email: "email",
@@ -38,14 +52,45 @@ const CADENCE_LABEL: Record<Cadence, string> = {
   month: "every month",
 };
 
+const CADENCE_SHORT: Record<Cadence, string> = {
+  day: "daily",
+  week: "weekly",
+  month: "monthly",
+};
+
+const MAX_JOBS = 4;
+
+function newJob(): ExpertJob {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `job-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    apps: [],
+    destination: "notifications",
+    cadence: "day",
+  };
+}
+
+/** Short tab label — placeholder until real AI titles; mirrors sentence content. */
+function jobTabLabel(job: ExpertJob, index: number): string {
+  if (job.apps.length === 0) return `Job ${index + 1}`;
+  const first = connectors.find((c) => c.id === job.apps[0].connectorId)?.name
+    ?? job.apps[0].label.split(/\s+/)[0]
+    ?? "App";
+  const words = [first, CADENCE_SHORT[job.cadence]];
+  if (job.apps.length > 1) words.splice(1, 0, `+${job.apps.length - 1}`);
+  return words.slice(0, 4).join(" ");
+}
+
 /**
  * Venmo-style sentence builder for catalog Experts.
- * Extremely simple: verb + app chips + destination + cadence.
+ * Header = job tabs (Job 1 + …); body = one sentence per active job.
  */
 export function ExpertSetupView({ expertId }: { expertId: string }) {
   const { workspaceId } = useApp();
   const expert = expertCatalogEntry(expertId);
-  const verb = expert?.name ?? "Expert";
+  const verb = expert?.kind ?? "Expert";
 
   const byWorkspace = useSyncExternalStore(
     subscribeConnectorConnections,
@@ -68,11 +113,25 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
       });
   }, [byWorkspace, workspaceId]);
 
-  const [apps, setApps] = useState<AppPick[]>([]);
-  const [destination, setDestination] = useState<Destination>("notifications");
-  const [cadence, setCadence] = useState<Cadence>("day");
+  const [jobs, setJobs] = useState<ExpertJob[]>(() => [newJob()]);
+  const [activeJobId, setActiveJobId] = useState(() => jobs[0]!.id);
   const [picker, setPicker] = useState<"app" | "dest" | "cadence" | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const activeJob = jobs.find((j) => j.id === activeJobId) ?? jobs[0]!;
+
+  useEffect(() => {
+    const job = newJob();
+    setJobs([job]);
+    setActiveJobId(job.id);
+    setPicker(null);
+  }, [expertId]);
+
+  useEffect(() => {
+    if (!jobs.some((j) => j.id === activeJobId)) {
+      setActiveJobId(jobs[0]!.id);
+    }
+  }, [jobs, activeJobId]);
 
   useEffect(() => {
     const onDoc = (event: MouseEvent) => {
@@ -82,17 +141,35 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
-  const addApp = (pick: AppPick) => {
-    setApps((current) =>
-      current.some((a) => a.connectionId === pick.connectionId)
-        ? current
-        : [...current, pick],
+  const updateActive = (patch: Partial<ExpertJob>) => {
+    setJobs((current) =>
+      current.map((job) =>
+        job.id === activeJob.id ? { ...job, ...patch } : job,
+      ),
     );
+  };
+
+  const addApp = (pick: AppPick) => {
+    if (activeJob.apps.some((a) => a.connectionId === pick.connectionId)) {
+      setPicker(null);
+      return;
+    }
+    updateActive({ apps: [...activeJob.apps, pick] });
     setPicker(null);
   };
 
   const removeApp = (connectionId: string) => {
-    setApps((current) => current.filter((a) => a.connectionId !== connectionId));
+    updateActive({
+      apps: activeJob.apps.filter((a) => a.connectionId !== connectionId),
+    });
+  };
+
+  const addJob = () => {
+    if (jobs.length >= MAX_JOBS) return;
+    const job = newJob();
+    setJobs((current) => [...current, job]);
+    setActiveJobId(job.id);
+    setPicker(null);
   };
 
   return (
@@ -108,15 +185,45 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
             alt=""
             className="h-9 w-9 rounded-[10px] object-cover"
           />
-          <p className="text-[13px] tracking-[-0.01em] text-muted-foreground">
-            Build what this expert does
-          </p>
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            {jobs.map((job, index) => {
+              const selected = job.id === activeJob.id;
+              return (
+                <button
+                  key={job.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveJobId(job.id);
+                    setPicker(null);
+                  }}
+                  className={cn(
+                    "max-w-[9.5rem] truncate rounded-full px-2.5 py-1 text-[13px] tracking-[-0.01em] transition-colors",
+                    selected
+                      ? "bg-foreground/[0.08] font-medium text-foreground dark:bg-white/[0.1]"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {jobTabLabel(job, index)}
+                </button>
+              );
+            })}
+            {jobs.length < MAX_JOBS ? (
+              <button
+                type="button"
+                aria-label="Add job"
+                onClick={addJob}
+                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+              >
+                <Plus className="h-4 w-4" strokeWidth={2.2} />
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-3 text-[28px] font-medium leading-[1.35] tracking-[-0.03em] text-foreground sm:text-[32px]">
           <span>{verb}</span>
 
-          {apps.length === 0 ? (
+          {activeJob.apps.length === 0 ? (
             <ChipButton
               active={picker === "app"}
               onClick={() => setPicker(picker === "app" ? null : "app")}
@@ -125,8 +232,11 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
               an app
             </ChipButton>
           ) : (
-            apps.map((app, index) => (
-              <span key={app.connectionId} className="inline-flex items-baseline gap-x-2">
+            activeJob.apps.map((app, index) => (
+              <span
+                key={app.connectionId}
+                className="inline-flex items-baseline gap-x-2"
+              >
                 {index > 0 ? (
                   <span className="font-normal text-muted-foreground/70">,</span>
                 ) : null}
@@ -139,7 +249,7 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
             ))
           )}
 
-          {apps.length > 0 ? (
+          {activeJob.apps.length > 0 ? (
             <ChipButton
               active={picker === "app"}
               onClick={() => setPicker(picker === "app" ? null : "app")}
@@ -158,12 +268,12 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
             active={picker === "dest"}
             onClick={() => setPicker(picker === "dest" ? null : "dest")}
           >
-            {destination === "notifications" ? (
+            {activeJob.destination === "notifications" ? (
               <Bell className="h-4 w-4" strokeWidth={1.8} />
             ) : (
               <Mail className="h-4 w-4" strokeWidth={1.8} />
             )}
-            {DEST_LABEL[destination]}
+            {DEST_LABEL[activeJob.destination]}
             <ChevronDown className="h-3.5 w-3.5 opacity-50" strokeWidth={2} />
           </ChipButton>
 
@@ -171,7 +281,7 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
             active={picker === "cadence"}
             onClick={() => setPicker(picker === "cadence" ? null : "cadence")}
           >
-            {CADENCE_LABEL[cadence]}
+            {CADENCE_LABEL[activeJob.cadence]}
             <ChevronDown className="h-3.5 w-3.5 opacity-50" strokeWidth={2} />
           </ChipButton>
         </div>
@@ -184,7 +294,7 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
               </p>
             ) : (
               connectedApps.map((app) => {
-                const selected = apps.some(
+                const selected = activeJob.apps.some(
                   (a) => a.connectionId === app.connectionId,
                 );
                 return (
@@ -201,9 +311,7 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
                     }
                     className={cn(
                       "flex w-full items-center gap-3 rounded-[12px] px-2.5 py-2.5 text-left transition-colors",
-                      selected
-                        ? "opacity-40"
-                        : "hover:bg-muted/60",
+                      selected ? "opacity-40" : "hover:bg-muted/60",
                     )}
                   >
                     <ConnectorMark id={app.icon} size="nav" />
@@ -232,12 +340,12 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
                 key={id}
                 type="button"
                 onClick={() => {
-                  setDestination(id);
+                  updateActive({ destination: id });
                   setPicker(null);
                 }}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-[12px] px-2.5 py-2.5 text-left transition-colors hover:bg-muted/60",
-                  destination === id && "bg-muted/50",
+                  activeJob.destination === id && "bg-muted/50",
                 )}
               >
                 <Icon className="h-4 w-4 text-muted-foreground" strokeWidth={1.8} />
@@ -260,12 +368,12 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
                 key={id}
                 type="button"
                 onClick={() => {
-                  setCadence(id);
+                  updateActive({ cadence: id });
                   setPicker(null);
                 }}
                 className={cn(
                   "flex w-full items-center rounded-[12px] px-2.5 py-2.5 text-left text-[15px] tracking-[-0.01em] transition-colors hover:bg-muted/60",
-                  cadence === id && "bg-muted/50",
+                  activeJob.cadence === id && "bg-muted/50",
                 )}
               >
                 {label}
@@ -273,11 +381,6 @@ export function ExpertSetupView({ expertId }: { expertId: string }) {
             ))}
           </PickerCard>
         ) : null}
-
-        <p className="mt-auto pt-16 text-[13px] leading-relaxed text-muted-foreground">
-          Keep it short or stack more apps — this sentence is what the expert
-          will run.
-        </p>
       </div>
     </div>
   );

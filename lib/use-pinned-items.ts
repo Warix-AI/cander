@@ -36,6 +36,8 @@ export type PinnedItem = {
   projectKind?: ProjectKind;
   /** Catalog expert pin (sidebar Experts) — not a real space project yet. */
   expertCatalog?: boolean;
+  /** Expert type for hover (“Summarize expert”). */
+  expertKind?: string;
   /** Live preview image URL (project cover or chat image). */
   coverImage?: string;
   /** Banner gradient class when cover is a preset (projects). */
@@ -185,6 +187,7 @@ export function usePinnedItems() {
             title: expert.name,
             projectKind: "automation",
             expertCatalog: true,
+            expertKind: expert.kind,
             icon: expert.icon,
             coverImage: expert.icon,
           });

@@ -1,15 +1,26 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import {
   OAUTH_HANDOFF_CHANNEL,
   OAUTH_HANDOFF_MESSAGE,
   OAUTH_HANDOFF_STORAGE_KEY,
-  oauthReturnPath,
   type OAuthHandoffPayload,
 } from "@/lib/connectors/oauth-handoff";
+import { claimConnectorOAuthSession } from "@/lib/api/connector-client";
+import {
+  patchConnectorConnectionForWorkspace,
+  replaceConnectorConnectionsForWorkspace,
+} from "@/lib/connector-connections-store";
+import { fetchConnectorConnections } from "@/lib/api/connector-client";
 import { isMobileShell } from "@/lib/mobile-shell";
+import { getWorkspaceSnapshot } from "@/lib/session";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/data-backend";
+
+function personalWorkspaceIdForUser(userId: string) {
+  return `ws-${userId.replace(/-/g, "")}`;
+}
 
 function isHandoffPayload(data: unknown): data is OAuthHandoffPayload {
   if (!data || typeof data !== "object") return false;
@@ -21,26 +32,58 @@ function isHandoffPayload(data: unknown): data is OAuthHandoffPayload {
   );
 }
 
-function routeForHandoff(
-  router: ReturnType<typeof useRouter>,
-  payload: OAuthHandoffPayload,
-) {
-  const path = oauthReturnPath({
-    sessionUri: payload.sessionUri,
-    connectorId:
-      typeof payload.connectorId === "string" ? payload.connectorId : null,
-  });
-  router.replace(path);
+async function resolveWorkspaceId(): Promise<string | null> {
+  const fromSession = getWorkspaceSnapshot()?.trim();
+  if (fromSession) return fromSession;
+  if (!isSupabaseConfigured()) return null;
+  try {
+    const supabase = createSupabaseBrowserClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user?.id) return personalWorkspaceIdForUser(user.id);
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/**
+ * Finish a parked OAuth session in the signed-in Cander window.
+ * Never navigates to `/connectors/oauth/return` — that page is for the
+ * unsigned popup/tab and was causing a home ↔ return redirect loop.
+ */
+async function claimHandoffInPlace(_payload: OAuthHandoffPayload) {
+  try {
+    localStorage.removeItem(OAUTH_HANDOFF_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+
+  const workspaceId = await resolveWorkspaceId();
+  if (!workspaceId) return;
+
+  try {
+    const claimed = await claimConnectorOAuthSession({ workspaceId });
+    if (claimed.claimed && claimed.connection) {
+      patchConnectorConnectionForWorkspace(workspaceId, claimed.connection);
+      return;
+    }
+    const connections = await fetchConnectorConnections(workspaceId);
+    replaceConnectorConnectionsForWorkspace(workspaceId, connections);
+  } catch {
+    // Non-fatal — Apps UI / onboarding poll will retry.
+  }
 }
 
 /**
  * Completes connector OAuth when:
  * - OS opens cander://oauth/return?...
  * - Another tab/window publishes a session_uri handoff (Safari finish page)
+ *
+ * Web: always claim in-place. Do not router.replace to the return page.
  */
 export function ConnectorOAuthDeepLinkListener() {
-  const router = useRouter();
-
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -58,7 +101,7 @@ export function ConnectorOAuthDeepLinkListener() {
       const sessionUri = parsed.searchParams.get("session_uri")?.trim();
       if (!sessionUri) return;
       const connector = parsed.searchParams.get("connector")?.trim();
-      routeForHandoff(router, {
+      void claimHandoffInPlace({
         type: OAUTH_HANDOFF_MESSAGE,
         sessionUri,
         connectorId: connector,
@@ -68,12 +111,7 @@ export function ConnectorOAuthDeepLinkListener() {
     const onMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       if (!isHandoffPayload(event.data)) return;
-      try {
-        localStorage.removeItem(OAUTH_HANDOFF_STORAGE_KEY);
-      } catch {
-        // ignore
-      }
-      routeForHandoff(router, event.data);
+      void claimHandoffInPlace(event.data);
     };
 
     const onStorage = (event: StorageEvent) => {
@@ -81,8 +119,7 @@ export function ConnectorOAuthDeepLinkListener() {
       try {
         const parsed = JSON.parse(event.newValue) as unknown;
         if (!isHandoffPayload(parsed)) return;
-        localStorage.removeItem(OAUTH_HANDOFF_STORAGE_KEY);
-        routeForHandoff(router, parsed);
+        void claimHandoffInPlace(parsed);
       } catch {
         // ignore
       }
@@ -96,12 +133,7 @@ export function ConnectorOAuthDeepLinkListener() {
       channel = new BroadcastChannel(OAUTH_HANDOFF_CHANNEL);
       channel.onmessage = (event) => {
         if (!isHandoffPayload(event.data)) return;
-        try {
-          localStorage.removeItem(OAUTH_HANDOFF_STORAGE_KEY);
-        } catch {
-          // ignore
-        }
-        routeForHandoff(router, event.data);
+        void claimHandoffInPlace(event.data);
       };
     } catch {
       channel = null;
@@ -113,8 +145,7 @@ export function ConnectorOAuthDeepLinkListener() {
       if (raw) {
         const parsed = JSON.parse(raw) as unknown;
         if (isHandoffPayload(parsed)) {
-          localStorage.removeItem(OAUTH_HANDOFF_STORAGE_KEY);
-          routeForHandoff(router, parsed);
+          void claimHandoffInPlace(parsed);
         }
       }
     } catch {
@@ -155,7 +186,7 @@ export function ConnectorOAuthDeepLinkListener() {
       channel?.close();
       removeAppUrl();
     };
-  }, [router]);
+  }, []);
 
   return null;
 }

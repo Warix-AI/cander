@@ -29,6 +29,7 @@ import {
 } from "@/components/shell/ComposerVoice";
 import { connectors } from "@/lib/data";
 import { APP_MESSAGE_PLACEHOLDER } from "@/lib/app-brand";
+import { consumeOnboardingComposerHint } from "@/lib/onboarding/composer-hint";
 import {
   browsingFocusComposerPlaceholder,
   getBrowsingFocusServerSnapshot,
@@ -271,6 +272,7 @@ export function Composer({
     standaloneBrowserOpen,
     mobileSurface,
   } = useApp();
+  const [onboardingHint] = useState(() => consumeOnboardingComposerHint());
   const { openCreate, modal: createModal } = useCreateProjectFlow(
     (projectId) => {
       openProject(projectId, {
@@ -1632,6 +1634,7 @@ export function Composer({
       ? `Change the ${labelFor(selectedId)}…`
       : browsingFocusHint ??
         connectorFocusHint ??
+        onboardingHint ??
         APP_MESSAGE_PLACEHOLDER);
 
   /** Mobile / dock: 6 lines; desktop new-chat & shell: 8 lines. */
