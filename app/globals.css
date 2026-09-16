@@ -26,7 +26,8 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.87 0 0);
-  --app-canvas: oklch(0.94 0.003 265);
+  /* Desktop canvas around floating islands — pure white (islands stay frosted). */
+  --app-canvas: oklch(1 0 0);
   --space-canvas: oklch(0.96 0.002 265);
   --background: var(--app-canvas);
   --sidebar: var(--app-canvas);
@@ -814,6 +815,17 @@ html.dark .courier-app-appearance[data-palette="mono"] {
   --space-canvas: oklch(0.12 calc(var(--app-chroma) * 0.25) var(--app-hue));
 }
 
+/* Keep the area around floating islands pure white / black (don't tint the canvas). */
+html:not(.dark) .courier-app-appearance {
+  --app-canvas: oklch(1 0 0);
+  --background: oklch(1 0 0);
+}
+
+html.dark .courier-app-appearance {
+  --app-canvas: #000;
+  --background: #000;
+}
+
 .courier-app-appearance .rounded-box {
   border-radius: var(--radius);
 }
@@ -1467,15 +1479,23 @@ html:not(.dark) .light-surface {
     0 4px 12px oklch(0 0 0 / 0.03);
 }
 
-/* Desktop islands: frosted glass over a soft canvas (macOS Settings-like). */
+/* Desktop islands: frosted glass over the white/black canvas (macOS Settings-like). */
 .shell-island {
-  background: oklch(1 0 0 / 0.66);
   -webkit-backdrop-filter: blur(36px) saturate(160%);
   backdrop-filter: blur(36px) saturate(160%);
+}
+
+/* Light: same denser cool wash as the menu — readable on pure white canvas. */
+html:not(.dark) .shell-island {
+  background: linear-gradient(
+    165deg,
+    oklch(0.985 0.005 250 / 0.96),
+    oklch(0.968 0.008 250 / 0.9)
+  );
   box-shadow:
-    0 0 0 0.5px oklch(0 0 0 / 0.04),
-    0 1px 1px oklch(0 0 0 / 0.02),
-    0 6px 20px oklch(0 0 0 / 0.045);
+    0 0 0 0.5px oklch(0 0 0 / 0.06),
+    0 1px 1px oklch(0 0 0 / 0.03),
+    0 8px 28px oklch(0 0 0 / 0.055);
 }
 
 html.dark .shell-island {
@@ -1488,7 +1508,11 @@ html.dark .shell-island {
 
 /* Light: sidebar reads denser / cooler than content islands (macOS Settings). */
 html:not(.dark) .shell-island-sidebar {
-  background: oklch(0.97 0.006 250 / 0.92);
+  background: linear-gradient(
+    165deg,
+    oklch(0.978 0.006 250 / 0.96),
+    oklch(0.96 0.008 250 / 0.92)
+  );
   box-shadow:
     0 0 0 0.5px oklch(0 0 0 / 0.05),
     0 1px 1px oklch(0 0 0 / 0.025),
