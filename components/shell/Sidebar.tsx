@@ -5,6 +5,7 @@ import {
   AudioLines,
   CircleUser,
   GripVertical,
+  MessageSquare,
   SquarePen,
   type LucideIcon,
 } from "lucide-react";
@@ -57,7 +58,7 @@ const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 
 /** Top mode strip — Apps / Experts / Chats. */
-const SIDEBAR_SEGMENT_IDS = PRIMARY_PIN_SECTION_IDS;
+const SIDEBAR_SEGMENT_IDS = ["connectors", "agents", "chats"] as const;
 type SidebarSegmentId = (typeof SIDEBAR_SEGMENT_IDS)[number];
 const SEGMENT_STORAGE_KEY = "cander-sidebar-segment";
 

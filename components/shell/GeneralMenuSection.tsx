@@ -118,7 +118,7 @@ export function GeneralMenuBody({
   const setQuery = onQueryChange ?? setInternalQuery;
 
   const rows = useMemo(
-    () => buildGeneralMenuRows(entitlements, isPlatformAdmin),
+    () => buildGeneralMenuRows(entitlements, isPlatformAdmin === true),
     [entitlements, isPlatformAdmin],
   );
 
