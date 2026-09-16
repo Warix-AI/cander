@@ -166,19 +166,24 @@ export function RightPanelToggleDock() {
   });
 
   // Only when collapsed — open layouts already host PanelToggle in chrome.
-  // Leaving this mounted painted a permanent bg-background chip over the
-  // header control and looked like a stuck hover.
+  // Connector top chrome keeps the toggle in-place when collapsed — skip the
+  // dock so it doesn't jump up/right or paint a stuck highlight chip.
   if (mobile || !canPanel || panelMode !== "collapsed") return null;
+  if (floating && connectorId) return null;
 
   return (
     <div
       className={cn(
-        "pointer-events-none absolute top-0 right-0 z-50 hidden h-11 items-center gap-1 px-3 lg:flex",
-        floating ? "pt-3 pr-3" : "pt-0 pr-3",
+        // Match the open-state chrome row (h-11 / 45px) inside the island —
+        // not the outer float gap above it.
+        "pointer-events-none absolute z-50 hidden items-center lg:flex",
+        floating
+          ? "top-2.5 right-2.5 h-[45px] pr-2"
+          : "top-0 right-0 h-11 pr-3",
       )}
       onPointerLeave={clearBrowserChromeHovers}
     >
-      <PanelToggle docked className="pointer-events-auto bg-background" />
+      <PanelToggle className="pointer-events-auto" />
     </div>
   );
 }

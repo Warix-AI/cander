@@ -3,7 +3,7 @@
 import { ConnectorLoadingState } from "@/components/connectors/views/ConnectorLoadingState";
 import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
-import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 /** Shared chrome contract for Calendar / Drive / Sheets / Docs panels. */
@@ -50,13 +50,16 @@ export function WorkspacePanelFrame({
   status?: string | null;
   error?: string | null;
 }) {
+  const floating = useShellStyle() === "floating";
   return (
     <div
       className={cn(
         "flex h-full min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden",
-        // Desktop keeps a solid canvas. Mobile stays transparent so lists can
-        // scroll under the glass header (Gmail pattern).
-        "bg-white dark:bg-space-canvas max-lg:bg-transparent max-lg:dark:bg-transparent",
+        // Floating islands supply the glass surface; classic keeps a solid fill.
+        // Mobile stays transparent so lists can scroll under the glass header.
+        floating
+          ? "bg-transparent"
+          : "bg-white dark:bg-space-canvas max-lg:bg-transparent max-lg:dark:bg-transparent",
       )}
     >
       <div className="relative flex min-h-0 min-w-0 max-w-full flex-1 flex-col overflow-hidden">
@@ -144,7 +147,7 @@ export function WorkspaceListRow({
       type="button"
       onClick={onClick}
       className={cn(
-        "flex w-full gap-3 border-b border-black/5 px-4 py-3 text-left transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/[0.04]",
+        "flex w-full gap-3 border-b border-black/[0.035] px-4 py-3 text-left transition-colors hover:bg-black/[0.03] dark:border-white/[0.06] dark:hover:bg-white/[0.04]",
         active && "bg-black/[0.04] dark:bg-white/[0.05]",
       )}
     >

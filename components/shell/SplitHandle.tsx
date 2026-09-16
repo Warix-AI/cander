@@ -27,7 +27,9 @@ export function SplitHandle({
       aria-label={label}
       className={cn(
         "relative z-10 shrink-0 cursor-col-resize",
-        overlay ? "w-0" : "w-px bg-sidebar-border hover:bg-chart-2/50",
+        overlay
+          ? "w-px bg-black/[0.08] hover:bg-black/[0.14] dark:bg-white/[0.1] dark:hover:bg-white/[0.16]"
+          : "w-px bg-sidebar-border hover:bg-chart-2/50",
       )}
       onPointerDown={(event) => {
         if (event.button !== 0) return;

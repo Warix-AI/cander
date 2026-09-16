@@ -30,7 +30,7 @@ export function PinPreviewThumb({
         alt=""
         draggable={false}
         className={cn(
-          "h-3.5 w-3.5 shrink-0 rounded-full object-cover object-center",
+          "h-4 w-4 shrink-0 rounded-full object-cover object-center",
           className,
         )}
       />
@@ -40,7 +40,7 @@ export function PinPreviewThumb({
   return (
     <span
       className={cn(
-        "relative h-3.5 w-3.5 shrink-0 overflow-hidden rounded-[3px]",
+        "relative h-4 w-4 shrink-0 overflow-hidden rounded-[3px]",
         className,
       )}
     >

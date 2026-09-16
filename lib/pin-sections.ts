@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   AppWindow,
   Blocks,
-  Bot,
+  Brain,
   Image as ImageIcon,
   Layout,
   MessageSquare,
@@ -11,7 +11,7 @@ import {
 import type { ProjectKind } from "@/lib/space-entities";
 import type { PinKind, SpaceId } from "@/lib/types";
 
-/** Sidebar expandable pin folders — look like New / Canvas rows. */
+/** Sidebar expandable pin folders — look like New / Apps / Chats rows. */
 export type PinSectionId =
   | "connectors"
   | "agents"
@@ -21,14 +21,24 @@ export type PinSectionId =
   | "searches"
   | "chats";
 
-/** Agents section sits directly under Connectors (user-facing: Experts). */
+/**
+ * Pin folder order. Apps → Experts → Chats sit in the primary New card;
+ * remaining folders render below.
+ */
 export const PIN_SECTION_ORDER: PinSectionId[] = [
   "connectors",
   "agents",
+  "chats",
   "websites",
   "apps",
   "images",
   "searches",
+];
+
+/** Sections that live inside the New / Apps / Experts / Chats inset card. */
+export const PRIMARY_PIN_SECTION_IDS: PinSectionId[] = [
+  "connectors",
+  "agents",
   "chats",
 ];
 
@@ -43,10 +53,10 @@ export const PIN_SECTION_LABEL: Record<PinSectionId, string> = {
   chats: "Chats",
 };
 
-/** Each folder uses a distinct glyph (Canvas keeps Brush separately). */
+/** Each folder uses a distinct glyph. */
 export const PIN_SECTION_ICONS: Record<PinSectionId, LucideIcon> = {
   connectors: Blocks,
-  agents: Bot,
+  agents: Brain,
   websites: Layout,
   apps: AppWindow,
   images: ImageIcon,
@@ -118,10 +128,35 @@ export function groupPinnedItemsBySection<T extends PinSectionItem>(
 export function ensureAppsPinSection<T extends PinSectionItem>(
   groups: { id: PinSectionId; items: T[] }[],
 ): { id: PinSectionId; items: T[] }[] {
-  if (groups.some((group) => group.id === "connectors")) return groups;
-  const empty = { id: "connectors" as const, items: [] as T[] };
+  return ensurePinSection(groups, "connectors");
+}
+
+/** Ensure the Chats pin folder exists even with no pinned threads yet. */
+export function ensureChatsPinSection<T extends PinSectionItem>(
+  groups: { id: PinSectionId; items: T[] }[],
+): { id: PinSectionId; items: T[] }[] {
+  return ensurePinSection(groups, "chats");
+}
+
+/** Primary sidebar card folders — Apps, Experts, and Chats always available. */
+export function ensurePrimaryPinSections<T extends PinSectionItem>(
+  groups: { id: PinSectionId; items: T[] }[],
+): { id: PinSectionId; items: T[] }[] {
+  let next = groups;
+  for (const id of PRIMARY_PIN_SECTION_IDS) {
+    next = ensurePinSection(next, id);
+  }
+  return next;
+}
+
+function ensurePinSection<T extends PinSectionItem>(
+  groups: { id: PinSectionId; items: T[] }[],
+  id: PinSectionId,
+): { id: PinSectionId; items: T[] }[] {
+  if (groups.some((group) => group.id === id)) return groups;
+  const empty = { id, items: [] as T[] };
   const orderIndex = new Map(
-    PIN_SECTION_ORDER.map((id, index) => [id, index] as const),
+    PIN_SECTION_ORDER.map((sectionId, index) => [sectionId, index] as const),
   );
   const next = [...groups, empty];
   next.sort(

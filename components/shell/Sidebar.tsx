@@ -2,145 +2,132 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import {
-  ArrowLeft,
-  Activity,
-  Bell,
-  Building2,
-  ChartNoAxesColumn,
-  CreditCard,
+  AudioLines,
+  CircleUser,
   GripVertical,
-  LayoutGrid,
-  MessageSquare,
-  Mic,
-  Palette,
   SquarePen,
-  UserRound,
+  type LucideIcon,
 } from "lucide-react";
-import { AccountMenu } from "@/components/shell/AccountMenu";
-import { VoiceControl } from "@/components/shell/VoiceControl";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { PinControl } from "@/components/shell/PinControl";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
-import {
-  PinSectionFolder,
-  pinSectionHeaderClass,
-} from "@/components/shell/PinSectionFolder";
-import { PinnedEmptyHint } from "@/components/shell/PinnedEmptyHint";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceRail } from "@/components/shell/WorkspaceRail";
 import { useApp } from "@/components/app/AppProvider";
 import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
-import { visibleSettingsTabs } from "@/lib/settings-nav";
 import { workspacesFor } from "@/lib/entitlements";
 import {
-  PRIMARY_NAV_CARD_ACTIVE,
-  PRIMARY_NAV_CARD_HOVER,
-  PRIMARY_NAV_CARD_RADIUS_FIRST,
-  PRIMARY_NAV_CARD_RADIUS_LAST,
+  SIDEBAR_ROW,
+  SIDEBAR_ROW_HOVER,
+  SIDEBAR_ROW_ICON,
+  SIDEBAR_SEGMENT_ACTIVE,
 } from "@/lib/mobile-menu-styles";
+import { usePinDisplayPrefs } from "@/lib/pin-display-prefs";
 import {
-  usePinDisplayPrefs,
-  usePinSectionCollapse,
-} from "@/lib/pin-display-prefs";
-import {
-  ensureAppsPinSection,
+  ensurePrimaryPinSections,
   groupPinnedItemsBySection,
   PIN_SECTION_ICONS,
   PIN_SECTION_LABEL,
+  PRIMARY_PIN_SECTION_IDS,
+  type PinSectionId,
 } from "@/lib/pin-sections";
-import {
-  getAppsMoreOpenServerSnapshot,
-  getAppsMoreOpenSnapshot,
-  setAppsMoreOpen,
-  subscribeAppsMoreOpen,
-} from "@/lib/apps-more-prefs";
-import { spaceIconTint } from "@/lib/space-icons";
-import { type SidebarNavId, isExtraNavId, isComingSoonNav, navSpaceMatches } from "@/lib/spaces";
 import {
   setSidebarPeeking,
   subscribeSidebarPeekHold,
   subscribeSidebarPeekRelease,
 } from "@/lib/sidebar-peek";
-import { useMainNavItems } from "@/lib/use-main-nav-items";
 import { usePinnedItems, type PinnedItem } from "@/lib/use-pinned-items";
 import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
-import type { PinKind, SettingsTab, SpaceId } from "@/lib/types";
-import {
-  skipMobilePagerTransitionOnce,
-  skipMobileSpaceEnterOnce,
-} from "@/lib/mobile-nav-transition";
+import type { PinKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
-import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import {
+  SHELL_FLOAT_MARGIN,
+  SHELL_G3_RADIUS,
+  SHELL_ISLAND_SIDEBAR,
+  useShellStyle,
+} from "@/lib/shell-chrome";
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 
-const settingsIcons: Record<SettingsTab, typeof Building2> = {
-  organization: Building2,
-  workspaces: LayoutGrid,
-  plans: CreditCard,
-  usage: ChartNoAxesColumn,
-  voice: Mic,
-  notifications: Bell,
-  general: UserRound,
-  appearance: Palette,
+/** Top mode strip — Apps / Experts / Chats. */
+const SIDEBAR_SEGMENT_IDS = PRIMARY_PIN_SECTION_IDS;
+type SidebarSegmentId = (typeof SIDEBAR_SEGMENT_IDS)[number];
+const SEGMENT_STORAGE_KEY = "cander-sidebar-segment";
+
+const SEGMENT_META: Record<
+  SidebarSegmentId,
+  { label: string; Icon: LucideIcon }
+> = {
+  connectors: {
+    label: PIN_SECTION_LABEL.connectors,
+    Icon: PIN_SECTION_ICONS.connectors,
+  },
+  agents: {
+    label: PIN_SECTION_LABEL.agents,
+    Icon: PIN_SECTION_ICONS.agents,
+  },
+  chats: {
+    label: PIN_SECTION_LABEL.chats,
+    Icon: PIN_SECTION_ICONS.chats,
+  },
 };
+
+/** ~10% under prior 20px mode icons. */
+const SEGMENT_ICON_CLASS = "h-[18px] w-[18px] shrink-0";
+
+function readStoredSegment(): SidebarSegmentId {
+  if (typeof window === "undefined") return "connectors";
+  const raw = window.localStorage.getItem(SEGMENT_STORAGE_KEY);
+  if (raw && (SIDEBAR_SEGMENT_IDS as readonly string[]).includes(raw)) {
+    return raw as SidebarSegmentId;
+  }
+  return "connectors";
+}
 
 export function Sidebar() {
   const {
-    view,
     spaceId,
     threadId,
     projectId,
     sidebarOpen,
-    newChat,
-    openSpace,
-    openRecents,
-    openBrowser,
     reorderPins,
     openThread,
     openProject,
     openConnector,
     openConnectorConnect,
-    openOverlay,
     connectorId,
     entitlements,
     actor,
-    settingsTab,
-    setSettingsTab,
     workspaceRailOpen,
-    canGoBack,
-    goBack,
     workspaceId,
+    view,
+    newChat,
+    toggleVoice,
+    voiceActive,
+    voiceConnecting,
+    openSettings,
   } = useApp();
 
   const runningExperts = useRunningExpertState(workspaceId);
 
-  const mainNavItems = useMainNavItems({ spacesOnly: true });
   const { pinnedItems } = usePinnedItems();
   const { prefs: pinPrefs } = usePinDisplayPrefs();
-  const { isCollapsed, toggle: togglePinSection, open: openPinSection, closeAll: closePinSections } =
-    usePinSectionCollapse();
-  const appsMoreOpen = useSyncExternalStore(
-    subscribeAppsMoreOpen,
-    getAppsMoreOpenSnapshot,
-    getAppsMoreOpenServerSnapshot,
-  );
   useSyncExternalStore(
     subscribeWorkspaceCatalog,
     getWorkspaceCatalogSnapshot,
     getWorkspaceCatalogServerSnapshot,
   );
-  const inSettings = view === "settings";
   const [peek, setPeek] = useState(false);
   const [peekVisible, setPeekVisible] = useState(false);
   const [pinDragKey, setPinDragKey] = useState<string | null>(null);
+  const [segment, setSegment] = useState<SidebarSegmentId>(readStoredSegment);
   const peekCloseTimer = useRef<number | null>(null);
   const peekExitTimer = useRef<number | null>(null);
   const edgeRef = useRef<HTMLDivElement>(null);
@@ -247,44 +234,30 @@ export function Sidebar() {
     workspaceRailOpen &&
     workspaceCount >= 2;
 
-  const settingsNav = visibleSettingsTabs(entitlements);
-  // New stays active for detached home chat (newChat always assigns a threadId).
-  const chatActive =
-    view === "chat" && !spaceId && !projectId && !connectorId;
-
-  const activePinnedProject =
-    Boolean(projectId) &&
-    pinnedItems.some(
-      (item) => item.kind === "project" && item.id === projectId,
-    );
-
-  const navActive = (id: SidebarNavId) => {
-    if (id === "recents") return view === "recents";
-    // Pinned connector detail — highlight the pin, not the Connectors tab.
-    if (id === "connectors" && connectorId) return false;
-    // Pinned project — highlight the pin row, not the space.
-    if (
-      activePinnedProject &&
-      (id === spaceId ||
-        (id === "studio" &&
-          (spaceId === "build" ||
-            spaceId === "research" ||
-            spaceId === "home")))
-    )
-      return false;
-    return (
-      navSpaceMatches(id, spaceId) && (view === "space" || view === "chat")
-    );
-  };
+  const selectSegment = useCallback((next: SidebarSegmentId) => {
+    setSegment(next);
+    try {
+      window.localStorage.setItem(SEGMENT_STORAGE_KEY, next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const pinGroups = useMemo(
     () =>
-      ensureAppsPinSection(
+      ensurePrimaryPinSections(
         groupPinnedItemsBySection(pinnedItems, {
           visibleKinds: pinPrefs.visible,
         }),
       ),
     [pinnedItems, pinPrefs],
+  );
+  const primaryPinGroups = useMemo(
+    () =>
+      pinGroups.filter((group) =>
+        PRIMARY_PIN_SECTION_IDS.includes(group.id),
+      ),
+    [pinGroups],
   );
 
   const pinRowActive = (item: PinnedItem) => {
@@ -304,26 +277,30 @@ export function Sidebar() {
           ? `thread:${threadId}`
           : null;
 
-  // Expand the owning folder only when navigation changes — not while the
-  // user opens other pin sections to browse. Chats never auto-opens: only
-  // the user expanding that folder should show the list.
+  // Follow destination into Apps / Experts / Chats.
   useEffect(() => {
+    if (view === "settings") return;
     if (!activePinKey) return;
     const owning = pinGroups.find((group) =>
       group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
     );
-    if (!owning || owning.id === "chats") return;
-    openPinSection(owning.id);
+    if (!owning) return;
+    if (!(PRIMARY_PIN_SECTION_IDS as readonly string[]).includes(owning.id)) {
+      return;
+    }
+    selectSegment(owning.id as SidebarSegmentId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pinGroups read on nav change only
-  }, [activePinKey, openPinSection]);
+  }, [view, activePinKey, selectSegment]);
 
-  const openNav = (id: SidebarNavId) => {
-    if (isComingSoonNav(id)) return;
-    closePinSections();
-    if (id === "browser") openBrowser();
-    else if (id === "recents") openRecents();
-    else openSpace(id);
-  };
+  const activeSegmentGroup = useMemo(
+    () =>
+      primaryPinGroups.find((group) => group.id === segment) ??
+      primaryPinGroups[0] ?? {
+        id: "connectors" as PinSectionId,
+        items: [] as PinnedItem[],
+      },
+    [primaryPinGroups, segment],
+  );
 
   const renderPinnedRow = (item: PinnedItem) => (
     <PinnedRow
@@ -332,7 +309,7 @@ export function Sidebar() {
       id={item.id}
       title={item.title}
       leading={<PinPreviewThumb item={item} />}
-      // Stroke marks the active child; solid blue = selected; pulse = Expert running.
+      // Row background marks the active pin; pulse = Expert running.
       inUse={pinRowActive(item)}
       running={
         item.projectKind === "automation" &&
@@ -351,6 +328,19 @@ export function Sidebar() {
       onReorder={reorderPins}
       dragActiveKey={pinDragKey}
       onDragActiveKeyChange={setPinDragKey}
+    />
+  );
+
+  const renderPinSectionChildren = (
+    group: {
+      id: PinSectionId;
+      items: PinnedItem[];
+    },
+  ) => (
+    <SidebarPinSectionBody
+      group={group}
+      renderPinnedRow={renderPinnedRow}
+      onConnect={(id) => openConnectorConnect(id)}
     />
   );
 
@@ -405,28 +395,28 @@ export function Sidebar() {
         className={cn(
           "flex min-h-0",
           chromeOutside ? "flex-1" : "h-full",
-          floating && "mb-3 mr-2",
-          floating && !macDesktop && "mt-0",
+          floating && SHELL_FLOAT_MARGIN,
+          floating && !macDesktop && "mt-2.5",
         )}
       >
       <WorkspaceRail />
-      <aside
+      <div
         className={cn(
-          "flex w-[min(273px,calc(100vw-3.5rem))] shrink-0 flex-col bg-sidebar text-sidebar-foreground lg:w-[273px]",
+          "flex w-[min(253px,calc(100vw-3.5rem))] shrink-0 flex-col text-sidebar-foreground lg:w-[253px]",
           floating
             ? cn(
-                "light-surface overflow-hidden",
+                "overflow-hidden",
+                SHELL_ISLAND_SIDEBAR,
                 SHELL_G3_RADIUS,
                 chromeOutside
-                  ? // Chrome already owns the top row; panel sits under it.
-                    cn("h-full", !showRail && "ml-3")
+                  ? cn("h-full", !showRail && "ml-2.5")
                   : cn(
-                      "mb-3 mr-2 mt-[max(0.75rem,var(--desktop-titlebar))] h-[calc(100%-0.75rem-max(0.75rem,var(--desktop-titlebar)))]",
-                      !showRail && "ml-3",
+                      "mb-2.5 mr-2 mt-[max(0.625rem,var(--desktop-titlebar))] h-[calc(100%-0.625rem-max(0.625rem,var(--desktop-titlebar)))]",
+                      !showRail && "ml-2.5",
                     ),
               )
             : cn(
-                "h-full overflow-hidden",
+                "h-full overflow-hidden bg-sidebar",
                 peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
               ),
         )}
@@ -442,275 +432,136 @@ export function Sidebar() {
       <div
         className={cn(
           "flex min-h-0 flex-1 flex-col",
-          // Same fill as chat — no hairline between menu and transcript.
         )}
       >
       {/* Web / floating — header icons live inside the menu column only. */}
       {!macDesktop ? <WindowChrome hideHistory={peeking} /> : null}
 
-      {inSettings ? (
-        <nav
+      <nav
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto px-2",
-            macDesktop || floating ? "mt-2" : "mt-3.5",
+            "flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2",
+            macDesktop || floating ? "mt-1.5" : "mt-3.5",
           )}
-          aria-label="Settings"
+          aria-label="Main"
         >
-          <button
-            type="button"
-            onClick={() => {
-              closePinSections();
-              if (canGoBack) goBack();
-              else newChat();
-            }}
-            className="mb-0.5 flex w-full items-center gap-3 rounded-[10px] px-3 py-1.5 text-left text-[15px] transition-colors duration-200 hover:bg-sidebar-accent"
-            aria-label="Back"
+          <div
+            role="tablist"
+            aria-label="Sidebar section"
+            className="flex shrink-0 gap-0.5"
           >
-            <ArrowLeft
-              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-              strokeWidth={2}
-            />
-            <span className="font-medium tracking-[-0.01em]">Back</span>
-          </button>
-          <div className="flex flex-col gap-0">
-          {settingsNav.map((tab) => {
-            const Icon = settingsIcons[tab.id];
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setSettingsTab(tab.id)}
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-[10px] px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
-                  settingsTab === tab.id
-                    ? "bg-sidebar-accent font-medium"
-                    : "hover:bg-sidebar-accent",
-                )}
-              >
-                <Icon
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  strokeWidth={2}
-                />
-                {tab.label}
-              </button>
-            );
-          })}
-          </div>
-        </nav>
-      ) : (
-        <>
-          <nav
-            className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden px-2",
-              macDesktop || floating ? "mt-2" : "mt-3.5",
-            )}
-            aria-label="Main"
-          >
-            <div className="flex min-h-0 shrink flex-col gap-0 overflow-y-auto">
-              <div
-                className={cn(
-                  "flex flex-col gap-0 p-[3px]",
-                  SHELL_G3_RADIUS,
-                  "bg-black/[0.03] dark:bg-white/[0.045]",
-                )}
-              >
+            {SIDEBAR_SEGMENT_IDS.map((id) => {
+              const { label, Icon } = SEGMENT_META[id];
+              const active = segment === id;
+              return (
                 <button
+                  key={id}
                   type="button"
-                  onClick={() => {
-                    closePinSections();
-                    newChat();
-                  }}
+                  role="tab"
+                  aria-label={label}
+                  aria-selected={active}
+                  title={label}
+                  onClick={() => selectSegment(id)}
                   className={cn(
-                    "flex w-full items-center gap-3 px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
-                    PRIMARY_NAV_CARD_RADIUS_FIRST,
-                    chatActive
-                      ? PRIMARY_NAV_CARD_ACTIVE
-                      : PRIMARY_NAV_CARD_HOVER,
+                    "flex min-w-0 items-center justify-center gap-1.5 px-1.5 py-2 transition-[background-color,box-shadow,color,backdrop-filter,flex-grow] duration-150",
+                    SHELL_G3_RADIUS,
+                    active
+                      ? cn(SIDEBAR_SEGMENT_ACTIVE, "flex-[1.35]")
+                      : "flex-1 text-muted-foreground",
                   )}
                 >
-                  <SquarePen
-                    className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                    strokeWidth={2}
-                  />
-                  <span className="min-w-0 flex-1 truncate">New</span>
+                  <Icon className={SEGMENT_ICON_CLASS} strokeWidth={1.85} />
+                  {active ? (
+                    <span className="min-w-0 truncate text-[12px] tracking-[-0.01em]">
+                      {label}
+                    </span>
+                  ) : null}
                 </button>
-                {mainNavItems.map((item, index) => (
-                  <SidebarNavButton
-                    key={item.id}
-                    id={item.id}
-                    Icon={item.Icon}
-                    label={item.label}
-                    active={navActive(item.id)}
-                    comingSoon={item.comingSoon}
-                    onOpen={openNav}
-                    cardSurface
-                    cardEdge={
-                      index === mainNavItems.length - 1 ? "last" : "middle"
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
-              <div className="h-full overflow-y-auto">
-                {pinGroups.length > 0 ? (
-                  <div className="flex flex-col gap-1">
-                    {pinGroups.map((group) => {
-                      const collapsed = isCollapsed(group.id);
-                      const SectionIcon = PIN_SECTION_ICONS[group.id];
-                      const activeChild = group.items.find((item) =>
-                        pinRowActive(item),
-                      );
-                      // Only the folder that owns the current view — not merely open.
-                      const sectionActive = Boolean(activeChild);
-                      const treeActiveKey = activeChild
-                        ? `${activeChild.kind}:${activeChild.id}`
-                        : null;
-                      return (
-                        <PinSectionFolder
-                          key={group.id}
-                          label={PIN_SECTION_LABEL[group.id]}
-                          icon={SectionIcon}
-                          expanded={!collapsed}
-                          sectionActive={sectionActive}
-                          onToggle={() => {
-                            const closing = !collapsed;
-                            const ownsView = Boolean(activeChild);
-                            togglePinSection(group.id);
-                            if (group.id === "connectors" && closing) {
-                              setAppsMoreOpen(false);
-                            }
-                            // Closing the folder that owns the current view → New.
-                            if (closing && ownsView) {
-                              skipMobilePagerTransitionOnce();
-                              skipMobileSpaceEnterOnce();
-                              window.setTimeout(() => {
-                                newChat();
-                              }, 200);
-                            }
-                          }}
-                          activeKey={treeActiveKey}
-                          deps={`${group.items
-                            .map((item) => `${item.kind}:${item.id}`)
-                            .join(",")}|more:${group.id === "connectors" ? appsMoreOpen : false}`}
-                          headerClassName={pinSectionHeaderClass(sectionActive)}
-                          iconClassName="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-                        >
-                          {group.id === "agents" ? (
-                            <button
-                              type="button"
-                              onClick={() => openOverlay("agents-activity")}
-                              className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left text-[13px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
-                            >
-                              <Activity
-                                className="h-3.5 w-3.5 shrink-0"
-                                strokeWidth={1.6}
-                              />
-                              <span className="truncate">Activity</span>
-                            </button>
-                          ) : null}
-                          {group.items.map((item) => renderPinnedRow(item))}
-                          {group.id === "connectors" ? (
-                            <AppsMoreSection
-                              listedIds={group.items.map((item) => item.id)}
-                              onConnect={(id) => openConnectorConnect(id)}
-                            />
-                          ) : null}
-                        </PinSectionFolder>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <PinnedEmptyHint />
-                )}
-              </div>
-            </div>
-          </nav>
-
-          <div className="shrink-0 space-y-0.5 px-2 pb-2">
-            <VoiceControl />
-            <AccountMenu />
+              );
+            })}
           </div>
-        </>
-      )}
+
+          <div className="relative mt-2.5 min-h-0 flex-1 overflow-hidden">
+            <div className="h-full overflow-y-auto pb-1">
+              <div className="flex flex-col gap-0.5">
+                {renderPinSectionChildren(activeSegmentGroup)}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-2 flex shrink-0 flex-col gap-0.5 border-t border-black/[0.06] pt-2 dark:border-white/[0.08]">
+            <button
+              type="button"
+              onClick={() => newChat()}
+              className={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER)}
+            >
+              <SquarePen className={SIDEBAR_ROW_ICON} strokeWidth={2} />
+              <span className="min-w-0 flex-1 truncate">New</span>
+            </button>
+            {entitlements.hasVoice ? (
+              <button
+                type="button"
+                aria-pressed={voiceActive || voiceConnecting}
+                onClick={() => toggleVoice()}
+                className={cn(
+                  SIDEBAR_ROW,
+                  SIDEBAR_ROW_HOVER,
+                  (voiceActive || voiceConnecting) && "shell-select-active",
+                )}
+              >
+                <AudioLines className={SIDEBAR_ROW_ICON} strokeWidth={2} />
+                <span className="min-w-0 flex-1 truncate">Voice</span>
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => openSettings("general")}
+              className={cn(
+                SIDEBAR_ROW,
+                SIDEBAR_ROW_HOVER,
+                view === "settings" && "shell-select-active",
+              )}
+            >
+              <CircleUser className={SIDEBAR_ROW_ICON} strokeWidth={2} />
+              <span className="min-w-0 flex-1 truncate">General</span>
+            </button>
+          </div>
+        </nav>
+
       </div>
-    </aside>
+    </div>
       </div>
     </div>
     </>
   );
 }
 
-function SidebarNavButton({
-  id,
-  Icon,
-  label,
-  active,
-  comingSoon,
-  onOpen,
-  cardSurface = false,
-  cardEdge = "middle",
+function SidebarPinSectionBody({
+  group,
+  renderPinnedRow,
+  onConnect,
 }: {
-  id: SidebarNavId;
-  Icon: (props: { className?: string; strokeWidth?: number }) => ReactNode;
-  label: string;
-  active: boolean;
-  comingSoon?: boolean;
-  onOpen: (id: SidebarNavId) => void;
-  /** Stronger hover/active when nested in the New+Canvas inset card. */
-  cardSurface?: boolean;
-  /** Asymmetric radius so the highlight follows the card curve. */
-  cardEdge?: "first" | "middle" | "last";
+  group: { id: PinSectionId; items: PinnedItem[] };
+  renderPinnedRow: (item: PinnedItem) => ReactNode;
+  onConnect: (id: string) => void;
 }) {
-  const tinted =
-    id === "home" ||
-    id === "work" ||
-    id === "build" ||
-    id === "research" ||
-    id === "studio";
-  const cardRadius =
-    cardEdge === "first"
-      ? PRIMARY_NAV_CARD_RADIUS_FIRST
-      : cardEdge === "last"
-        ? PRIMARY_NAV_CARD_RADIUS_LAST
-        : "rounded-none";
   return (
-    <button
-      type="button"
-      disabled={comingSoon}
-      aria-disabled={comingSoon || undefined}
-      onClick={() => {
-        if (!comingSoon) onOpen(id);
-      }}
-      className={cn(
-        "flex w-full items-center gap-3 px-3.5 py-2 text-left text-[15px] transition-colors duration-200",
-        cardSurface ? cardRadius : "rounded-lg",
-        comingSoon
-          ? "cursor-default opacity-70"
-          : active
-            ? cardSurface
-              ? PRIMARY_NAV_CARD_ACTIVE
-              : "bg-sidebar-accent font-medium"
-            : cardSurface
-              ? PRIMARY_NAV_CARD_HOVER
-              : "hover:bg-sidebar-accent",
-      )}
-    >
-      <Icon
+    <>
+      <div
         className={cn(
-          "h-3.5 w-3.5 shrink-0",
-          tinted ? spaceIconTint(id as SpaceId) : "text-muted-foreground",
+          "flex flex-col",
+          group.id === "connectors" ? "gap-0" : "gap-0.5",
         )}
-        strokeWidth={2}
-      />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {comingSoon ? (
-        <span className="shrink-0 rounded-full bg-sidebar-accent px-2 py-0.5 text-[11px] font-medium tracking-[0.02em] text-muted-foreground">
-          Coming soon
-        </span>
+      >
+        {group.items.map((item) => renderPinnedRow(item))}
+      </div>
+      {group.id === "connectors" ? (
+        <AppsMoreSection
+          listedIds={group.items.map((item) => item.id)}
+          onConnect={onConnect}
+          query=""
+        />
       ) : null}
-    </button>
+    </>
   );
 }
 
@@ -765,8 +616,8 @@ function PinnedRow({
       ref={rowRef}
       data-pin-tree-key={dragKey}
       className={cn(
-        "group relative flex w-full items-center rounded-lg transition-colors duration-200",
-        "hover:bg-sidebar-accent",
+        "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
+        inUse ? "shell-select-active" : SIDEBAR_ROW_HOVER,
         dragging && "opacity-40",
       )}
       onDragOver={(event) => {
@@ -810,14 +661,19 @@ function PinnedRow({
         type="button"
         onClick={onOpen}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-3 truncate py-1.5 pr-1 pl-1.5 text-left text-[15px]",
+          // Connected apps: ~10% tighter vertical padding than discover rows.
+          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
+          kind === "connector" ? "py-[7.2px]" : "py-2",
           inUse && "font-medium",
         )}
       >
-        <span data-pin-leading className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible">
+        <span
+          data-pin-leading
+          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
+        >
           {leading ?? (
             <MessageSquare
-              className="h-4 w-4 shrink-0 text-muted-foreground"
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
               strokeWidth={2}
             />
           )}
@@ -852,20 +708,13 @@ function PinnedRow({
         <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
       {kind === "connector" ? (
-        running || inUse ? (
+        running ? (
           <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
-            {running ? (
-              <span
-                aria-hidden
-                title="Expert running"
-                className="pointer-events-none h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4]"
-              />
-            ) : (
-              <span
-                aria-hidden
-                className="pointer-events-none h-1.5 w-1.5 rounded-full bg-[#0b4fc4]"
-              />
-            )}
+            <span
+              aria-hidden
+              title="Expert running"
+              className="pointer-events-none h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4]"
+            />
           </div>
         ) : null
       ) : (
@@ -875,11 +724,6 @@ function PinnedRow({
               aria-hidden
               title="Expert running"
               className="pointer-events-none absolute h-1.5 w-1.5 animate-pulse rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
-            />
-          ) : inUse ? (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute h-1.5 w-1.5 rounded-full bg-[#0b4fc4] transition-opacity duration-150 group-hover:opacity-0"
             />
           ) : null}
           <PinControl kind={kind} id={id} />

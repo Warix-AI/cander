@@ -37,19 +37,20 @@ export function NavToggle({
 
   const canRail =
     entitlements.hasWorkspaces && !entitlements.showInviteWall;
-  const open = sidebarOpen;
-  const closingRailNext = open && canRail && workspaceRailOpen;
+  const open = canRail ? workspaceRailOpen && sidebarOpen : sidebarOpen;
 
   return (
     <button
       type="button"
       style={desktop ? DESKTOP_NO_DRAG : undefined}
       aria-label={
-        !open
-          ? "Open left panel"
-          : closingRailNext
-            ? "Hide workspaces"
-            : "Close left panel"
+        canRail
+          ? open
+            ? "Close workspaces"
+            : "Open workspaces"
+          : open
+            ? "Close left panel"
+            : "Open left panel"
       }
       onClick={() => toggleLeftPanel()}
       className={cn(
@@ -110,7 +111,7 @@ export function LeftNavToggleDock({
       className={cn(
         "pointer-events-none fixed z-50 hidden h-11 items-center lg:flex",
         floating
-          ? "top-[max(0.75rem,var(--desktop-titlebar))]"
+          ? "top-[max(0.625rem,var(--desktop-titlebar))]"
           : "top-[var(--desktop-titlebar)]",
       )}
       style={{ left: `${leftPx}px` }}

@@ -13,10 +13,21 @@ export const SHELL_G3_RADIUS_PX = 20;
 /** Electron desktop window outer radius — slightly larger than in-app G3 cards. */
 export const DESKTOP_WINDOW_RADIUS_PX = 24;
 export const SHELL_G3_RADIUS = "shell-g3-radius";
+/**
+ * Frosted island on the desktop canvas — same recipe in light and dark
+ * (foreground ink at low opacity over white / black).
+ */
+export const SHELL_ISLAND = "shell-island";
 /** G3 radius for compact controls where a 20px card radius would read as a pill. */
 export const CONNECTOR_CONTROL_RADIUS = "connector-control-radius";
-/** Floating shell inset — matches my-3 / ml-3 / mr-3 on menu and panels. */
-export const SHELL_FLOAT_INSET_PX = 12;
+/** Floating shell inset — ~8–10px between islands and window edge. */
+export const SHELL_FLOAT_INSET_PX = 10;
+/** Tailwind gap/padding twin for SHELL_FLOAT_INSET_PX (10px). */
+export const SHELL_FLOAT_GAP = "gap-2.5";
+export const SHELL_FLOAT_PAD = "py-2.5 pr-2.5";
+export const SHELL_FLOAT_MARGIN = "my-2.5 mr-2.5";
+/** Sidebar column material — slightly denser than content islands in light mode. */
+export const SHELL_ISLAND_SIDEBAR = "shell-island shell-island-sidebar";
 /** Interior of a floating shell panel — inherits light-surface / composer-shell chrome. */
 export const SHELL_PANEL_BODY = "flex h-full min-h-0 flex-col";
 /** Scrollable panel body — transparent so the white shell shows through. */

@@ -36,29 +36,44 @@ export const mobileMenuRowClass = [
   "hover:bg-black/[0.03] dark:hover:bg-white/8",
 ].join(" ");
 
+/**
+ * Desktop sidebar rows — primary nav (New / Apps / Experts / Chats / General).
+ */
+export const SIDEBAR_ROW =
+  "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[14px] tracking-[-0.01em] transition-colors duration-150";
+export const SIDEBAR_ROW_HOVER =
+  "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]";
+export const SIDEBAR_ROW_ICON =
+  "h-4 w-4 shrink-0 text-muted-foreground";
+/**
+ * Contextual secondary rows under an expanded primary section.
+ * Indent + tighter rhythm; inactive text is quieter.
+ */
+export const SIDEBAR_ROW_SECONDARY =
+  "flex w-full items-center gap-2 rounded-[7px] px-2 py-[5px] text-left text-[13px] tracking-[-0.01em] text-foreground/70 transition-colors duration-150";
+export const SIDEBAR_ROW_SECONDARY_ICON =
+  "h-3 w-3 shrink-0 text-muted-foreground/80";
+/** Glass G3 pill for the chosen Apps | Experts | Chats mode (never leaf blue). */
+export const SIDEBAR_SEGMENT_ACTIVE = "shell-segment-active";
+/** Leaf destination (Gmail, Expert, Chat). */
+export const PRIMARY_NAV_CARD_ACTIVE = "shell-select-active";
+/** @deprecated Prefer SIDEBAR_SEGMENT_ACTIVE for section chrome. */
+export const PRIMARY_NAV_PARENT_ACTIVE = "shell-segment-active";
+export const PRIMARY_NAV_CARD_HOVER = SIDEBAR_ROW_HOVER;
+
 export const mobileMenuRowActiveClass =
-  "bg-black/[0.04] font-semibold dark:bg-white/8";
+  "shell-select-active font-semibold";
 
 export const MOBILE_MENU_ICON_STROKE = 2.15;
 /** Letter-height glyphs — match desktop sidebar / connector `nav` marks. */
 export const MOBILE_MENU_ICON_SIZE = "h-3.5 w-3.5";
 
-/**
- * New / Canvas inset card hover & active.
- * Light: lift toward white (short of the menu). Dark: press darker than the card.
- * `!` beats the shared row hover baked into mobileMenuRowClass.
- */
-export const PRIMARY_NAV_CARD_ACTIVE =
-  "!bg-white/75 font-medium dark:!bg-black/40";
-export const PRIMARY_NAV_CARD_HOVER =
-  "hover:!bg-white/75 dark:hover:!bg-black/40";
-
-/** Card is G3 (20px) with 3px padding — inner highlight follows the outer curve. */
+/** @deprecated Prefer SIDEBAR_ROW — kept for mobile card edge radii. */
 export const PRIMARY_NAV_CARD_RADIUS_FIRST = "primary-nav-card-first";
 export const PRIMARY_NAV_CARD_RADIUS_LAST = "primary-nav-card-last";
 /** Single-row inset (product switcher) — all four corners; first+last conflict in CSS. */
 export const PRIMARY_NAV_CARD_RADIUS_SOLO = "primary-nav-card-solo";
-/** Mobile New/Canvas card uses 12px shell — slightly tighter inner curve. */
+/** Mobile New/Apps/Chats card uses 12px shell — slightly tighter inner curve. */
 export const PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE =
   "primary-nav-card-first-mobile";
 export const PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE =

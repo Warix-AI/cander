@@ -6,7 +6,7 @@ import { useApp } from "@/components/app/AppProvider";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { workspacesFor } from "@/lib/entitlements";
 import { useDesktopShell } from "@/lib/desktop-shell";
-import { useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, SHELL_ISLAND_SIDEBAR, useShellStyle } from "@/lib/shell-chrome";
 import {
   getWorkspaceCatalogServerSnapshot,
   getWorkspaceCatalogSnapshot,
@@ -69,7 +69,15 @@ export function WorkspaceRail() {
     <div
       className={cn(
         "flex h-full w-[58px] shrink-0 flex-col items-center",
-        floating ? "bg-transparent" : "bg-sidebar",
+        floating
+          ? cn(
+              // Match menu island height (parent already applies vertical float margin).
+              // mr-2 = 8px gap between workspace selector and menu.
+              "ml-2.5 mr-2 h-full overflow-hidden",
+              SHELL_ISLAND_SIDEBAR,
+              SHELL_G3_RADIUS,
+            )
+          : "bg-sidebar",
       )}
       aria-label="Workspaces"
     >

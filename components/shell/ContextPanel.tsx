@@ -19,10 +19,15 @@ import { showStandaloneBrowserPanel } from "@/lib/right-panel";
 import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { useMobileShell } from "@/lib/use-media-query";
 import { appConnectorById } from "@/lib/connectors/apps/definitions";
-import { SHELL_G3_RADIUS, useShellStyle } from "@/lib/shell-chrome";
+import { useShellStyle } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
-export function ContextPanel() {
+export function ContextPanel({
+  hideConnectorTopChrome = false,
+}: {
+  /** Workspace already renders the connector tab strip full-width. */
+  hideConnectorTopChrome?: boolean;
+}) {
   const {
     spaceId,
     connectorId,
@@ -71,12 +76,12 @@ export function ContextPanel() {
   return (
     <aside
       className={cn(
-        "@container flex h-full min-h-0 min-w-0 flex-col",
+        "@container flex h-full min-h-0 min-w-0 flex-col overflow-hidden",
         floatingChrome
-          ? cn("light-surface my-3 mr-3 overflow-hidden", SHELL_G3_RADIUS)
+          ? "bg-transparent"
           : mobile
-            ? cn("overflow-hidden", MOBILE_APP_BG)
-            : "overflow-hidden rounded-none border-0 bg-white shadow-none dark:bg-space-canvas",
+            ? MOBILE_APP_BG
+            : "rounded-none border-0 bg-white shadow-none dark:bg-space-canvas",
         !dragging &&
           !mobile &&
           "transition-[width] duration-[550ms] ease-[cubic-bezier(0.25,0.1,0.25,1)]",
@@ -107,7 +112,10 @@ export function ContextPanel() {
             connectorId === "gsheets" ||
             connectorId === "gdocs" ||
             Boolean(appConnectorById(connectorId))) ? (
-          <ConnectorViewHost connectorId={connectorId} />
+          <ConnectorViewHost
+            connectorId={connectorId}
+            hideTopChrome={hideConnectorTopChrome}
+          />
         ) : spaceId === "connectors" && connectorId === "apple-health" ? (
           <AppleHealthConnectorPanel />
         ) : spaceId === "connectors" ? (
@@ -122,7 +130,7 @@ export function ContextPanel() {
   );
 }
 
-export function ResizeHandle() {
+export function ResizeHandle({ overlay = false }: { overlay?: boolean }) {
   const { setPanelRatio, panelMode } = useApp();
   const mobile = useMobileShell();
   if (mobile) return null;
@@ -136,6 +144,7 @@ export function ResizeHandle() {
       from="right"
       min={0.28}
       max={0.72}
+      overlay={overlay}
       onRatio={setPanelRatio}
     />
   );

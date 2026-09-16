@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
-/** `nav` matches lucide sidebar icons (3.5×3.5, no tile). */
+/** `nav` matches lucide sidebar icons (4×4, no tile). */
 type MarkSize = "nav" | "xs" | "sm" | "md";
 
 type MarkProps = {
@@ -24,21 +24,21 @@ export function ConnectorMark({ id, className, size = "md" }: MarkProps) {
 }
 
 function tileClass(size: MarkSize) {
-  if (size === "nav") return "h-3.5 w-3.5 bg-transparent";
+  if (size === "nav") return "h-4 w-4 bg-transparent";
   if (size === "xs") return cn("h-6 w-6 bg-muted", SHELL_G3_RADIUS);
   if (size === "sm") return cn("h-8 w-8 bg-muted", SHELL_G3_RADIUS);
   return cn("h-10 w-10 bg-muted", SHELL_G3_RADIUS);
 }
 
 function brandImageSize(size: MarkSize) {
-  if (size === "nav") return "h-3.5 w-3.5";
+  if (size === "nav") return "h-4 w-4";
   if (size === "xs") return "h-6 w-6";
   if (size === "sm") return "h-8 w-8";
   return "h-10 w-10";
 }
 
 function glyphClass(size: MarkSize) {
-  if (size === "nav" || size === "xs") return "h-3.5 w-3.5";
+  if (size === "nav" || size === "xs") return "h-4 w-4";
   if (size === "sm") return "h-4 w-4";
   return "h-5 w-5";
 }

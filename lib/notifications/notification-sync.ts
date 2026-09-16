@@ -9,8 +9,16 @@ import type { NotificationRecord } from "./types.ts";
 
 type Listener = () => void;
 
+type NotificationsSnapshot = {
+  items: NotificationRecord[];
+  unreadCount: number;
+};
+
 let items: NotificationRecord[] = [];
 let unreadCount = 0;
+/** Stable ref for useSyncExternalStore — new object only when data changes. */
+let snapshot: NotificationsSnapshot = { items, unreadCount };
+const EMPTY_SNAPSHOT: NotificationsSnapshot = { items: [], unreadCount: 0 };
 const listeners = new Set<Listener>();
 let channel: ReturnType<
   ReturnType<typeof createSupabaseBrowserClient>["channel"]
@@ -18,6 +26,7 @@ let channel: ReturnType<
 let activeProfileId: string | null = null;
 
 function emit() {
+  snapshot = { items, unreadCount };
   listeners.forEach((l) => l());
 }
 
@@ -51,7 +60,11 @@ function recomputeUnread() {
 }
 
 export function getNotificationsSnapshot() {
-  return { items, unreadCount };
+  return snapshot;
+}
+
+export function getNotificationsServerSnapshot(): NotificationsSnapshot {
+  return EMPTY_SNAPSHOT;
 }
 
 export function subscribeNotifications(listener: Listener) {

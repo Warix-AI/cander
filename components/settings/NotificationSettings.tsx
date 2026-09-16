@@ -12,6 +12,7 @@ import {
 import { isDesktopShell } from "@/lib/desktop-shell";
 import { isMobileShell } from "@/lib/mobile-shell";
 import {
+  getNotificationsServerSnapshot,
   getNotificationsSnapshot,
   markAllNotificationsRead,
   markNotificationRead,
@@ -45,7 +46,7 @@ export function NotificationSettings() {
   const { items, unreadCount } = useSyncExternalStore(
     subscribeNotifications,
     getNotificationsSnapshot,
-    () => ({ items: [], unreadCount: 0 }),
+    getNotificationsServerSnapshot,
   );
   const [prefs, setPrefs] = useState<NotificationPreferences>(
     DEFAULT_NOTIFICATION_PREFERENCES,

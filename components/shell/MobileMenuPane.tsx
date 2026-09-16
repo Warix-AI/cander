@@ -4,41 +4,48 @@ import { useEffect } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   ChevronLeft,
+  CircleUser,
   LayoutGrid,
-  MessageSquare,
-  PanelsTopLeft,
   Settings,
   Shield,
   SquarePen,
-  X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderWordmark } from "@/components/brand/CanderWordmark";
-import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import {
   MobileSlideStack,
   useMobileStackDirection,
 } from "@/components/shell/mobile/MobileSlideStack";
 import { PinsSheet } from "@/components/shell/mobile/PinsSheet";
 import { WorkspaceSheet } from "@/components/shell/mobile/WorkspaceSheet";
+import {
+  GENERAL_MENU_SECTION_ID,
+  GeneralMenuBody,
+} from "@/components/shell/GeneralMenuSection";
+import { PinSectionFolder } from "@/components/shell/PinSectionFolder";
 import { useIsPlatformAdmin } from "@/lib/admin/use-platform-admin";
 import {
   MOBILE_MENU_BG,
   MOBILE_MENU_ICON_SIZE,
   MOBILE_MENU_ICON_STROKE,
+  PRIMARY_NAV_CARD_ACTIVE,
+  PRIMARY_NAV_CARD_HOVER,
+  PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
+  PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE,
   mobileMenuRowActiveClass,
   mobileMenuRowClass,
 } from "@/lib/mobile-menu-styles";
-import { closeAllPinSections } from "@/lib/pin-display-prefs";
+import { closeAllPinSections, usePinSectionCollapse } from "@/lib/pin-display-prefs";
 import { setAppsMoreOpen } from "@/lib/apps-more-prefs";
 import { requestConnectorsCatalog } from "@/lib/connector-connect-intent";
-import { navLabel, useMainNavItems } from "@/lib/use-main-nav-items";
+import { PRIMARY_PIN_SECTION_IDS } from "@/lib/pin-sections";
+import { navLabel } from "@/lib/use-main-nav-items";
 import { isComingSoonNav, isExtraNavId, navSpaceMatches, type SidebarNavId } from "@/lib/spaces";
 import { navIcon } from "@/lib/space-icons";
 import type { MobileMenuScreen, NavDestinationId } from "@/lib/types";
-import { voiceStatusLabel } from "@/lib/voice/voice-status";
 import { cn } from "@/lib/utils";
+import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
 
 const MOBILE_SECONDARY_NAV: SidebarNavId[] = ["connectors", "recents"];
 
@@ -173,16 +180,11 @@ function MenuMain({
   onOpenNav: (id: SidebarNavId) => void;
   onSelectPin: () => void;
 }) {
-  const spaceItems = useMainNavItems({ spacesOnly: true });
   const newActive =
     view === "chat" && !spaceId && !projectId && !connectorId;
-
-  const navActive = (id: SidebarNavId) => {
-    if (id === "recents") return view === "recents";
-    return (
-      navSpaceMatches(id, spaceId) && (view === "space" || view === "chat")
-    );
-  };
+  const { isCollapsed, toggle: togglePinSection } = usePinSectionCollapse();
+  const generalCollapsed = isCollapsed(GENERAL_MENU_SECTION_ID);
+  const generalLit = view === "settings" || !generalCollapsed;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -197,13 +199,22 @@ function MenuMain({
         </div>
 
         <div className="flex min-h-[calc(100%-4.5rem)] flex-col px-3 pb-[calc(env(safe-area-inset-bottom,0px)+2.75rem)] pt-2">
-          <div className="flex flex-col gap-[0.1rem]">
+          <div
+            className={cn(
+              "flex flex-col gap-0 p-[3px]",
+              SHELL_G3_RADIUS,
+              "bg-black/[0.03] dark:bg-white/[0.045]",
+            )}
+          >
             <button
               type="button"
               onClick={onNewChat}
               className={cn(
                 mobileMenuRowClass,
-                newActive && mobileMenuRowActiveClass,
+                PRIMARY_NAV_CARD_RADIUS_FIRST_MOBILE,
+                newActive
+                  ? PRIMARY_NAV_CARD_ACTIVE
+                  : PRIMARY_NAV_CARD_HOVER,
               )}
               aria-label="New"
             >
@@ -213,28 +224,35 @@ function MenuMain({
               />
               <span className="min-w-0 flex-1 truncate">New</span>
             </button>
-            {spaceItems.map((item) => (
-              <MobileNavRow
-                key={item.id}
-                id={item.id}
-                label={item.label}
-                Icon={item.Icon}
-                active={navActive(item.id)}
-                comingSoon={item.comingSoon}
-                onOpen={onOpenNav}
-              />
-            ))}
-            <PinsSheet onSelect={onSelectPin} hideHeading />
-          </div>
-
-          <div className="mt-auto space-y-0.5 pt-3 pb-1">
-            <MobileVoiceRow />
+            <PinsSheet
+              onSelect={onSelectPin}
+              hideHeading
+              sectionIds={PRIMARY_PIN_SECTION_IDS}
+              cardSurface
+              headerOnly
+            />
             <button
               type="button"
-              onClick={() => onOpenScreen("general")}
-              className={mobileMenuRowClass}
+              aria-expanded={!generalCollapsed}
+              aria-label="General"
+              onClick={() => {
+                const closing = !generalCollapsed;
+                togglePinSection(GENERAL_MENU_SECTION_ID);
+                if (closing && view === "settings") {
+                  window.setTimeout(() => {
+                    onNewChat();
+                  }, 200);
+                }
+              }}
+              className={cn(
+                mobileMenuRowClass,
+                PRIMARY_NAV_CARD_RADIUS_LAST_MOBILE,
+                generalLit
+                  ? PRIMARY_NAV_CARD_ACTIVE
+                  : PRIMARY_NAV_CARD_HOVER,
+              )}
             >
-              <PanelsTopLeft
+              <CircleUser
                 className={cn(
                   MOBILE_MENU_ICON_SIZE,
                   "shrink-0 text-muted-foreground",
@@ -244,92 +262,40 @@ function MenuMain({
               General
             </button>
           </div>
+
+          <div className="mt-1 flex flex-col gap-[0.1rem]">
+            <PinsSheet
+              onSelect={onSelectPin}
+              hideHeading
+              sectionIds={PRIMARY_PIN_SECTION_IDS}
+              bodyOnly
+            />
+            <PinSectionFolder
+              label="General"
+              icon={CircleUser}
+              expanded={!generalCollapsed}
+              onToggle={() => togglePinSection(GENERAL_MENU_SECTION_ID)}
+              activeKey={null}
+              bodyOnly
+              flat
+            >
+              <GeneralMenuBody
+                rowClassName={cn(mobileMenuRowClass, "text-foreground")}
+                iconClassName={cn(
+                  MOBILE_MENU_ICON_SIZE,
+                  "shrink-0 text-muted-foreground",
+                )}
+                onNavigate={onSelectPin}
+              />
+            </PinSectionFolder>
+            <PinsSheet
+              onSelect={onSelectPin}
+              hideHeading
+              sectionIds={["websites", "apps", "images", "searches"]}
+            />
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
-
-function MobileVoiceRow() {
-  const {
-    entitlements,
-    voiceActive,
-    voiceConnecting,
-    voiceStatus,
-    voiceSpeaking,
-    voiceThreadId,
-    toggleVoice,
-    openVoiceThread,
-  } = useApp();
-  if (!entitlements.hasVoice) return null;
-
-  const live = voiceActive || voiceConnecting;
-  const label = voiceStatusLabel(
-    voiceConnecting && voiceStatus === "idle" ? "connecting" : voiceStatus,
-  );
-
-  return (
-    <div className="flex w-full items-center gap-0.5">
-      <button
-        type="button"
-        aria-pressed={live}
-        aria-busy={voiceConnecting}
-        aria-label={
-          voiceConnecting
-            ? "Connecting voice"
-            : voiceActive
-              ? "Stop voice"
-              : "Start voice"
-        }
-        onClick={toggleVoice}
-        className={cn(
-          mobileMenuRowClass,
-          "min-w-0 flex-1",
-          live ? mobileMenuRowActiveClass : undefined,
-        )}
-      >
-        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-          <VoiceOrb
-            active={live}
-            speaking={voiceSpeaking}
-            as="div"
-            size={16}
-            label={label}
-            className="shrink-0"
-          />
-        </span>
-        {label}
-      </button>
-      {voiceActive && voiceThreadId ? (
-        <button
-          type="button"
-          aria-label="Open voice chat"
-          title="Open voice chat"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            openVoiceThread();
-          }}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
-        >
-          <MessageSquare className="h-5 w-5" strokeWidth={1.8} />
-        </button>
-      ) : null}
-      {live ? (
-        <button
-          type="button"
-          aria-label="Stop voice"
-          title="Stop voice"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            if (live) toggleVoice();
-          }}
-          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground"
-        >
-          <X className="h-5 w-5" strokeWidth={1.8} />
-        </button>
-      ) : null}
     </div>
   );
 }

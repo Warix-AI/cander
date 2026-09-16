@@ -25,8 +25,10 @@ export function SettingsPage({
   return (
     <div
       className={cn(
-        "settings-screen-canvas min-h-full",
+        "settings-screen-canvas",
         mobile ? MOBILE_APP_BG : "bg-background",
+        // Unified all-settings scroll uses .unified-settings-stack to flatten height.
+        "min-h-full [.unified-settings-stack_&]:min-h-0 [.unified-settings-stack_&]:bg-transparent",
       )}
     >
       <div
@@ -34,7 +36,7 @@ export function SettingsPage({
           "mx-auto w-full",
           mobile
             ? "px-4 pt-0 pb-10"
-            : "px-5 pb-14 sm:px-8 lg:px-10",
+            : "px-5 pb-14 sm:px-8 lg:px-10 [.unified-settings-stack_&]:pb-8",
           wide ? "max-w-6xl" : "max-w-[53.2rem]",
           className,
         )}

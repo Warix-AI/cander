@@ -6,11 +6,12 @@ import { cn } from "@/lib/utils";
 
 /** Bottom padding so scroll content clears the floating nav (mobile + desktop panel). */
 export const CONNECTOR_FLOATING_NAV_PAD =
-  "pb-[calc(5rem+env(safe-area-inset-bottom,0px))]";
+  "pb-[calc(4rem+env(safe-area-inset-bottom,0px))]";
 
 /**
  * Floating bottom section nav for multi-section connectors.
  * Same pattern on mobile and desktop right-panel — no separate top tab strip.
+ * Desktop: chat-bar height, content-width, centered (not full panel width).
  */
 export function ConnectorFloatingNav({
   children,
@@ -60,7 +61,7 @@ export function ConnectorFloatingNav({
     <div
       ref={wrapRef}
       className={cn(
-        "pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pb-[max(10px,calc(env(safe-area-inset-bottom)+10px))] sm:px-4",
+        "pointer-events-none absolute inset-x-0 bottom-0 z-20 flex justify-center px-3 pb-[max(10px,calc(env(safe-area-inset-bottom)+10px))] sm:px-4",
         className,
       )}
     >
@@ -68,8 +69,8 @@ export function ConnectorFloatingNav({
         ref={navRef}
         aria-label={label}
         className={cn(
-          "mobile-floating-nav mobile-glass-pill pointer-events-auto mx-auto flex h-14 w-full max-w-3xl items-center gap-1 overflow-x-auto overscroll-x-contain rounded-[28px] border border-border/60 px-2",
-          // Desktop / wide panel fallback when mobile glass tokens are not active.
+          // Match composer / chat-bar height; width hugs tabs, stays centered.
+          "mobile-floating-nav mobile-glass-pill pointer-events-auto flex h-11 w-fit max-w-full items-center gap-0.5 overflow-x-auto overscroll-x-contain rounded-full border border-border/60 px-1.5",
           "bg-background/90 shadow-[0_8px_28px_oklch(0_0_0/0.08)] backdrop-blur-xl",
           "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         )}
@@ -98,7 +99,7 @@ export function ConnectorFloatingNavItem({
       data-nav-id={id}
       onClick={onClick}
       className={cn(
-        "h-10 shrink-0 rounded-full px-4 text-[14px] font-medium transition-colors",
+        "h-8 shrink-0 rounded-full px-3 text-[13px] font-medium transition-colors",
         active
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:bg-muted/60",

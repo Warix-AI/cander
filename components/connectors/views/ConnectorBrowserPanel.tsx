@@ -12,8 +12,7 @@ import {
   ListFilter,
   Mail,
   MailOpen,
-  Maximize2,
-  Minimize2,
+  PanelLeft,
   Pencil,
   Plus,
   RefreshCw,
@@ -82,13 +81,14 @@ import {
   BROWSER_CHROME_CHIP_HOVER,
   SHELL_G3_RADIUS,
   SHELL_PANEL_BODY,
+  useShellStyle,
 } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
-const PANEL_SURFACE = "bg-white dark:bg-space-canvas";
-/** Connector chrome matches the space canvas (menu-matched dark). */
-const CONNECTOR_CHROME_BG = "bg-white dark:bg-space-canvas";
-
+/** Opaque only in classic shell — floating islands supply the glass surface. */
+function panelSurface(floating: boolean) {
+  return floating ? "bg-transparent" : "bg-white dark:bg-space-canvas";
+}
 function sessionSnapshot(
   key: string,
   connectorId: string,
@@ -102,7 +102,14 @@ function sessionSnapshot(
  * bottom chrome for connector actions or web URL nav.
  * The connector tab is always first and cannot be closed.
  */
-export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) {
+export function ConnectorBrowserPanel({
+  connectorId,
+  hideTopChrome = false,
+}: {
+  connectorId: string;
+  /** When true, tab strip is rendered by the parent workspace (full-width). */
+  hideTopChrome?: boolean;
+}) {
   const {
     workspaceId,
     actor,
@@ -112,6 +119,8 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
     expandedLayout,
     toggleExpandedLayout,
   } = useApp();
+  const floating = useShellStyle() === "floating";
+  const surface = panelSurface(floating);
   const catalog = CONNECTOR_CATALOG.find((item) => item.id === connectorId);
   const connectorTitle = catalog?.name ?? connectorId;
   useSyncExternalStore(
@@ -422,15 +431,28 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
   // or cleared when leaving the connectors space.
 
   return (
-    <div className={cn(SHELL_PANEL_BODY, CONNECTOR_CHROME_BG)}>
-      {/* Top header — tabs + expand + panel only */}
+    <div className={cn(SHELL_PANEL_BODY, surface)}>
+      {/* Top header — chat collapse + tabs + panel (skipped when workspace spans it) */}
+      {hideTopChrome ? null : (
       <div
         className={cn(
           "hidden h-[45px] min-w-0 shrink-0 items-center gap-1 px-2 lg:flex",
-          CONNECTOR_CHROME_BG,
+          surface,
         )}
         onPointerLeave={clearBrowserChromeHovers}
       >
+        {chatArmed ? (
+          <BrowserChromeTooltip
+            label={expandedLayout ? "Open chat" : "Close chat"}
+          >
+            <BrowserChromeIconButton
+              aria-label={expandedLayout ? "Open chat" : "Close chat"}
+              onClick={() => toggleExpandedLayout()}
+            >
+              <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+            </BrowserChromeIconButton>
+          </BrowserChromeTooltip>
+        ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
           {session.tabs.map((tab) => (
             <ConnectorTabButton
@@ -460,42 +482,28 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
           </BrowserChromeTooltip>
         </div>
         <span className="ml-auto flex shrink-0 items-center gap-1">
-          {chatArmed ? (
-            <BrowserChromeTooltip
-              label={expandedLayout ? "Restore layout" : "Expand"}
-            >
-              <BrowserChromeIconButton
-                aria-label={expandedLayout ? "Restore layout" : "Expand"}
-                onClick={() => toggleExpandedLayout()}
-              >
-                {expandedLayout ? (
-                  <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                ) : (
-                  <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                )}
-              </BrowserChromeIconButton>
-            </BrowserChromeTooltip>
-          ) : null}
-          {chatArmed ? (
-            <BrowserChromeTooltip
-              label={
-                panelMode === "collapsed"
-                  ? "Open right panel"
-                  : "Close right panel"
-              }
-            >
-              <PanelToggle />
-            </BrowserChromeTooltip>
-          ) : null}
+          <BrowserChromeTooltip
+            label={
+              panelMode === "collapsed"
+                ? "Open right panel"
+                : "Close right panel"
+            }
+          >
+            <PanelToggle />
+          </BrowserChromeTooltip>
         </span>
       </div>
+      )}
 
       {/* Bottom header — connector tools or web URL nav */}
       <div
         className={cn(
-          "relative h-[45px] min-w-0 shrink-0 items-center gap-1 border-y border-black/5 px-2 dark:border-white/10",
+          "relative h-[45px] min-w-0 shrink-0 items-center gap-1 px-2",
+          hideTopChrome
+            ? "border-b border-black/[0.035] dark:border-white/[0.06]"
+            : "border-y border-black/[0.035] dark:border-white/[0.06]",
           isConnectorTab ? "hidden lg:flex" : "flex",
-          CONNECTOR_CHROME_BG,
+          surface,
         )}
       >
         {isConnectorTab && connectorId === "gmail" ? (
@@ -874,7 +882,7 @@ export function ConnectorBrowserPanel({ connectorId }: { connectorId: string }) 
       <div
         className={cn(
           "relative flex min-h-0 flex-1 flex-col overflow-hidden",
-          PANEL_SURFACE,
+          surface,
         )}
       >
         {connectorId === "gmail" ? (

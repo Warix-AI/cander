@@ -1,21 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import { MessageSquare, X } from "lucide-react";
+import { MessageSquare, Mic, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { SIDEBAR_FOOTER_ROW } from "@/components/shell/AccountMenu";
 import { VoiceOrb } from "@/components/shell/VoiceOrb";
 import type { VoiceAnchor } from "@/lib/types";
+import {
+  PRIMARY_NAV_CARD_ACTIVE,
+  PRIMARY_NAV_CARD_HOVER,
+} from "@/lib/mobile-menu-styles";
 import { voiceStatusLabel } from "@/lib/voice/voice-status";
 import { cn } from "@/lib/utils";
 
-/** Sidebar footer row — matches General icon size/alignment (16px). */
-export function VoiceControl({ className }: { className?: string }) {
+/** Sidebar voice row — Lucide mic (not the orb). */
+export function VoiceControl({
+  className,
+  triggerClassName,
+  iconClassName = "h-3.5 w-3.5 shrink-0 text-muted-foreground",
+  cardSurface = false,
+}: {
+  className?: string;
+  /** Override the inner button chrome (e.g. primary nav card). */
+  triggerClassName?: string;
+  iconClassName?: string;
+  cardSurface?: boolean;
+}) {
   const {
     voiceActive,
     voiceConnecting,
     voiceStatus,
-    voiceSpeaking,
     voiceThreadId,
     toggleVoice,
     openVoiceThread,
@@ -35,8 +49,8 @@ export function VoiceControl({ className }: { className?: string }) {
     <div
       className={cn(
         "group flex w-full items-center gap-0.5 rounded-lg transition-colors duration-200",
-        !live && "hover:bg-sidebar-accent",
-        live && "bg-sidebar-accent",
+        !cardSurface && !live && "hover:bg-sidebar-accent",
+        !cardSurface && live && "bg-sidebar-accent",
         className,
       )}
       onMouseEnter={() => setHovered(true)}
@@ -58,21 +72,17 @@ export function VoiceControl({ className }: { className?: string }) {
           toggleVoice();
         }}
         className={cn(
-          SIDEBAR_FOOTER_ROW,
-          "min-w-0 flex-1 hover:bg-transparent",
-          live && "font-medium",
+          triggerClassName ?? SIDEBAR_FOOTER_ROW,
+          "min-w-0 flex-1",
+          !cardSurface && !triggerClassName && "hover:bg-transparent",
+          cardSurface
+            ? live
+              ? PRIMARY_NAV_CARD_ACTIVE
+              : PRIMARY_NAV_CARD_HOVER
+            : live && "font-medium",
         )}
       >
-        <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center">
-          <VoiceOrb
-            active={live}
-            speaking={voiceSpeaking}
-            as="div"
-            size={16}
-            label={label}
-            className="shrink-0"
-          />
-        </span>
+        <Mic className={iconClassName} strokeWidth={2} />
         <span className="min-w-0 truncate">{label}</span>
       </button>
       {showActions ? (

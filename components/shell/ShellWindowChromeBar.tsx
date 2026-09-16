@@ -14,6 +14,10 @@ import { cn } from "@/lib/utils";
 export const SHELL_HEADER_ICON_CLASS =
   "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground/75 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-35";
 
+/** Slightly stronger than Search/Voice — still an icon control, not a CTA button. */
+export const SHELL_HEADER_ICON_EMPHASIS_CLASS =
+  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-foreground/85 transition-colors duration-200 hover:bg-sidebar-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-35";
+
 /**
  * Presentational sidebar header row — same geometry as product WindowChrome
  * (traffic-light clear on Electron, h-11 + px-3 on web).
@@ -21,9 +25,11 @@ export const SHELL_HEADER_ICON_CLASS =
 export function ShellWindowChromeBar({
   clearTrafficLights = false,
   hideHistory = false,
+  showHistory = false,
   className,
   leading,
   afterSearch,
+  trailing,
   onSearch,
   onBack,
   onForward,
@@ -32,11 +38,15 @@ export function ShellWindowChromeBar({
 }: {
   clearTrafficLights?: boolean;
   hideHistory?: boolean;
+  /** Show back/forward (admin). Product chrome uses afterSearch for voice instead. */
+  showHistory?: boolean;
   className?: string;
   /** Usually NavToggle or a PanelLeft collapse control. */
   leading: ReactNode;
-  /** Between Search and the drag spacer (e.g. Live voice orb). */
+  /** Immediately after Search (e.g. voice + new chat). */
   afterSearch?: ReactNode;
+  /** Far-right cluster (e.g. General/Settings) — separated from primary actions. */
+  trailing?: ReactNode;
   onSearch?: () => void;
   onBack?: () => void;
   onForward?: () => void;
@@ -46,12 +56,12 @@ export function ShellWindowChromeBar({
   const desktop = useDesktopShell();
   const dragSpacer = desktop ? (
     <div
-      className="min-w-2 flex-1 self-stretch"
+      className="min-w-3 flex-1 self-stretch"
       style={DESKTOP_DRAG}
       aria-hidden
     />
   ) : (
-    <div className="min-w-2 flex-1" aria-hidden />
+    <div className="min-w-3 flex-1" aria-hidden />
   );
 
   return (
@@ -75,50 +85,59 @@ export function ShellWindowChromeBar({
     >
       {leading}
       {!hideHistory ? (
-        <div
-          className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
-          style={desktop ? DESKTOP_NO_DRAG : undefined}
-        >
-          <button
-            type="button"
-            aria-label="Search"
+        <>
+          {/* Tight gap — Search sits next to the panel toggle */}
+          <div className="w-1 shrink-0" aria-hidden />
+          <div
+            className="flex shrink-0 items-center gap-1.5"
             style={desktop ? DESKTOP_NO_DRAG : undefined}
-            onClick={onSearch}
-            disabled={!onSearch}
-            className={SHELL_HEADER_ICON_CLASS}
           >
-            <Search className="h-4 w-4" strokeWidth={1.7} />
-          </button>
-          {afterSearch ? (
+            <button
+              type="button"
+              aria-label="Search"
+              style={desktop ? DESKTOP_NO_DRAG : undefined}
+              onClick={onSearch}
+              disabled={!onSearch}
+              className={SHELL_HEADER_ICON_CLASS}
+            >
+              <Search className="h-4 w-4" strokeWidth={1.7} />
+            </button>
+            {afterSearch}
+            {showHistory ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="Back"
+                  disabled={!canGoBack}
+                  style={desktop ? DESKTOP_NO_DRAG : undefined}
+                  onClick={onBack}
+                  className={SHELL_HEADER_ICON_CLASS}
+                >
+                  <ChevronLeft className="h-4 w-4" strokeWidth={1.7} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Forward"
+                  disabled={!canGoForward}
+                  style={desktop ? DESKTOP_NO_DRAG : undefined}
+                  onClick={onForward}
+                  className={SHELL_HEADER_ICON_CLASS}
+                >
+                  <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
+                </button>
+              </>
+            ) : null}
+          </div>
+          {dragSpacer}
+          {trailing ? (
             <div
               className="flex shrink-0 items-center"
               style={desktop ? DESKTOP_NO_DRAG : undefined}
             >
-              {afterSearch}
+              {trailing}
             </div>
           ) : null}
-          <button
-            type="button"
-            aria-label="Back"
-            disabled={!canGoBack}
-            style={desktop ? DESKTOP_NO_DRAG : undefined}
-            onClick={onBack}
-            className={SHELL_HEADER_ICON_CLASS}
-          >
-            <ChevronLeft className="h-4 w-4" strokeWidth={1.7} />
-          </button>
-          <button
-            type="button"
-            aria-label="Forward"
-            disabled={!canGoForward}
-            style={desktop ? DESKTOP_NO_DRAG : undefined}
-            onClick={onForward}
-            className={SHELL_HEADER_ICON_CLASS}
-          >
-            <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
-          </button>
-          {dragSpacer}
-        </div>
+        </>
       ) : (
         dragSpacer
       )}

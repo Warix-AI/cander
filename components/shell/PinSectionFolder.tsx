@@ -23,8 +23,11 @@ const ANIM_EASE = "cubic-bezier(0.32, 0.72, 0, 1)";
 const STROKE_DRAW_MS = 320;
 
 /**
- * Expandable pin folder with a Reddit-style rail: thick stroke from the
- * center of the section icon, down, then a rounded corner into the active child.
+ * Expandable pin folder.
+ * Default: optional Reddit-style rail into the active child.
+ * `flat`: no rail / no child indent (left-aligned list).
+ * `headerOnly`: toggle row only — caller renders children elsewhere.
+ * `bodyOnly`: animated children panel only (no header / no stroke).
  */
 export function PinSectionFolder({
   label,
@@ -37,6 +40,9 @@ export function PinSectionFolder({
   headerClassName,
   iconClassName,
   iconStrokeWidth = 2,
+  flat = false,
+  headerOnly = false,
+  bodyOnly = false,
 }: {
   label: string;
   icon: (props: { className?: string; strokeWidth?: number }) => ReactNode;
@@ -46,23 +52,40 @@ export function PinSectionFolder({
   /** `${kind}:${id}` of the active child, or null. */
   activeKey: string | null;
   deps?: unknown;
-  children: ReactNode;
+  children?: ReactNode;
   headerClassName?: string;
   iconClassName?: string;
   iconStrokeWidth?: number;
+  /** Left-aligned children; skip the tree stroke. */
+  flat?: boolean;
+  /** Render the header toggle only (body lives outside this component). */
+  headerOnly?: boolean;
+  /** Render the animated body only (header lives elsewhere). */
+  bodyOnly?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const iconWrapRef = useRef<HTMLSpanElement>(null);
   const headerRef = useRef<HTMLButtonElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const pathElRef = useRef<SVGPathElement>(null);
+  const skipStroke = flat || headerOnly || bodyOnly;
+  const showHeader = !bodyOnly;
+  const showBody = !headerOnly;
   const [path, setPath] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(expanded);
-  const [animOpen, setAnimOpen] = useState(expanded);
-  const [height, setHeight] = useState<number | "auto">(expanded ? "auto" : 0);
+  const [mounted, setMounted] = useState(expanded && showBody);
+  const [animOpen, setAnimOpen] = useState(expanded && showBody);
+  const [height, setHeight] = useState<number | "auto">(
+    expanded && showBody ? "auto" : 0,
+  );
 
   useEffect(() => {
-    const inner = innerRef.current;
+    if (!showBody) {
+      setMounted(false);
+      setAnimOpen(false);
+      setHeight(0);
+      setPath(null);
+      return;
+    }
 
     if (expanded) {
       setMounted(true);
@@ -81,7 +104,7 @@ export function PinSectionFolder({
       };
     }
 
-    const current = inner?.scrollHeight ?? 0;
+    const current = innerRef.current?.scrollHeight ?? 0;
     setHeight(current);
     setAnimOpen(false);
     setPath(null);
@@ -93,9 +116,13 @@ export function PinSectionFolder({
       cancelAnimationFrame(frame);
       window.clearTimeout(done);
     };
-  }, [expanded]);
+  }, [expanded, showBody]);
 
   useLayoutEffect(() => {
+    if (skipStroke) {
+      setPath(null);
+      return;
+    }
     const root = rootRef.current;
     const iconWrap = iconWrapRef.current;
     const header = headerRef.current;
@@ -147,10 +174,11 @@ export function PinSectionFolder({
     measure();
     const t = window.setTimeout(measure, ANIM_MS + 20);
     return () => window.clearTimeout(t);
-  }, [activeKey, deps, animOpen]);
+  }, [activeKey, deps, animOpen, skipStroke]);
 
   // Draw the stroke from the top down into the active item.
   useLayoutEffect(() => {
+    if (skipStroke) return;
     const el = pathElRef.current;
     if (!el || !path || !animOpen) return;
 
@@ -165,32 +193,34 @@ export function PinSectionFolder({
       el.style.strokeDashoffset = "0";
     });
     return () => cancelAnimationFrame(frame);
-  }, [path, animOpen, activeKey]);
+  }, [path, animOpen, activeKey, skipStroke]);
 
   return (
     <div ref={rootRef} className="relative">
-      <button
-        ref={headerRef}
-        type="button"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onToggle();
-          headerRef.current?.blur();
-        }}
-        aria-expanded={expanded}
-        className={headerClassName}
-      >
-        <span
-          ref={iconWrapRef}
-          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+      {showHeader ? (
+        <button
+          ref={headerRef}
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onToggle();
+            headerRef.current?.blur();
+          }}
+          aria-expanded={expanded}
+          className={headerClassName}
         >
-          <Icon className={iconClassName} strokeWidth={iconStrokeWidth} />
-        </span>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-      </button>
+          <span
+            ref={iconWrapRef}
+            className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center"
+          >
+            <Icon className={iconClassName} strokeWidth={iconStrokeWidth} />
+          </span>
+          <span className="min-w-0 flex-1 truncate">{label}</span>
+        </button>
+      ) : null}
 
-      {mounted ? (
+      {showBody && mounted ? (
         <div
           className="overflow-hidden"
           style={{
@@ -202,7 +232,7 @@ export function PinSectionFolder({
             ref={innerRef}
             className="relative flex flex-col"
             style={{
-              paddingLeft: CHILD_PAD_LEFT,
+              paddingLeft: flat || bodyOnly ? 0 : CHILD_PAD_LEFT,
               opacity: animOpen ? 1 : 0,
               transform: animOpen ? "translateY(0)" : "translateY(-6px)",
               transition: `opacity ${ANIM_MS}ms ${ANIM_EASE}, transform ${ANIM_MS}ms ${ANIM_EASE}`,
@@ -213,7 +243,7 @@ export function PinSectionFolder({
         </div>
       ) : null}
 
-      {path ? (
+      {!skipStroke && path ? (
         <svg
           aria-hidden
           className={cn(
@@ -243,7 +273,9 @@ export function PinSectionFolder({
 /** Header fill when the folder is open or owns the current view. */
 export function pinSectionHeaderClass(active?: boolean) {
   return cn(
-    "flex w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left text-[15px] transition-colors duration-200",
-    active ? "bg-sidebar-accent font-medium" : "hover:bg-sidebar-accent",
+    "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-[7px] text-left text-[13px] tracking-[-0.01em] transition-colors duration-150",
+    active
+      ? "shell-segment-active"
+      : "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
   );
 }

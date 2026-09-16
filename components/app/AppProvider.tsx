@@ -691,12 +691,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [panelRatio, setPanelRatioState] = useState(DEFAULT_PANEL_RATIO);
   const [expandedLayout, setExpandedLayout] = useState(false);
   const [expandedPinned, setExpandedPinned] = useState(false);
-  const layoutSnapshot = useRef<{
-    sidebarOpen: boolean;
-    workspaceRailOpen: boolean;
-    panelRatio: number;
-    panelMode: PanelMode;
-  } | null>(null);
   const [mobileSurface, setMobileSurfaceState] = useState<MobileSurface>("chat");
   const mobileContentSurfaceRef = useRef<"chat" | "panel">("chat");
   const setMobileSurface = useCallback(
@@ -1145,22 +1139,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       !entitlements.showInviteWall &&
       workspacesFor(actor, entitlements).length >= 2;
 
+    // With a workspace rail: this control only opens/closes the selector.
+    // Without one: fall back to toggling the menu itself.
+    if (!canRail) {
+      setSidebarOpen((open) => !open);
+      return;
+    }
+
     if (!sidebarOpen) {
       setSidebarOpen(true);
-      if (canRail) setWorkspaceRailOpen(true);
+      setWorkspaceRailOpen(true);
       return;
     }
-    if (canRail && workspaceRailOpen) {
-      setWorkspaceRailOpen(false);
-      return;
-    }
-    setSidebarOpen(false);
-  }, [
-    sidebarOpen,
-    workspaceRailOpen,
-    actor,
-    entitlements,
-  ]);
+
+    setWorkspaceRailOpen((open) => !open);
+  }, [sidebarOpen, actor, entitlements]);
 
   const toggleRightPanel = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
@@ -1191,36 +1184,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toggleExpandedLayout = useCallback(() => {
     if (expandedLayout) {
-      const snap = layoutSnapshot.current;
-      layoutSnapshot.current = null;
       setExpandedLayout(false);
       setExpandedPinned(false);
-      if (snap) {
-        setSidebarOpen(snap.sidebarOpen);
-        setWorkspaceRailOpen(snap.workspaceRailOpen);
-        setPanelRatioState(snap.panelRatio);
-        setPanelMode(snap.panelMode);
-      }
       return;
     }
-    layoutSnapshot.current = {
-      sidebarOpen,
-      workspaceRailOpen,
-      panelRatio,
-      panelMode,
-    };
-    setSidebarOpen(false);
-    setWorkspaceRailOpen(false);
+    // Hide only the chat column — menu / workspace rail stay put.
+    // App fills the main left+right island, not the whole window.
     setExpandedLayout(true);
-    setExpandedPinned(true);
+    setExpandedPinned(false);
     setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
-  }, [
-    expandedLayout,
-    sidebarOpen,
-    workspaceRailOpen,
-    panelRatio,
-    panelMode,
-  ]);
+  }, [expandedLayout]);
 
   const openSpaceChat = useCallback(
     (space: SpaceId, opts?: { keepProject?: boolean; landOnPanel?: boolean }) => {
@@ -4882,7 +4855,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSkillId(null);
     setView("space");
     setMobileSurface("panel");
-    layoutSnapshot.current = null;
     setExpandedLayout(false);
     setExpandedPinned(false);
     if (chatWasOpen) {

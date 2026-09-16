@@ -851,7 +851,7 @@ export function GmailConnectorView({
                   return (
                     <article
                       key={msg.providerMessageId}
-                      className="border-b border-black/5 last:border-b-0 dark:border-white/10"
+                      className="border-b border-black/[0.035] last:border-b-0 dark:border-white/[0.06]"
                     >
                       <div className="flex items-start gap-3 px-4 pb-3">
                         <MailSenderAvatar fromAddr={msg.fromAddr} size={32} />
@@ -919,7 +919,7 @@ export function GmailConnectorView({
           </div>
 
           {replyOpen ? (
-            <div className="shrink-0 border-t border-black/5 bg-white px-4 py-3 dark:border-white/10 dark:bg-space-canvas">
+            <div className="shrink-0 border-t border-black/[0.035] bg-white px-4 py-3 dark:border-white/[0.06] dark:bg-space-canvas">
               <textarea
                 ref={replyRef}
                 value={replyBody}
@@ -997,7 +997,7 @@ export function GmailConnectorView({
               type="button"
               onClick={() => void openMessage(item)}
               className={cn(
-                "flex w-full gap-3 border-b border-black/5 px-4 py-3 text-left transition-colors hover:bg-black/[0.03] dark:border-white/10 dark:hover:bg-white/[0.04]",
+                "flex w-full gap-3 border-b border-black/[0.035] px-4 py-3 text-left transition-colors hover:bg-black/[0.03] dark:border-white/[0.06] dark:hover:bg-white/[0.04]",
                 selectedId === item.providerMessageId &&
                   "bg-black/[0.04] dark:bg-white/[0.05]",
               )}

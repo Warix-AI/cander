@@ -15,7 +15,7 @@ export function WindowChrome({
   hideHistory?: boolean;
   className?: string;
 }) {
-  const { openOverlay, canGoBack, canGoForward, goBack, goForward } = useApp();
+  const { openOverlay } = useApp();
 
   return (
     <ShellWindowChromeBar
@@ -24,10 +24,6 @@ export function WindowChrome({
       className={className}
       leading={<NavToggle />}
       onSearch={() => openOverlay("search")}
-      onBack={goBack}
-      onForward={goForward}
-      canGoBack={canGoBack}
-      canGoForward={canGoForward}
     />
   );
 }

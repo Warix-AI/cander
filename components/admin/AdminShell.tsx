@@ -103,7 +103,7 @@ export function AdminShell() {
                 className={cn(
                   "flex w-full flex-col gap-0 p-[3px]",
                   SHELL_G3_RADIUS,
-                  "bg-black/[0.03] dark:bg-white/[0.045]",
+                  "bg-white dark:bg-white/[0.045]",
                 )}
               >
                 <Link
@@ -130,7 +130,7 @@ export function AdminShell() {
                 className={cn(
                   "flex flex-col gap-0 p-[3px]",
                   SHELL_G3_RADIUS,
-                  "bg-black/[0.03] dark:bg-white/[0.045]",
+                  "bg-white dark:bg-white/[0.045]",
                 )}
               >
                 {ADMIN_SECTIONS.map((id, index) => (

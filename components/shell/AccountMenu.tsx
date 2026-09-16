@@ -20,6 +20,10 @@ import { setAppsMoreOpen } from "@/lib/apps-more-prefs";
 import { requestConnectorsCatalog } from "@/lib/connector-connect-intent";
 import { USAGE_METER_TONES } from "@/lib/usage-meters";
 import { useUsageStatusPercent } from "@/lib/use-usage-status";
+import {
+  PRIMARY_NAV_CARD_ACTIVE,
+  PRIMARY_NAV_CARD_HOVER,
+} from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 /** Shared footer row chrome for AccountMenu — matches SidebarNavButton. */
@@ -81,10 +85,20 @@ function UsageFlyoutRow({ onOpen }: { onOpen: () => void }) {
   );
 }
 
-export function AccountMenu() {
+export function AccountMenu({
+  triggerClassName,
+  iconClassName = "h-4 w-4 shrink-0 text-muted-foreground",
+  cardSurface = false,
+}: {
+  triggerClassName?: string;
+  iconClassName?: string;
+  /** Match New / Apps / Chats inset card hover & active. */
+  cardSurface?: boolean;
+} = {}) {
   const router = useRouter();
   const { view, openSettings, openRecents, openSpace } = useApp();
   const isPlatformAdmin = useIsPlatformAdmin();
+  const active = view === "settings";
 
   return (
     <Dropdown
@@ -99,16 +113,17 @@ export function AccountMenu() {
           type="button"
           onClick={toggle}
           className={cn(
-            SIDEBAR_FOOTER_ROW,
-            (open || view === "settings") && "bg-sidebar-accent font-medium",
+            triggerClassName ?? SIDEBAR_FOOTER_ROW,
+            cardSurface
+              ? open || active
+                ? PRIMARY_NAV_CARD_ACTIVE
+                : PRIMARY_NAV_CARD_HOVER
+              : (open || active) && "bg-sidebar-accent font-medium",
           )}
           aria-label="General"
           aria-expanded={open}
         >
-          <CircleUser
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            strokeWidth={2}
-          />
+          <CircleUser className={iconClassName} strokeWidth={2} />
           General
         </button>
       )}

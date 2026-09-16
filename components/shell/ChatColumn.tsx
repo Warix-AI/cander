@@ -669,7 +669,8 @@ export function ChatColumn() {
   return (
     <section
       className={cn(
-        "@container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background",
+        "@container relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+        floating ? "bg-transparent" : "bg-background",
       )}
     >
       {showLanding ? (

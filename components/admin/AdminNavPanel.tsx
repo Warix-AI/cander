@@ -31,7 +31,7 @@ import {
   PRIMARY_NAV_CARD_RADIUS_LAST,
   PRIMARY_NAV_CARD_RADIUS_SOLO,
 } from "@/lib/mobile-menu-styles";
-import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, SHELL_ISLAND } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { House } from "lucide-react";
@@ -77,6 +77,7 @@ export function AdminNavPanel({ className }: { className?: string }) {
         <ShellNavToggleButton onClick={() => setNavCollapsed(true)} />
       }
       onSearch={() => setSearchOpen(true)}
+      showHistory
       onBack={goBack}
       onForward={goForward}
       canGoBack={canGoBack}
@@ -122,7 +123,7 @@ export function AdminNavPanel({ className }: { className?: string }) {
                 className={cn(
                   "flex w-full flex-col gap-0 p-[3px]",
                   SHELL_G3_RADIUS,
-                  "bg-black/[0.03] dark:bg-white/[0.045]",
+                  SHELL_ISLAND,
                 )}
               >
                 <button
@@ -151,7 +152,7 @@ export function AdminNavPanel({ className }: { className?: string }) {
                 className={cn(
                   "flex flex-col gap-0 p-[3px]",
                   SHELL_G3_RADIUS,
-                  "bg-black/[0.03] dark:bg-white/[0.045]",
+                  SHELL_ISLAND,
                 )}
               >
                 {ADMIN_SECTIONS.map((id, index) => {

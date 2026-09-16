@@ -22,14 +22,16 @@
   --chart-5: oklch(0.42 0.18 266);
   --popover: oklch(1 0 0);
   --primary: oklch(0.205 0 0);
-  --sidebar: oklch(1 0 0);
   --spacing: 0.25rem;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.87 0 0);
-  --app-canvas: oklch(0.965 0.004 265);
-  --space-canvas: oklch(0.988 0.002 265);
+  --app-canvas: oklch(0.94 0.003 265);
+  --space-canvas: oklch(0.96 0.002 265);
   --background: var(--app-canvas);
+  --sidebar: var(--app-canvas);
+  --shell-select: #007aff;
+  --shell-select-foreground: oklch(0.99 0 0);
   --canvas-hover: oklch(1 0 0);
   --canvas-active: oklch(1 0 0);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -41,7 +43,7 @@
   --shadow-spread: 0px;
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.985 0 0);
   --sidebar-border: oklch(0.935 0 0);
   --card-foreground: oklch(0.145 0 0);
   --shadow-offset-x: 0;
@@ -77,15 +79,17 @@
   --chart-5: oklch(0.42 0.18 266);
   --popover: oklch(0.14 0 0);
   --primary: oklch(0.922 0 0);
-  /* Menu + right panel: slightly lighter black */
-  --sidebar: oklch(0.12 0 0);
+  --app-canvas: oklch(0 0 0);
+  --sidebar: oklch(0 0 0);
+  --shell-select: #0a84ff;
+  --shell-select-foreground: oklch(0.99 0 0);
   --spacing: 0.25rem;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
   --secondary: oklch(0.22 0 0);
-  /* Chat / new-chat canvas: lighter than menu + right panel */
-  --background: oklch(0.17 0 0);
-  --space-canvas: oklch(0.12 0 0);
+  /* Desktop canvas is black; islands sit on top as translucent gray. */
+  --background: oklch(0 0 0);
+  --space-canvas: oklch(0 0 0);
   --canvas-hover: var(--muted);
   --canvas-active: var(--muted);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -786,8 +790,8 @@ html:not(.dark) .courier-app-appearance[data-palette="mono"] {
   --accent: oklch(0.94 calc(var(--app-chroma) * 0.9) var(--app-hue));
   --border: oklch(0.92 calc(var(--app-chroma) * 0.6) var(--app-hue));
   --input: oklch(0.96 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --sidebar: oklch(1 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar: var(--app-canvas);
+  --sidebar-accent: oklch(0.985 0 0);
   --sidebar-border: oklch(0.935 calc(var(--app-chroma) * 0.55) var(--app-hue));
   --space-canvas: oklch(0.988 calc(var(--app-chroma) * 0.35) var(--app-hue));
   --secondary: oklch(0.88 calc(var(--app-chroma) * 0.5) var(--app-hue));
@@ -1040,7 +1044,7 @@ html.dark .light-surface.menu-glass-surface {
     position: relative;
     left: clamp(
       -32rem,
-      calc((53.2rem - (100vw - 273px)) / 2 - 1.25rem),
+      calc((53.2rem - (100vw - 253px)) / 2 - 1.25rem),
       0px
     );
   }
@@ -1461,6 +1465,84 @@ html:not(.dark) .light-surface {
   box-shadow:
     0 1px 2px oklch(0 0 0 / 0.04),
     0 4px 12px oklch(0 0 0 / 0.03);
+}
+
+/* Desktop islands: frosted glass over a soft canvas (macOS Settings-like). */
+.shell-island {
+  background: oklch(1 0 0 / 0.66);
+  -webkit-backdrop-filter: blur(36px) saturate(160%);
+  backdrop-filter: blur(36px) saturate(160%);
+  box-shadow:
+    0 0 0 0.5px oklch(0 0 0 / 0.04),
+    0 1px 1px oklch(0 0 0 / 0.02),
+    0 6px 20px oklch(0 0 0 / 0.045);
+}
+
+html.dark .shell-island {
+  background: oklch(1 0 0 / 0.08);
+  box-shadow:
+    0 0 0 0.5px oklch(1 0 0 / 0.08),
+    0 1px 1px oklch(0 0 0 / 0.2),
+    0 8px 24px oklch(0 0 0 / 0.32);
+}
+
+/* Light: sidebar reads denser / cooler than content islands (macOS Settings). */
+html:not(.dark) .shell-island-sidebar {
+  background: oklch(0.97 0.006 250 / 0.92);
+  box-shadow:
+    0 0 0 0.5px oklch(0 0 0 / 0.05),
+    0 1px 1px oklch(0 0 0 / 0.025),
+    0 6px 18px oklch(0 0 0 / 0.04);
+}
+
+html.dark .shell-island-sidebar {
+  background: oklch(1 0 0 / 0.09);
+}
+
+/* Leaf selection — quiet system blue (macOS sidebar). */
+.shell-select-active {
+  background: var(--shell-select) !important;
+  color: var(--shell-select-foreground) !important;
+  font-weight: 500;
+}
+
+.shell-select-active .text-muted-foreground {
+  color: var(--shell-select-foreground) !important;
+  opacity: 0.92;
+}
+
+.shell-select-active svg.lucide,
+.shell-select-active [data-lucide] {
+  color: var(--shell-select-foreground) !important;
+  opacity: 0.92;
+}
+
+/* Selected Apps | Experts | Chats — glass pill on the chosen mode only (no track). */
+.shell-segment-active {
+  background: oklch(1 0 0 / 0.55) !important;
+  color: var(--foreground) !important;
+  font-weight: 500;
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow:
+    0 0 0 0.5px oklch(0 0 0 / 0.05),
+    0 1px 2px oklch(0 0 0 / 0.04),
+    0 4px 12px oklch(0 0 0 / 0.035);
+}
+
+html.dark .shell-segment-active {
+  background: oklch(1 0 0 / 0.12) !important;
+  box-shadow:
+    0 0 0 0.5px oklch(1 0 0 / 0.1),
+    0 1px 2px oklch(0 0 0 / 0.25),
+    0 4px 14px oklch(0 0 0 / 0.28);
+}
+
+.shell-segment-active .text-muted-foreground,
+.shell-segment-active svg.lucide,
+.shell-segment-active [data-lucide] {
+  color: var(--foreground) !important;
+  opacity: 0.9;
 }
 
 .landing-suggestion {

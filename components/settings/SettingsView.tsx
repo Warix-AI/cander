@@ -227,7 +227,12 @@ export function SettingsView() {
   );
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden",
+        !mobile && "bg-transparent",
+      )}
+    >
       {mobile ? (
         settingsMobileHub ? (
           settingsBody
@@ -240,43 +245,49 @@ export function SettingsView() {
             {settingsBody}
           </MobileSlideStack>
         )
-      ) : (
+      ) : settingsOrgMemberId ? (
         <div className="settings-screen-canvas min-h-0 flex-1 overflow-y-auto">
-          {settingsTab === "organization" ? (
-            entitlements.showOrgManaged ? (
-              <ManagedOrganizationSettings />
-            ) : settingsOrgMemberId ? (
-              <OrgMemberDetailSettings
-                memberId={settingsOrgMemberId}
-                onBack={() => setSettingsOrgMemberId(null)}
-              />
-            ) : (
-              <OrganizationSettings
-                onSelectMember={(memberId) => setSettingsOrgMemberId(memberId)}
-              />
-            )
+          <OrgMemberDetailSettings
+            memberId={settingsOrgMemberId}
+            onBack={() => setSettingsOrgMemberId(null)}
+          />
+        </div>
+      ) : settingsWorkspaceId ? (
+        <div className="settings-screen-canvas min-h-0 flex-1 overflow-y-auto">
+          <WorkspacesSettings
+            selectedId={settingsWorkspaceId}
+            onSelect={setSettingsWorkspaceId}
+          />
+        </div>
+      ) : (
+        <div className="unified-settings-stack min-h-0 flex-1 overflow-y-auto">
+          {entitlements.showOrgManaged ? (
+            <ManagedOrganizationSettings />
+          ) : entitlements.showOrgAdmin ||
+            entitlements.canActivateOrganization ? (
+            <OrganizationSettings
+              onSelectMember={(memberId) => setSettingsOrgMemberId(memberId)}
+            />
           ) : null}
 
-          {settingsTab === "workspaces" ? (
+          {entitlements.hasWorkspaces ? (
             <WorkspacesSettings
               selectedId={settingsWorkspaceId}
               onSelect={setSettingsWorkspaceId}
             />
           ) : null}
 
-          {settingsTab === "plans" ? <PlansSettings /> : null}
+          <PlansSettings />
 
-          {settingsTab === "usage" ? <UsageSettings /> : null}
+          <UsageSettings />
 
-          {settingsTab === "voice" ? <VoiceSettings /> : null}
+          {entitlements.hasVoice ? <VoiceSettings /> : null}
 
-          {settingsTab === "notifications" ? <NotificationSettings /> : null}
+          <NotificationSettings />
 
-          {settingsTab === "general" ? (
-            <GeneralSettings onAfterSignOut={() => leave()} />
-          ) : null}
+          <GeneralSettings onAfterSignOut={() => leave()} />
 
-          {settingsTab === "appearance" ? <AppearanceSettings /> : null}
+          <AppearanceSettings />
         </div>
       )}
     </div>

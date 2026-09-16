@@ -10,7 +10,7 @@ import {
   PRIMARY_NAV_CARD_HOVER,
   PRIMARY_NAV_CARD_RADIUS_SOLO,
 } from "@/lib/mobile-menu-styles";
-import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { SHELL_G3_RADIUS, SHELL_ISLAND } from "@/lib/shell-chrome";
 import { cn } from "@/lib/utils";
 
 export type ShellProductId = "app" | "admin";
@@ -62,7 +62,7 @@ export function ShellProductSwitcher({
           className={cn(
             "flex w-full flex-col gap-0 p-[3px]",
             SHELL_G3_RADIUS,
-            "bg-black/[0.03] dark:bg-white/[0.045]",
+            SHELL_ISLAND,
           )}
         >
           <button

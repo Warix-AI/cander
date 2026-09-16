@@ -175,9 +175,9 @@ function Root() {
     };
   }, [mobile]);
 
-  // Desktop is always classic; floating chrome is mobile-only.
+  // Desktop uses floating islands (padded white panels on the canvas).
   useEffect(() => {
-    setShellStyle(mobile ? "floating" : "classic");
+    setShellStyle("floating");
   }, [mobile]);
 
   useEffect(() => {
@@ -273,7 +273,7 @@ function AuthenticatedShell() {
           onTouchEnd={swipe.onTouchEnd}
           className={cn(
             "relative flex h-svh min-h-0 flex-1 overflow-hidden text-foreground",
-            mobile ? MOBILE_MENU_BG : "bg-background",
+            mobile ? MOBILE_MENU_BG : "bg-[var(--app-canvas)]",
             // Bottom tab bar removed — no reserved nav inset on mobile.
           )}
         >
