@@ -63,7 +63,7 @@ function ensureTray() {
   try {
     const img = nativeImage.createFromPath(ICON_PATH);
     tray = new Tray(img.isEmpty() ? nativeImage.createEmpty() : img.resize({ width: 16, height: 16 }));
-    tray.setToolTip("Cander");
+    tray.setToolTip("One");
     tray.setContextMenu(
       Menu.buildFromTemplate([
         {
@@ -84,7 +84,7 @@ function ensureTray() {
           },
         },
         {
-          label: "Open Cander",
+          label: "Open One",
           click: () => {
             const main = getMainWindow?.();
             main?.show();
