@@ -20,7 +20,8 @@ export const SHELL_HEADER_ICON_EMPHASIS_CLASS =
 
 /**
  * Presentational sidebar header row — same geometry as product WindowChrome
- * (traffic-light clear on Electron, h-11 + px-3 on web).
+ * (traffic-light clear on Electron, 45px panel chrome on web to match
+ * connector / browser tab strips).
  */
 export function ShellWindowChromeBar({
   clearTrafficLights = false,
@@ -79,7 +80,9 @@ export function ShellWindowChromeBar({
       }}
       className={cn(
         "relative flex shrink-0 items-center gap-1 pr-3",
-        clearTrafficLights ? undefined : "h-11 px-3",
+        // Match connector / browser tab strip (h-[45px]) so the stroke under
+        // Search lines up with the stroke under pinned app tabs.
+        clearTrafficLights ? undefined : "h-[45px] px-3",
         className,
       )}
     >

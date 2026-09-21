@@ -570,11 +570,27 @@ export function Sidebar() {
             peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
           )}
         >
-          <WindowChrome
-            clearTrafficLights={macDesktop}
-            navChrome
-            className="w-full bg-transparent text-foreground"
-          />
+          {/*
+            Match connector / browser tab strip height (45px) so the stroke under
+            this chrome lines up with the stroke under pinned app tabs.
+          */}
+          <div
+            className={cn(
+              "flex shrink-0 flex-col justify-center overflow-hidden",
+              macDesktop
+                ? "h-[max(52px,var(--desktop-titlebar,52px))]"
+                : "h-[45px]",
+            )}
+          >
+            <WindowChrome
+              clearTrafficLights={macDesktop}
+              navChrome
+              className={cn(
+                "w-full bg-transparent text-foreground",
+                macDesktop ? undefined : "h-full min-h-0",
+              )}
+            />
+          </div>
 
           <div className="relative flex min-h-0 flex-1">
             <PrimaryNavRail section={section} onSection={selectSection} />

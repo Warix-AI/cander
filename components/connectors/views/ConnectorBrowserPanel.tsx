@@ -438,7 +438,7 @@ export function ConnectorBrowserPanel({
       {hideTopChrome ? null : (
       <div
         className={cn(
-          "hidden h-[45px] min-w-0 shrink-0 items-center gap-1 px-2 lg:flex",
+          "hidden h-[45px] min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06] lg:flex",
           surface,
         )}
         onPointerLeave={clearBrowserChromeHovers}
@@ -494,10 +494,7 @@ export function ConnectorBrowserPanel({
       {/* Bottom header — connector tools or web URL nav */}
       <div
         className={cn(
-          "relative h-[45px] min-w-0 shrink-0 items-center gap-1 px-2",
-          hideTopChrome
-            ? "border-b border-black/[0.035] dark:border-white/[0.06]"
-            : "border-y border-black/[0.035] dark:border-white/[0.06]",
+          "relative h-[45px] min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06]",
           isConnectorTab ? "hidden lg:flex" : "flex",
           surface,
         )}
