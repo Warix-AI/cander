@@ -1601,25 +1601,24 @@ html.dark .shell-island-sidebar {
 }
 
 /*
- * Contextual sidebar row selection — restrained dark-gray wash so the main
- * content stays the visual focus (not a saturated full-width blue block).
+ * Contextual sidebar row selection — full system-blue fill (same as
+ * shell-select-active) so the active app/workspace/chat reads clearly.
  */
 .shell-nav-row-active {
-  position: relative;
-  background: oklch(0.92 0.004 250 / 0.72) !important;
-  color: var(--foreground) !important;
+  background: var(--shell-select) !important;
+  color: var(--shell-select-foreground) !important;
   font-weight: 500;
-  box-shadow: inset 2.5px 0 0 0 color-mix(in oklab, var(--shell-select) 72%, transparent);
-}
-
-html.dark .shell-nav-row-active {
-  background: oklch(1 0 0 / 0.09) !important;
-  box-shadow: inset 2.5px 0 0 0 color-mix(in oklab, var(--shell-select) 65%, transparent);
 }
 
 .shell-nav-row-active .text-muted-foreground {
-  color: var(--foreground) !important;
-  opacity: 0.72;
+  color: var(--shell-select-foreground) !important;
+  opacity: 0.92;
+}
+
+.shell-nav-row-active svg.lucide,
+.shell-nav-row-active [data-lucide] {
+  color: var(--shell-select-foreground) !important;
+  opacity: 0.92;
 }
 
 /* Selected Apps | Experts | Chats — glass pill on the chosen mode only (no track). */
