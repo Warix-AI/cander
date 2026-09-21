@@ -112,8 +112,6 @@ export function Sidebar() {
   const [peekVisible, setPeekVisible] = useState(false);
   const [pinDragKey, setPinDragKey] = useState<string | null>(null);
   const [section, setSection] = useState<PrimaryNavSection>(readPrimaryNavSection);
-  const [contextFilter, setContextFilter] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
   const peekCloseTimer = useRef<number | null>(null);
   const peekExitTimer = useRef<number | null>(null);
   const edgeRef = useRef<HTMLDivElement>(null);
@@ -299,15 +297,10 @@ export function Sidebar() {
     );
   }, [navPinGroups, section]);
 
-  const filterNeedle = contextFilter.trim().toLowerCase();
-
   const filteredPinItems = useMemo(() => {
     if (!activePinGroup) return [] as PinnedItem[];
-    if (!filterNeedle) return activePinGroup.items;
-    return activePinGroup.items.filter((item) =>
-      item.title.toLowerCase().includes(filterNeedle),
-    );
-  }, [activePinGroup, filterNeedle]);
+    return activePinGroup.items;
+  }, [activePinGroup]);
 
   const restoreLastItem = useCallback(
     (next: PrimaryNavSection) => {
@@ -333,8 +326,6 @@ export function Sidebar() {
     (next: PrimaryNavSection) => {
       setSection(next);
       persistPrimaryNavSection(next);
-      setContextFilter("");
-      setSearchOpen(false);
       if (!sidebarOpen) setSidebarOpen(true);
       restoreLastItem(next);
     },
@@ -423,16 +414,11 @@ export function Sidebar() {
       renderPinnedRow={renderPinnedRow}
       onConnect={(id) => openConnectorConnect(id)}
       section={section}
-      filter={filterNeedle}
     />
   );
 
   const renderWorkspaceSegment = () => {
-    const list = filterNeedle
-      ? allowedWorkspaces.filter((item) =>
-          item.name.toLowerCase().includes(filterNeedle),
-        )
-      : allowedWorkspaces;
+    const list = allowedWorkspaces;
     return (
       <div className="flex flex-col gap-0">
         {list.map((item) => {
@@ -497,22 +483,6 @@ export function Sidebar() {
       <ContextualNavHeader
         section={section}
         onPrimaryAction={onPrimaryAction}
-        searchOpen={searchOpen}
-        onToggleSearch={() => {
-          setSearchOpen((open) => {
-            if (open) setContextFilter("");
-            return !open;
-          });
-        }}
-        searchValue={contextFilter}
-        onSearchChange={setContextFilter}
-        searchPlaceholder={
-          section === "apps"
-            ? "Filter apps"
-            : section === "images"
-              ? "Search images"
-              : "Search chats"
-        }
       />
 
       <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
@@ -604,23 +574,15 @@ function SidebarPinSectionBody({
   renderPinnedRow,
   onConnect,
   section,
-  filter,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   onConnect: (id: string) => void;
   section: PrimaryNavSection;
-  filter: string;
 }) {
   if (section === "chats" || section === "images") {
     const emptyLabel =
-      section === "images"
-        ? filter
-          ? "No matching images"
-          : "No images yet"
-        : filter
-          ? "No matching chats"
-          : "No chats yet";
+      section === "images" ? "No images yet" : "No chats yet";
     return (
       <>
         {group.items.length ? (
@@ -659,7 +621,7 @@ function SidebarPinSectionBody({
         <AppsMoreSection
           listedIds={group.items.map((item) => item.id)}
           onConnect={onConnect}
-          query={filter}
+          query=""
         />
       ) : null}
     </>

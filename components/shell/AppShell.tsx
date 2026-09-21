@@ -178,9 +178,9 @@ function Root() {
     };
   }, [mobile]);
 
-  // Desktop uses floating islands (padded white panels on the canvas).
+  // Desktop: docked canvas (no floating islands). Mobile keeps floating chrome.
   useEffect(() => {
-    setShellStyle("floating");
+    setShellStyle(mobile ? "floating" : "classic");
   }, [mobile]);
 
   useEffect(() => {
