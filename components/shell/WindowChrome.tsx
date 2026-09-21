@@ -69,7 +69,7 @@ export function WindowChrome({
                 view === "voice" && "bg-sidebar-accent text-foreground",
               )}
             >
-              <VoiceWaveIcon size={14} barClassName="bg-current" />
+              <VoiceWaveIcon size={14} />
             </button>
           ) : null
         }

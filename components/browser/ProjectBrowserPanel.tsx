@@ -15,9 +15,7 @@ import {
   Globe,
   Image,
   LayoutTemplate,
-  Maximize2,
   MessageSquare,
-  Minimize2,
   Monitor,
   MousePointer2,
   Pencil,
@@ -230,8 +228,8 @@ export function ProjectBrowserPanel({
     sidebarOpen,
     openSpaceChat,
     expandedLayout,
-    toggleExpandedLayout,
     panelMode,
+    shellPanelCycleStep,
     openOverlay,
     selectMode,
     setSelectMode,
@@ -2532,26 +2530,16 @@ export function ProjectBrowserPanel({
             )}
             {chatArmed ? (
               <BrowserChromeTooltip
-                label={expandedLayout ? "Restore layout" : "Expand"}
-              >
-                <BrowserChromeIconButton
-                  aria-label={expandedLayout ? "Restore layout" : "Expand"}
-                  onClick={() => toggleExpandedLayout()}
-                >
-                  {expandedLayout ? (
-                    <Minimize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  ) : (
-                    <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.6} />
-                  )}
-                </BrowserChromeIconButton>
-              </BrowserChromeTooltip>
-            ) : null}
-            {chatArmed ? (
-              <BrowserChromeTooltip
                 label={
-                  panelMode === "collapsed"
-                    ? "Open right panel"
-                    : "Close right panel"
+                  shellPanelCycleStep === 1
+                    ? "Open chat"
+                    : shellPanelCycleStep === 2
+                      ? "Close panels"
+                      : shellPanelCycleStep === 3
+                        ? "Open panels"
+                        : !expandedLayout
+                          ? "Close chat"
+                          : "Close panels"
                 }
               >
                 <PanelToggle />

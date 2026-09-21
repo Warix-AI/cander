@@ -375,6 +375,13 @@ type AppContextValue = {
   setWorkspaceRailOpen: (open: boolean) => void;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
+  /**
+   * Cycles focus panels from the unified close-panel control:
+   * close chat → open chat → close left+right chrome → restore chrome.
+   */
+  cycleShellPanels: () => void;
+  /** 0 resting · 1 chat closed · 2 chat restored · 3 side panels closed */
+  shellPanelCycleStep: 0 | 1 | 2 | 3;
   expandedLayout: boolean;
   expandedPinned: boolean;
   toggleExpandedLayout: () => void;
@@ -1170,10 +1177,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setExpandedPinned(false);
   }, []);
 
+  const shellPanelCycleRef = useRef<0 | 1 | 2 | 3>(0);
+  const [shellPanelCycleStep, setShellPanelCycleStep] = useState<0 | 1 | 2 | 3>(
+    0,
+  );
+  const panelCycleSnapshotRef = useRef<{
+    sidebarOpen: boolean;
+    panelMode: PanelMode;
+  } | null>(null);
+
   const toggleExpandedLayout = useCallback(() => {
     if (expandedLayout) {
       setExpandedLayout(false);
       setExpandedPinned(false);
+      shellPanelCycleRef.current = 0;
+      setShellPanelCycleStep(0);
       return;
     }
     // Hide only the chat column — menu / workspace rail stay put.
@@ -1181,7 +1199,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setExpandedLayout(true);
     setExpandedPinned(false);
     setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+    shellPanelCycleRef.current = 1;
+    setShellPanelCycleStep(1);
   }, [expandedLayout]);
+
+  /**
+   * One control for chat + side chrome:
+   * 1 close chat · 2 open chat · 3 close left+right · 4 restore.
+   */
+  const cycleShellPanels = useCallback(() => {
+    const desktop = window.matchMedia("(min-width: 1024px)").matches;
+    if (!desktop) {
+      toggleRightPanel();
+      return;
+    }
+
+    const step = shellPanelCycleRef.current;
+    const chatArmed = drafting || Boolean(thread);
+
+    if (step === 0) {
+      if (chatArmed && !expandedLayout) {
+        setExpandedLayout(true);
+        setExpandedPinned(false);
+        setPanelMode((mode) => (mode === "collapsed" ? "split" : mode));
+        shellPanelCycleRef.current = 1;
+        setShellPanelCycleStep(1);
+        return;
+      }
+      // Collapsed right panel (e.g. dock) — open it instead of cycling away.
+      if (panelMode === "collapsed") {
+        toggleRightPanel();
+        return;
+      }
+      // No chat to hide — close side chrome (left nav + right panel).
+      panelCycleSnapshotRef.current = { sidebarOpen, panelMode };
+      setSidebarOpen(false);
+      setPanelMode("collapsed");
+      shellPanelCycleRef.current = 3;
+      setShellPanelCycleStep(3);
+      return;
+    }
+
+    if (step === 1) {
+      setExpandedLayout(false);
+      setExpandedPinned(false);
+      shellPanelCycleRef.current = 2;
+      setShellPanelCycleStep(2);
+      return;
+    }
+
+    if (step === 2) {
+      panelCycleSnapshotRef.current = { sidebarOpen, panelMode };
+      setSidebarOpen(false);
+      setPanelMode("collapsed");
+      shellPanelCycleRef.current = 3;
+      setShellPanelCycleStep(3);
+      return;
+    }
+
+    // step === 3 — restore left nav + right panel
+    const snap = panelCycleSnapshotRef.current;
+    setSidebarOpen(snap?.sidebarOpen ?? true);
+    setPanelMode(
+      snap && snap.panelMode !== "collapsed" ? snap.panelMode : "split",
+    );
+    panelCycleSnapshotRef.current = null;
+    shellPanelCycleRef.current = 0;
+    setShellPanelCycleStep(0);
+  }, [
+    drafting,
+    thread,
+    expandedLayout,
+    sidebarOpen,
+    panelMode,
+    toggleRightPanel,
+  ]);
 
   const openSpaceChat = useCallback(
     (space: SpaceId, opts?: { keepProject?: boolean; landOnPanel?: boolean }) => {
@@ -6552,6 +6644,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceRailOpen,
       toggleLeftPanel,
       toggleRightPanel,
+      cycleShellPanels,
+      shellPanelCycleStep,
       expandedLayout,
       expandedPinned,
       toggleExpandedLayout,
@@ -6737,6 +6831,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       workspaceRailOpen,
       toggleLeftPanel,
       toggleRightPanel,
+      cycleShellPanels,
+      shellPanelCycleStep,
       expandedLayout,
       expandedPinned,
       toggleExpandedLayout,

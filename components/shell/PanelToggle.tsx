@@ -87,23 +87,43 @@ export function PanelToggle({
   /** Floating dock when the panel is collapsed — matches TopRail / NavToggle styling. */
   docked?: boolean;
 }) {
-  const { panelMode, toggleRightPanel } = useApp();
-  const open = panelMode !== "collapsed";
+  const {
+    drafting,
+    thread,
+    expandedLayout,
+    panelMode,
+    cycleShellPanels,
+    shellPanelCycleStep,
+  } = useApp();
+  const chatArmed = drafting || Boolean(thread);
   const hover = useChromeHover();
+
+  const label =
+    shellPanelCycleStep === 1
+      ? "Open chat"
+      : shellPanelCycleStep === 2
+        ? "Close panels"
+        : shellPanelCycleStep === 3
+          ? "Open panels"
+          : chatArmed && !expandedLayout
+            ? "Close chat"
+            : panelMode === "collapsed"
+              ? "Open right panel"
+              : "Close panels";
 
   useEffect(() => {
     hover.clear();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when open flips
-  }, [open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when cycle step flips
+  }, [shellPanelCycleStep]);
 
   return (
     <button
       ref={hover.ref}
       type="button"
-      aria-label={open ? "Close right panel" : "Open right panel"}
+      aria-label={label}
       onClick={() => {
         hover.clear();
-        toggleRightPanel();
+        cycleShellPanels();
       }}
       onPointerEnter={hover.onPointerEnter}
       onPointerLeave={hover.onPointerLeave}

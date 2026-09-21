@@ -12,7 +12,6 @@ import {
   ListFilter,
   Mail,
   MailOpen,
-  PanelLeft,
   Pencil,
   Plus,
   RefreshCw,
@@ -40,7 +39,6 @@ import { StripeConnectorView } from "@/components/connectors/views/StripeConnect
 import type { WorkspaceToolbarState } from "@/components/connectors/views/WorkspaceViewChrome";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
-  BrowserChromeIconButton,
   PanelToggle,
   clearBrowserChromeHovers,
 } from "@/components/shell/PanelToggle";
@@ -120,8 +118,8 @@ export function ConnectorBrowserPanel({
     drafting,
     thread,
     panelMode,
+    shellPanelCycleStep,
     expandedLayout,
-    toggleExpandedLayout,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const surface = panelSurface(floating);
@@ -445,18 +443,6 @@ export function ConnectorBrowserPanel({
         )}
         onPointerLeave={clearBrowserChromeHovers}
       >
-        {chatArmed ? (
-          <BrowserChromeTooltip
-            label={expandedLayout ? "Open chat" : "Close chat"}
-          >
-            <BrowserChromeIconButton
-              aria-label={expandedLayout ? "Open chat" : "Close chat"}
-              onClick={() => toggleExpandedLayout()}
-            >
-              <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-            </BrowserChromeIconButton>
-          </BrowserChromeTooltip>
-        ) : null}
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-visible">
           {session.tabs.map((tab) => (
             <ConnectorTabButton
@@ -488,9 +474,15 @@ export function ConnectorBrowserPanel({
         <span className="ml-auto flex shrink-0 items-center gap-1">
           <BrowserChromeTooltip
             label={
-              panelMode === "collapsed"
-                ? "Open right panel"
-                : "Close right panel"
+              shellPanelCycleStep === 1
+                ? "Open chat"
+                : shellPanelCycleStep === 2
+                  ? "Close panels"
+                  : shellPanelCycleStep === 3
+                    ? "Open panels"
+                    : chatArmed && !expandedLayout
+                      ? "Close chat"
+                      : "Close panels"
             }
           >
             <PanelToggle />

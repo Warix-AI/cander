@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useSyncExternalStore } from "react";
-import { PanelLeft, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { BrowserChromeTooltip } from "@/components/browser/BrowserChromeTooltip";
 import { FaviconImage } from "@/components/browser/FaviconImage";
 import { ConnectorMark } from "@/components/brand/ConnectorMarks";
 import {
-  BrowserChromeIconButton,
   PanelToggle,
   clearBrowserChromeHovers,
 } from "@/components/shell/PanelToggle";
@@ -74,9 +73,8 @@ export function ConnectorBrowserTopChrome({
     actor,
     drafting,
     thread,
-    panelMode,
+    shellPanelCycleStep,
     expandedLayout,
-    toggleExpandedLayout,
   } = useApp();
   const floating = useShellStyle() === "floating";
   const surface = panelSurface(floating);
@@ -167,18 +165,6 @@ export function ConnectorBrowserTopChrome({
       )}
       onPointerLeave={clearBrowserChromeHovers}
     >
-      {chatArmed ? (
-        <BrowserChromeTooltip
-          label={expandedLayout ? "Open chat" : "Close chat"}
-        >
-          <BrowserChromeIconButton
-            aria-label={expandedLayout ? "Open chat" : "Close chat"}
-            onClick={() => toggleExpandedLayout()}
-          >
-            <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
-          </BrowserChromeIconButton>
-        </BrowserChromeTooltip>
-      ) : null}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-visible">
         {session.tabs.map((tab) => (
           <ConnectorTopTabButton
@@ -210,9 +196,15 @@ export function ConnectorBrowserTopChrome({
       <span className="ml-auto flex shrink-0 items-center gap-1">
         <BrowserChromeTooltip
           label={
-            panelMode === "collapsed"
-              ? "Open right panel"
-              : "Close right panel"
+            shellPanelCycleStep === 1
+              ? "Open chat"
+              : shellPanelCycleStep === 2
+                ? "Close panels"
+                : shellPanelCycleStep === 3
+                  ? "Open panels"
+                  : chatArmed && !expandedLayout
+                    ? "Close chat"
+                    : "Close panels"
           }
         >
           <PanelToggle />

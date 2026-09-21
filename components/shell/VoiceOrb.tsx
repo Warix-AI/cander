@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-/** Static 3-bar waveform. */
+/** Static 3-bar waveform — bars use currentColor so header icons stay light. */
 export function VoiceWaveIcon({
   size = 14,
   className,
@@ -22,10 +22,7 @@ export function VoiceWaveIcon({
       {heights.map((ratio, index) => (
         <span
           key={index}
-          className={cn(
-            "w-[2.5px] rounded-full bg-primary-foreground",
-            barClassName,
-          )}
+          className={cn("w-[2.5px] rounded-full bg-current", barClassName)}
           style={{ height: Math.max(3, Math.round(size * ratio)) }}
         />
       ))}

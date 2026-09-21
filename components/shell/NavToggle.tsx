@@ -105,7 +105,7 @@ export function LeftNavToggleDock({
             view === "voice" && "bg-muted text-foreground",
           )}
         >
-          <VoiceWaveIcon size={14} barClassName="bg-current" />
+          <VoiceWaveIcon size={14} />
         </button>
       ) : null}
     </div>
