@@ -52,18 +52,10 @@ import {
 import type { PinKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
-import {
-  SHELL_FLOAT_MARGIN,
-  SHELL_FLOAT_MENU_TOP,
-  SHELL_G3_RADIUS,
-  SHELL_ISLAND_SIDEBAR,
-  useShellStyle,
-} from "@/lib/shell-chrome";
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 const CONTEXT_WIDTH_PX = 240;
-const RAIL_WIDTH_PX = 56;
 
 /** Map primary rail section → pin folder id (except workspaces). */
 const SECTION_TO_PIN: Record<
@@ -159,7 +151,8 @@ export function Sidebar() {
 
   const peeking = peek && !sidebarOpen;
   peekRef.current = peek;
-  const contextVisible = sidebarOpen || peeking;
+  /** Entire left nav (rail + contextual) — not just the context column. */
+  const navVisible = sidebarOpen || peeking;
 
   useEffect(() => {
     setSidebarPeeking(peeking);
@@ -223,11 +216,8 @@ export function Sidebar() {
     return subscribeSidebarPeekRelease(scheduleClosePeek);
   }, [scheduleClosePeek]);
 
-  const shellStyle = useShellStyle();
-  const floating = shellStyle === "floating";
   const desktop = useDesktopShell();
   const macDesktop = desktop;
-  const chromeOutside = desktop || floating;
   const allowedWorkspaces = workspacesFor(actor, entitlements);
 
   const openPinnedItem = useCallback(
@@ -541,14 +531,13 @@ export function Sidebar() {
 
   return (
     <>
-      <LeftNavToggleDock showRail peeking={peeking} />
+      <LeftNavToggleDock peeking={peeking} />
       {!sidebarOpen ? (
         <div
           ref={edgeRef}
           aria-hidden
           data-sidebar-edge=""
-          className="fixed inset-y-0 z-30 hidden w-[15px] lg:block"
-          style={{ left: RAIL_WIDTH_PX }}
+          className="fixed inset-y-0 left-0 z-30 hidden w-[15px] lg:block"
           onMouseEnter={openPeek}
           onMouseLeave={scheduleClosePeek}
         />
@@ -559,92 +548,49 @@ export function Sidebar() {
         onMouseEnter={!sidebarOpen ? openPeek : undefined}
         onMouseLeave={!sidebarOpen ? scheduleClosePeek : undefined}
         className={cn(
-          "hidden h-full max-w-[100vw] shrink-0 gap-0 lg:flex",
-          chromeOutside && "flex-col",
-          "lg:static lg:max-w-none",
+          "hidden h-full max-w-[100vw] shrink-0 flex-col lg:flex",
+          sidebarOpen
+            ? "lg:static lg:max-w-none"
+            : cn(
+                "lg:fixed lg:inset-y-0 lg:left-0 lg:z-40",
+                "will-change-transform transition-[transform,opacity]",
+                peek
+                  ? "translate-x-0 opacity-100 duration-[360ms] ease-out"
+                  : "pointer-events-none -translate-x-full opacity-0 duration-[420ms] ease-in",
+                !peekVisible && "invisible",
+              ),
         )}
-        aria-hidden={false}
+        aria-hidden={!navVisible}
       >
-        {macDesktop ? (
-          <WindowChrome
-            clearTrafficLights
-            navChrome
-            className={cn(
-              "w-full",
-              floating
-                ? "bg-transparent text-foreground"
-                : "bg-sidebar text-sidebar-foreground",
-            )}
-          />
-        ) : null}
-
+        {/*
+          Full-height docked menu (Cursor-style): flush top/bottom, right stroke
+          only — no floating island / G3 card.
+        */}
         <div
           className={cn(
-            "flex min-h-0",
-            chromeOutside ? "flex-1" : "h-full",
-            floating && (macDesktop ? SHELL_FLOAT_MENU_TOP : SHELL_FLOAT_MARGIN),
-            floating && !macDesktop && "mt-2",
+            "flex h-full w-[calc(56px+240px)] shrink-0 flex-col overflow-hidden border-r border-black/[0.08] bg-sidebar text-sidebar-foreground dark:border-white/[0.1]",
+            peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
           )}
         >
-          <div
-            className={cn(
-              "flex shrink-0 flex-col text-sidebar-foreground",
-              floating
-                ? cn(
-                    "ml-2 overflow-hidden",
-                    SHELL_ISLAND_SIDEBAR,
-                    SHELL_G3_RADIUS,
-                    chromeOutside
-                      ? "h-full"
-                      : "mb-2 mr-2 mt-[max(0.5rem,var(--desktop-titlebar))] h-[calc(100%-0.5rem-max(0.5rem,var(--desktop-titlebar)))]",
-                  )
-                : cn(
-                    "h-full overflow-hidden bg-sidebar",
-                    peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
-                  ),
-            )}
-          >
-            {!floating && !macDesktop ? (
-              <div
-                className="w-full shrink-0"
-                style={{ height: "var(--desktop-titlebar)" }}
-                aria-hidden
-              />
-            ) : null}
+          <WindowChrome
+            clearTrafficLights={macDesktop}
+            navChrome
+            className="w-full bg-transparent text-foreground"
+          />
 
-            <div className="flex min-h-0 flex-1 flex-col">
-              {!macDesktop ? <WindowChrome navChrome /> : null}
+          <div className="relative flex min-h-0 flex-1">
+            <PrimaryNavRail section={section} onSection={selectSection} />
 
-              <div className="relative flex min-h-0 flex-1">
-                <PrimaryNavRail section={section} onSection={selectSection} />
-
-                <div
-                  className={cn(
-                    "flex min-h-0 flex-col overflow-hidden border-l border-black/[0.06] transition-[width,opacity] duration-200 ease-out dark:border-white/[0.06]",
-                    contextVisible
-                      ? "opacity-100"
-                      : "pointer-events-none opacity-0",
-                    !sidebarOpen &&
-                      peek &&
-                      "absolute left-[56px] top-0 z-40 h-full shadow-[0_8px_30px_oklch(0_0_0/0.18)]",
-                    !sidebarOpen && !peekVisible && !peek && "invisible",
-                  )}
-                  style={{
-                    width: contextVisible ? CONTEXT_WIDTH_PX : 0,
-                  }}
-                  aria-hidden={!contextVisible}
-                >
-                  <nav
-                    className={cn(
-                      "flex h-full min-h-0 w-[240px] flex-1 flex-col overflow-hidden px-2 pb-2",
-                      macDesktop || floating ? "mt-1.5" : "mt-2",
-                    )}
-                    aria-label={PRIMARY_NAV_LABEL[section]}
-                  >
-                    {contextInner}
-                  </nav>
-                </div>
-              </div>
+            <div
+              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-black/[0.06] dark:border-white/[0.06]"
+              style={{ width: CONTEXT_WIDTH_PX }}
+            >
+              <nav
+                className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2 pt-1"
+                aria-label={PRIMARY_NAV_LABEL[section]}
+              >
+                {contextInner}
+              </nav>
             </div>
           </div>
         </div>

@@ -1,17 +1,15 @@
 "use client";
 
-import { PanelLeft } from "lucide-react";
+import { PanelLeft, Search } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DESKTOP_NO_DRAG,
   DESKTOP_TRAFFIC_CLEAR_PX,
   useDesktopShell,
 } from "@/lib/desktop-shell";
-import { SHELL_FLOAT_INSET_PX, useShellStyle } from "@/lib/shell-chrome";
+import { SHELL_HEADER_ICON_CLASS } from "@/components/shell/ShellWindowChromeBar";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
-
-const CHROME_PAD_PX = 12;
 
 export function NavToggle({
   className,
@@ -51,55 +49,39 @@ export function NavToggle({
 }
 
 /**
- * Fixed toggle when the sidebar is collapsed.
- * Desktop (classic + floating): same traffic-light-adjacent spot as WindowChrome.
- * Fully closed → only this control remains.
+ * Fixed PanelLeft + Search when the entire left nav is hidden.
+ * Single control cluster — avoids stacking a second toggle under Search.
  */
 export function LeftNavToggleDock({
-  showRail = false,
   peeking,
 }: {
-  /** When true, primary icon rail stays visible — dock sits just past it. */
-  showRail?: boolean;
   peeking: boolean;
 }) {
-  const { sidebarOpen, projectId, drafting, thread } = useApp();
+  const { sidebarOpen, projectId, drafting, thread, openSearch } = useApp();
   const mobile = useMobileShell();
-  const floating = useShellStyle() === "floating";
   const desktop = useDesktopShell();
   const projectFullscreen = Boolean(projectId) && !drafting && !thread;
-  const railOffset = showRail ? 56 : 0;
 
   if (mobile || sidebarOpen || peeking || projectFullscreen) return null;
 
-  if (desktop) {
-    return (
-      <div
-        className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center lg:flex"
-        style={{
-          left: DESKTOP_TRAFFIC_CLEAR_PX + railOffset,
-          ...DESKTOP_NO_DRAG,
-        }}
-      >
-        <NavToggle docked className="pointer-events-auto" />
-      </div>
-    );
-  }
-
-  const leftPx =
-    (floating ? SHELL_FLOAT_INSET_PX : 0) + CHROME_PAD_PX + railOffset;
-
   return (
     <div
-      className={cn(
-        "pointer-events-none fixed z-50 hidden h-11 items-center lg:flex",
-        floating
-          ? "top-[max(0.5rem,var(--desktop-titlebar))]"
-          : "top-[var(--desktop-titlebar)]",
-      )}
-      style={{ left: `${leftPx}px` }}
+      className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center gap-1.5 lg:flex"
+      style={{
+        left: desktop ? DESKTOP_TRAFFIC_CLEAR_PX : 12,
+        ...(desktop ? DESKTOP_NO_DRAG : undefined),
+      }}
     >
       <NavToggle docked className="pointer-events-auto" />
+      <button
+        type="button"
+        aria-label="Search"
+        style={desktop ? DESKTOP_NO_DRAG : undefined}
+        onClick={() => openSearch()}
+        className={cn(SHELL_HEADER_ICON_CLASS, "pointer-events-auto")}
+      >
+        <Search className="h-4 w-4" strokeWidth={1.7} />
+      </button>
     </div>
   );
 }
