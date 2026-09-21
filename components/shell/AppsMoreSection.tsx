@@ -21,12 +21,15 @@ export function AppsMoreSection({
   listedIds,
   onConnect,
   onOpen,
+  activeId = null,
   query = "",
 }: {
   listedIds: Iterable<string>;
   onConnect: (connectorId: string) => void;
   /** Open the app in the main/right panel (same as a connected pin). */
   onOpen?: (connectorId: string) => void;
+  /** Currently open connector — blue selected row. */
+  activeId?: string | null;
   /** Optional filter — empty shows the full available list. */
   query?: string;
 }) {
@@ -79,6 +82,7 @@ export function AppsMoreSection({
         <AvailableAppRow
           key={app.id}
           app={app}
+          active={activeId === app.id}
           onConnect={onConnect}
           onOpen={onOpen}
         />
@@ -89,10 +93,12 @@ export function AppsMoreSection({
 
 function AvailableAppRow({
   app,
+  active,
   onConnect,
   onOpen,
 }: {
   app: { id: string; name: string; icon: string };
+  active: boolean;
   onConnect: (id: string) => void;
   onOpen?: (id: string) => void;
 }) {
@@ -100,18 +106,28 @@ function AvailableAppRow({
     <div
       className={cn(
         "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
-        "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
+        active
+          ? "shell-select-active !text-[var(--shell-select-foreground)]"
+          : "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
       )}
     >
       <button
         type="button"
         onClick={() => (onOpen ?? onConnect)(app.id)}
-        className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]"
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]",
+          active && "font-medium",
+        )}
       >
         <span className="inline-flex shrink-0">
           <ConnectorMark id={app.icon} size="nav" />
         </span>
-        <span className="min-w-0 flex-1 truncate text-foreground/80">
+        <span
+          className={cn(
+            "min-w-0 flex-1 truncate",
+            active ? "text-inherit" : "text-foreground/80",
+          )}
+        >
           {app.name}
         </span>
       </button>
@@ -129,8 +145,9 @@ function AvailableAppRow({
           "pointer-events-none opacity-0 transition-[opacity,background-color,color] duration-150",
           "group-hover:pointer-events-auto group-hover:opacity-100",
           "focus-visible:pointer-events-auto focus-visible:opacity-100",
-          "text-muted-foreground",
-          "hover:bg-[var(--shell-select)] hover:text-[var(--shell-select-foreground)]",
+          active
+            ? "text-[var(--shell-select-foreground)]/90 hover:bg-white/15"
+            : "text-muted-foreground hover:bg-[var(--shell-select)] hover:text-[var(--shell-select-foreground)]",
           "focus-visible:bg-[var(--shell-select)] focus-visible:text-[var(--shell-select-foreground)]",
         )}
       >

@@ -262,8 +262,7 @@ export function Sidebar() {
 
   const pinRowActive = (item: PinnedItem) => {
     if (item.kind === "thread") return threadId === item.id;
-    if (item.kind === "connector")
-      return connectorId === item.id && spaceId === "connectors";
+    if (item.kind === "connector") return connectorId === item.id;
     return projectId === item.id;
   };
 
@@ -439,6 +438,7 @@ export function Sidebar() {
         persistLastNavItem("apps", `connector:${id}`);
         openConnector(id);
       }}
+      activeAppId={connectorId}
       section={section}
     />
   );
@@ -609,12 +609,14 @@ function SidebarPinSectionBody({
   renderPinnedRow,
   onConnect,
   onOpenApp,
+  activeAppId,
   section,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   onConnect: (id: string) => void;
   onOpenApp: (id: string) => void;
+  activeAppId?: string | null;
   section: PrimaryNavSection;
 }) {
   if (section === "chats" || section === "images") {
@@ -659,6 +661,7 @@ function SidebarPinSectionBody({
           listedIds={group.items.map((item) => item.id)}
           onConnect={onConnect}
           onOpen={onOpenApp}
+          activeId={activeAppId}
           query=""
         />
       ) : null}
@@ -722,7 +725,9 @@ function PinnedRow({
       data-pin-tree-key={dragKey}
       className={cn(
         "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
-        inUse ? "shell-select-active" : SIDEBAR_ROW_HOVER,
+        inUse
+          ? "shell-select-active !text-[var(--shell-select-foreground)]"
+          : SIDEBAR_ROW_HOVER,
         dragging && "opacity-40",
       )}
       onDragOver={(event) => {
