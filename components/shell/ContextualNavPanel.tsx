@@ -16,8 +16,18 @@ export function ContextualNavHeader({
   onPrimaryAction,
 }: {
   section: PrimaryNavSection;
-  onPrimaryAction: () => void;
+  onPrimaryAction?: () => void;
 }) {
+  if (section === "general") {
+    return (
+      <div className="flex shrink-0 items-center gap-1 px-1 pb-1 pt-0.5">
+        <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
+          {PRIMARY_NAV_LABEL.general}
+        </h2>
+      </div>
+    );
+  }
+
   const primaryLabel =
     section === "apps"
       ? "Connect app"
@@ -32,20 +42,22 @@ export function ContextualNavHeader({
       <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
         {PRIMARY_NAV_LABEL[section]}
       </h2>
-      <button
-        type="button"
-        title={primaryLabel}
-        aria-label={primaryLabel}
-        data-desktop-no-drag=""
-        onClick={onPrimaryAction}
-        className={HEADER_ICON}
-      >
-        {section === "chats" ? (
-          <SquarePen className="h-3.5 w-3.5" strokeWidth={1.7} />
-        ) : (
-          <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
-        )}
-      </button>
+      {onPrimaryAction ? (
+        <button
+          type="button"
+          title={primaryLabel}
+          aria-label={primaryLabel}
+          data-desktop-no-drag=""
+          onClick={onPrimaryAction}
+          className={HEADER_ICON}
+        >
+          {section === "chats" ? (
+            <SquarePen className="h-3.5 w-3.5" strokeWidth={1.7} />
+          ) : (
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
+          )}
+        </button>
+      ) : null}
     </div>
   );
 }

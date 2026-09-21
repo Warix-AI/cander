@@ -1,12 +1,12 @@
 "use client";
 
 import {
-  AppWindow,
   AudioLines,
   Bell,
   CircleHelp,
   CircleUser,
   Image as ImageIcon,
+  Layers,
   LayoutGrid,
   MessageSquare,
   type LucideIcon,
@@ -19,11 +19,11 @@ import {
 import { cn } from "@/lib/utils";
 
 const PRIMARY: {
-  id: PrimaryNavSection;
+  id: Exclude<PrimaryNavSection, "general">;
   Icon: LucideIcon;
 }[] = [
   { id: "workspaces", Icon: LayoutGrid },
-  { id: "apps", Icon: AppWindow },
+  { id: "apps", Icon: Layers },
   { id: "chats", Icon: MessageSquare },
   { id: "images", Icon: ImageIcon },
 ];
@@ -47,7 +47,6 @@ export function PrimaryNavRail({
   const {
     openHelp,
     openVoice,
-    openSettings,
     openNotifications,
     entitlements,
     view,
@@ -134,13 +133,13 @@ export function PrimaryNavRail({
         ) : null}
         <button
           type="button"
-          title="Settings"
-          aria-label="Settings"
+          title="General"
+          aria-label="General"
           data-desktop-no-drag=""
-          onClick={() => openSettings("general")}
+          onClick={() => onSection("general")}
           className={cn(
             RAIL_BTN,
-            view === "settings" &&
+            (section === "general" || view === "settings") &&
               "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
           )}
         >

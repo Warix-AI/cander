@@ -13,6 +13,7 @@ import {
 import { GripVertical, MessageSquare } from "lucide-react";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
+import { GeneralMenuBody } from "@/components/shell/GeneralMenuSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { PrimaryNavRail } from "@/components/shell/PrimaryNavRail";
 import { WindowChrome } from "@/components/shell/WindowChrome";
@@ -21,7 +22,11 @@ import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { useApp } from "@/components/app/AppProvider";
 import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
 import { workspacesFor } from "@/lib/entitlements";
-import { SIDEBAR_ROW_HOVER } from "@/lib/mobile-menu-styles";
+import {
+  SIDEBAR_ROW,
+  SIDEBAR_ROW_HOVER,
+  SIDEBAR_ROW_ICON,
+} from "@/lib/mobile-menu-styles";
 import {
   persistContextNavOpen,
   persistLastNavItem,
@@ -57,9 +62,9 @@ const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 const CONTEXT_WIDTH_PX = 240;
 
-/** Map primary rail section → pin folder id (except workspaces). */
+/** Map primary rail section → pin folder id (except workspaces / general). */
 const SECTION_TO_PIN: Record<
-  Exclude<PrimaryNavSection, "workspaces">,
+  Exclude<PrimaryNavSection, "workspaces" | "general">,
   PinSectionId
 > = {
   apps: "connectors",
@@ -97,6 +102,8 @@ export function Sidebar() {
     openExpertSetup,
     expertSetupId,
     openOverlay,
+    openSettings,
+    settingsTab,
   } = useApp();
 
   const runningExperts = useRunningExpertState(workspaceId);
@@ -269,9 +276,14 @@ export function Sidebar() {
           ? `thread:${threadId}`
           : null;
 
-  // Follow destination into Apps / Automations / Chats.
+  // Follow destination into Apps / Chats / Images / General.
   useEffect(() => {
-    if (view === "settings") return;
+    if (view === "settings") {
+      skipRestoreRef.current = true;
+      setSection("general");
+      persistPrimaryNavSection("general");
+      return;
+    }
     if (!activePinKey) return;
     const owning = pinGroups.find((group) =>
       group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
@@ -287,7 +299,7 @@ export function Sidebar() {
   }, [view, activePinKey]);
 
   const activePinGroup = useMemo(() => {
-    if (section === "workspaces") return null;
+    if (section === "workspaces" || section === "general") return null;
     const pinId = SECTION_TO_PIN[section];
     return (
       navPinGroups.find((group) => group.id === pinId) ?? {
@@ -327,9 +339,19 @@ export function Sidebar() {
       setSection(next);
       persistPrimaryNavSection(next);
       if (!sidebarOpen) setSidebarOpen(true);
+      if (next === "general") {
+        openSettings(settingsTab || "general");
+        return;
+      }
       restoreLastItem(next);
     },
-    [restoreLastItem, sidebarOpen, setSidebarOpen],
+    [
+      restoreLastItem,
+      sidebarOpen,
+      setSidebarOpen,
+      openSettings,
+      settingsTab,
+    ],
   );
 
   // Keyboard: Alt+1..4 switches primary section.
@@ -475,6 +497,7 @@ export function Sidebar() {
       openOverlay("workspace");
       return;
     }
+    if (section === "general") return;
     openSpace("studio");
   };
 
@@ -482,17 +505,25 @@ export function Sidebar() {
     <>
       <ContextualNavHeader
         section={section}
-        onPrimaryAction={onPrimaryAction}
+        onPrimaryAction={
+          section === "general" ? undefined : onPrimaryAction
+        }
       />
 
       <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
         <div className="h-full overflow-y-auto pb-1">
           <div className="flex flex-col gap-0.5">
-            {section === "workspaces"
-              ? renderWorkspaceSegment()
-              : activePinGroup
-                ? renderPinSectionChildren(activePinGroup, filteredPinItems)
-                : null}
+            {section === "general" ? (
+              <GeneralMenuBody
+                hideSearch
+                rowClassName={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER)}
+                iconClassName={SIDEBAR_ROW_ICON}
+              />
+            ) : section === "workspaces" ? (
+              renderWorkspaceSegment()
+            ) : activePinGroup ? (
+              renderPinSectionChildren(activePinGroup, filteredPinItems)
+            ) : null}
           </div>
         </div>
       </div>

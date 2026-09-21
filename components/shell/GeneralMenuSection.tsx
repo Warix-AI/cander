@@ -42,7 +42,7 @@ const SETTINGS_ICONS: Record<SettingsTab, LucideIcon> = {
 };
 
 const SETTINGS_LABEL: Partial<Record<SettingsTab, string>> = {
-  plans: "Plan",
+  plans: "Your plan",
 };
 
 type MenuRow =

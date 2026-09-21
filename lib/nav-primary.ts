@@ -3,8 +3,10 @@ export type PrimaryNavSection =
   | "workspaces"
   | "apps"
   | "chats"
-  | "images";
+  | "images"
+  | "general";
 
+/** Top rail destinations (General lives on the bottom account control). */
 export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
   "workspaces",
   "apps",
@@ -17,6 +19,7 @@ export const PRIMARY_NAV_LABEL: Record<PrimaryNavSection, string> = {
   apps: "Apps",
   chats: "Chats",
   images: "Images",
+  general: "General",
 };
 
 const SECTION_KEY = "cander-primary-nav-section";
@@ -27,7 +30,10 @@ const CONTEXT_OPEN_KEY = "cander-context-nav-open";
 function normalizeSection(raw: string | null): PrimaryNavSection | null {
   if (!raw) return null;
   if (raw === "automations" || raw === "agents") return "images";
-  if ((PRIMARY_NAV_SECTIONS as readonly string[]).includes(raw)) {
+  if (
+    (PRIMARY_NAV_SECTIONS as readonly string[]).includes(raw) ||
+    raw === "general"
+  ) {
     return raw as PrimaryNavSection;
   }
   return null;
