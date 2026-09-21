@@ -89,7 +89,6 @@ export function Sidebar() {
     sidebarOpen,
     setSidebarOpen,
     reorderPins,
-    setPin,
     openThread,
     openProject,
     openConnector,
@@ -395,9 +394,13 @@ export function Sidebar() {
         item.expertKind ? `${item.expertKind} expert` : undefined
       }
       leading={
-        item.kind === "thread" ? null : <PinPreviewThumb item={item} />
+        item.kind === "thread" && section !== "images" ? (
+          null
+        ) : (
+          <PinPreviewThumb item={item} />
+        )
       }
-      hideLeading={item.kind === "thread"}
+      hideLeading={item.kind === "thread" && section !== "images"}
       inUse={
         item.expertCatalog
           ? view === "expert" && expertSetupId === item.id
