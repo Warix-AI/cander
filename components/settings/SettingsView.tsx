@@ -55,12 +55,7 @@ import { isSupabaseConfigured } from "@/lib/data-backend";
 import { isMobileShell, openExternalUrl } from "@/lib/mobile-shell";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Member, SettingsTab } from "@/lib/types";
-import {
-  MOBILE_APP_BG,
-  SIDEBAR_ROW_HOVER,
-  SIDEBAR_SEGMENT_ACTIVE,
-} from "@/lib/mobile-menu-styles";
-import { SHELL_G3_RADIUS } from "@/lib/shell-chrome";
+import { MOBILE_APP_BG } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 import { workspaceKindOf } from "@/lib/workspace-kind";
 import {
@@ -94,9 +89,7 @@ const settingsIcons: Record<SettingsTab, typeof LayoutGrid> = {
   appearance: Palette,
 };
 
-const SETTINGS_SEGMENT_ICON = "h-[18px] w-[18px] shrink-0";
-
-/** Full-screen account settings — hub on mobile, tabs in sidebar on desktop. */
+/** Full-screen account settings — hub on mobile, sidebar links on desktop. */
 export function SettingsView() {
   const {
     settingsTab,
@@ -243,67 +236,23 @@ export function SettingsView() {
       ) : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-y-auto">
-            {/* Segments + body share one column so icons float on the island. */}
             <div className="mx-auto w-full max-w-[53.2rem] px-5 pt-1.5 sm:px-8 lg:px-10">
-              <div
-                role="tablist"
-                aria-label="Settings section"
-                className="flex w-full items-center justify-start gap-2 overflow-visible"
-              >
-                {settingsNav.map((tab) => {
-                  const Icon = settingsIcons[tab.id];
-                  const active = settingsTab === tab.id;
-                  return (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      role="tab"
-                      aria-label={tab.label}
-                      aria-selected={active}
-                      title={tab.label}
-                      onClick={() => {
-                        setSettingsWorkspaceId(null);
-                        setSettingsOrgMemberId(null);
-                        setSettingsTab(tab.id);
-                      }}
-                      className={cn(
-                        "relative z-10 flex shrink-0 items-center justify-center gap-1.5 px-2 py-2 transition-[background-color,box-shadow,color,backdrop-filter,padding] duration-150",
-                        SHELL_G3_RADIUS,
-                        active
-                          ? cn(SIDEBAR_SEGMENT_ACTIVE, "px-2.5")
-                          : cn("text-muted-foreground", SIDEBAR_ROW_HOVER),
-                      )}
-                    >
-                      {active ? (
-                        <span className="max-w-[7.5rem] truncate text-[12px] tracking-[-0.01em]">
-                          {tab.label}
-                        </span>
-                      ) : (
-                        <Icon
-                          className={SETTINGS_SEGMENT_ICON}
-                          strokeWidth={1.85}
-                        />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+              {settingsTab === "workspaces" && entitlements.hasWorkspaces ? (
+                <WorkspacesSettings
+                  selectedId={settingsWorkspaceId}
+                  onSelect={setSettingsWorkspaceId}
+                />
+              ) : null}
+              {settingsTab === "plans" ? <PlansSettings /> : null}
+              {settingsTab === "usage" ? <UsageSettings /> : null}
+              {settingsTab === "notifications" ? (
+                <NotificationSettings />
+              ) : null}
+              {settingsTab === "general" ? (
+                <GeneralSettings onAfterSignOut={() => leave()} />
+              ) : null}
+              {settingsTab === "appearance" ? <AppearanceSettings /> : null}
             </div>
-            {settingsTab === "workspaces" && entitlements.hasWorkspaces ? (
-              <WorkspacesSettings
-                selectedId={settingsWorkspaceId}
-                onSelect={setSettingsWorkspaceId}
-              />
-            ) : null}
-            {settingsTab === "plans" ? <PlansSettings /> : null}
-            {settingsTab === "usage" ? <UsageSettings /> : null}
-            {settingsTab === "notifications" ? (
-              <NotificationSettings />
-            ) : null}
-            {settingsTab === "general" ? (
-              <GeneralSettings onAfterSignOut={() => leave()} />
-            ) : null}
-            {settingsTab === "appearance" ? <AppearanceSettings /> : null}
           </div>
         </div>
       )}

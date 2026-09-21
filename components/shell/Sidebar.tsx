@@ -435,6 +435,10 @@ export function Sidebar() {
       group={{ ...group, items }}
       renderPinnedRow={renderPinnedRow}
       onConnect={(id) => openConnectorConnect(id)}
+      onOpenApp={(id) => {
+        persistLastNavItem("apps", `connector:${id}`);
+        openConnector(id);
+      }}
       section={section}
     />
   );
@@ -604,11 +608,13 @@ function SidebarPinSectionBody({
   group,
   renderPinnedRow,
   onConnect,
+  onOpenApp,
   section,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   onConnect: (id: string) => void;
+  onOpenApp: (id: string) => void;
   section: PrimaryNavSection;
 }) {
   if (section === "chats" || section === "images") {
@@ -652,6 +658,7 @@ function SidebarPinSectionBody({
         <AppsMoreSection
           listedIds={group.items.map((item) => item.id)}
           onConnect={onConnect}
+          onOpen={onOpenApp}
           query=""
         />
       ) : null}

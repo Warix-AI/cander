@@ -14,16 +14,19 @@ import { listSidebarAvailableApps } from "@/lib/sidebar-available-apps";
 import { cn } from "@/lib/utils";
 
 /**
- * Catalog apps not yet connected. Hover a row to reveal Add; Add opens
- * the connect flow. Connected apps surface above via the pin list.
+ * Catalog apps not yet connected. Click a row to open the app panel; Add
+ * still starts the connect flow. Connected apps surface above via pins.
  */
 export function AppsMoreSection({
   listedIds,
   onConnect,
+  onOpen,
   query = "",
 }: {
   listedIds: Iterable<string>;
   onConnect: (connectorId: string) => void;
+  /** Open the app in the main/right panel (same as a connected pin). */
+  onOpen?: (connectorId: string) => void;
   /** Optional filter — empty shows the full available list. */
   query?: string;
 }) {
@@ -73,7 +76,12 @@ export function AppsMoreSection({
   return (
     <div className="relative mt-0.5 flex flex-col gap-0.5">
       {matches.map((app) => (
-        <AvailableAppRow key={app.id} app={app} onConnect={onConnect} />
+        <AvailableAppRow
+          key={app.id}
+          app={app}
+          onConnect={onConnect}
+          onOpen={onOpen}
+        />
       ))}
     </div>
   );
@@ -82,9 +90,11 @@ export function AppsMoreSection({
 function AvailableAppRow({
   app,
   onConnect,
+  onOpen,
 }: {
   app: { id: string; name: string; icon: string };
   onConnect: (id: string) => void;
+  onOpen?: (id: string) => void;
 }) {
   return (
     <div
@@ -93,14 +103,18 @@ function AvailableAppRow({
         "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]">
+      <button
+        type="button"
+        onClick={() => (onOpen ?? onConnect)(app.id)}
+        className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]"
+      >
         <span className="inline-flex shrink-0">
           <ConnectorMark id={app.icon} size="nav" />
         </span>
         <span className="min-w-0 flex-1 truncate text-foreground/80">
           {app.name}
         </span>
-      </div>
+      </button>
       <button
         type="button"
         data-app-connect=""
