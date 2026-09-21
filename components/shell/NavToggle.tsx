@@ -8,6 +8,7 @@ import {
   useDesktopShell,
 } from "@/lib/desktop-shell";
 import { SHELL_HEADER_ICON_CLASS } from "@/components/shell/ShellWindowChromeBar";
+import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -49,7 +50,7 @@ export function NavToggle({
 }
 
 /**
- * Fixed PanelLeft + Search when the entire left nav is hidden.
+ * Fixed PanelLeft + Search + Voice when the entire left nav is hidden.
  * Single control cluster — avoids stacking a second toggle under Search.
  */
 export function LeftNavToggleDock({
@@ -57,7 +58,16 @@ export function LeftNavToggleDock({
 }: {
   peeking: boolean;
 }) {
-  const { sidebarOpen, projectId, drafting, thread, openSearch } = useApp();
+  const {
+    sidebarOpen,
+    projectId,
+    drafting,
+    thread,
+    openSearch,
+    openVoice,
+    entitlements,
+    view,
+  } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
   const projectFullscreen = Boolean(projectId) && !drafting && !thread;
@@ -82,6 +92,22 @@ export function LeftNavToggleDock({
       >
         <Search className="h-4 w-4" strokeWidth={1.7} />
       </button>
+      {entitlements.hasVoice ? (
+        <button
+          type="button"
+          aria-label="Voice"
+          title="Voice"
+          style={desktop ? DESKTOP_NO_DRAG : undefined}
+          onClick={() => openVoice()}
+          className={cn(
+            SHELL_HEADER_ICON_CLASS,
+            "pointer-events-auto",
+            view === "voice" && "bg-muted text-foreground",
+          )}
+        >
+          <VoiceWaveIcon size={14} barClassName="bg-current" />
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AudioLines,
   Bell,
   CircleHelp,
   CircleUser,
@@ -33,7 +32,7 @@ const RAIL_BTN =
 
 /**
  * Narrow primary icon rail (~56px) — major product sections + account utilities.
- * Search / collapse live in the desktop titlebar; notif + help sit above Settings.
+ * Search / Voice / collapse live in the desktop titlebar.
  */
 export function PrimaryNavRail({
   section,
@@ -44,13 +43,7 @@ export function PrimaryNavRail({
   onSection: (next: PrimaryNavSection) => void;
   className?: string;
 }) {
-  const {
-    openHelp,
-    openVoice,
-    openNotifications,
-    entitlements,
-    view,
-  } = useApp();
+  const { openHelp, openNotifications, view } = useApp();
 
   return (
     <aside
@@ -115,22 +108,6 @@ export function PrimaryNavRail({
         >
           <CircleHelp className="h-[17px] w-[17px]" strokeWidth={1.75} />
         </button>
-        {entitlements.hasVoice ? (
-          <button
-            type="button"
-            title="Voice"
-            aria-label="Voice"
-            data-desktop-no-drag=""
-            onClick={() => openVoice()}
-            className={cn(
-              RAIL_BTN,
-              view === "voice" &&
-                "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
-            )}
-          >
-            <AudioLines className="h-[17px] w-[17px]" strokeWidth={1.75} />
-          </button>
-        ) : null}
         <button
           type="button"
           title="General"
