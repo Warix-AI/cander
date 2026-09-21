@@ -4,10 +4,10 @@ import {
   Bell,
   CircleHelp,
   CircleUser,
-  Image as ImageIcon,
   Layers,
   LayoutGrid,
   MessageSquare,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -21,14 +21,14 @@ const PRIMARY: {
   id: Exclude<PrimaryNavSection, "general">;
   Icon: LucideIcon;
 }[] = [
-  { id: "workspaces", Icon: LayoutGrid },
-  { id: "apps", Icon: Layers },
+  { id: "apps", Icon: LayoutGrid },
+  { id: "workspaces", Icon: Layers },
   { id: "chats", Icon: MessageSquare },
-  { id: "images", Icon: ImageIcon },
+  { id: "automations", Icon: Zap },
 ];
 
 const RAIL_BTN =
-  "inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:hover:bg-white/[0.08] dark:focus-visible:ring-white/20";
+  "inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-200 hover:bg-black/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:hover:bg-white/[0.08] dark:focus-visible:ring-white/20";
 
 /**
  * Narrow primary icon rail (~56px) — major product sections + account utilities.

@@ -1582,7 +1582,7 @@ html.dark .shell-island-sidebar {
   background: #212121;
 }
 
-/* Leaf selection — quiet system blue (macOS sidebar). */
+/* Leaf selection — quiet system blue (macOS sidebar). Chat bubbles, CTAs. */
 .shell-select-active {
   background: var(--shell-select) !important;
   color: var(--shell-select-foreground) !important;
@@ -1598,6 +1598,28 @@ html.dark .shell-island-sidebar {
 .shell-select-active [data-lucide] {
   color: var(--shell-select-foreground) !important;
   opacity: 0.92;
+}
+
+/*
+ * Contextual sidebar row selection — restrained dark-gray wash so the main
+ * content stays the visual focus (not a saturated full-width blue block).
+ */
+.shell-nav-row-active {
+  position: relative;
+  background: oklch(0.92 0.004 250 / 0.72) !important;
+  color: var(--foreground) !important;
+  font-weight: 500;
+  box-shadow: inset 2.5px 0 0 0 color-mix(in oklab, var(--shell-select) 72%, transparent);
+}
+
+html.dark .shell-nav-row-active {
+  background: oklch(1 0 0 / 0.09) !important;
+  box-shadow: inset 2.5px 0 0 0 color-mix(in oklab, var(--shell-select) 65%, transparent);
+}
+
+.shell-nav-row-active .text-muted-foreground {
+  color: var(--foreground) !important;
+  opacity: 0.72;
 }
 
 /* Selected Apps | Experts | Chats — glass pill on the chosen mode only (no track). */

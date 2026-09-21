@@ -28,7 +28,7 @@ export function AppsMoreSection({
   onConnect: (connectorId: string) => void;
   /** Open the app in the main/right panel (same as a connected pin). */
   onOpen?: (connectorId: string) => void;
-  /** Currently open connector — blue selected row. */
+  /** Currently open connector — quiet selected row. */
   activeId?: string | null;
   /** Optional filter — empty shows the full available list. */
   query?: string;
@@ -107,7 +107,7 @@ function AvailableAppRow({
       className={cn(
         "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
         active
-          ? "shell-select-active !text-[var(--shell-select-foreground)]"
+          ? "shell-nav-row-active"
           : "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
       )}
     >
@@ -146,9 +146,9 @@ function AvailableAppRow({
           "group-hover:pointer-events-auto group-hover:opacity-100",
           "focus-visible:pointer-events-auto focus-visible:opacity-100",
           active
-            ? "text-[var(--shell-select-foreground)]/90 hover:bg-white/15"
-            : "text-muted-foreground hover:bg-[var(--shell-select)] hover:text-[var(--shell-select-foreground)]",
-          "focus-visible:bg-[var(--shell-select)] focus-visible:text-[var(--shell-select-foreground)]",
+            ? "text-foreground/80 hover:bg-black/[0.06] dark:hover:bg-white/[0.1]"
+            : "text-muted-foreground hover:bg-black/[0.06] hover:text-foreground dark:hover:bg-white/[0.1]",
+          "focus-visible:bg-black/[0.06] focus-visible:text-foreground dark:focus-visible:bg-white/[0.1]",
         )}
       >
         Add

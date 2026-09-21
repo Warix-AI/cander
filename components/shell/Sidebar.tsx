@@ -13,6 +13,7 @@ import {
 import { GripVertical, MessageSquare } from "lucide-react";
 import { ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
 import { GeneralMenuBody } from "@/components/shell/GeneralMenuSection";
+import { AppsNavList } from "@/components/shell/AppsNavList";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { PrimaryNavRail } from "@/components/shell/PrimaryNavRail";
 import { WindowChrome } from "@/components/shell/WindowChrome";
@@ -68,13 +69,13 @@ const SECTION_TO_PIN: Record<
 > = {
   apps: "connectors",
   chats: "chats",
-  images: "images",
+  automations: "agents",
 };
 
 const PIN_TO_SECTION: Partial<Record<PinSectionId, PrimaryNavSection>> = {
   connectors: "apps",
   chats: "chats",
-  images: "images",
+  agents: "automations",
 };
 
 export function Sidebar() {
@@ -248,7 +249,7 @@ export function Sidebar() {
     [pinnedItems, pinPrefs],
   );
   const navPinGroups = useMemo(() => {
-    const wanted: PinSectionId[] = ["connectors", "chats", "images"];
+    const wanted: PinSectionId[] = ["connectors", "chats", "agents"];
     return wanted.map(
       (id) =>
         pinGroups.find((group) => group.id === id) ?? {
@@ -273,7 +274,7 @@ export function Sidebar() {
           ? `thread:${threadId}`
           : null;
 
-  // Follow destination into Apps / Chats / Images / General.
+  // Follow destination into Apps / Chats / Automations / General.
   useEffect(() => {
     if (view === "settings") {
       skipRestoreRef.current = true;
@@ -358,14 +359,14 @@ export function Sidebar() {
         return;
       }
       const map: Record<string, PrimaryNavSection> = {
-        Digit1: "workspaces",
-        Digit2: "apps",
+        Digit1: "apps",
+        Digit2: "workspaces",
         Digit3: "chats",
-        Digit4: "images",
-        Numpad1: "workspaces",
-        Numpad2: "apps",
+        Digit4: "automations",
+        Numpad1: "apps",
+        Numpad2: "workspaces",
         Numpad3: "chats",
-        Numpad4: "images",
+        Numpad4: "automations",
       };
       const next = map[event.code];
       if (!next) return;
@@ -394,13 +395,13 @@ export function Sidebar() {
         item.expertKind ? `${item.expertKind} expert` : undefined
       }
       leading={
-        item.kind === "thread" && section !== "images" ? (
+        item.kind === "thread" && section !== "automations" ? (
           null
         ) : (
           <PinPreviewThumb item={item} />
         )
       }
-      hideLeading={item.kind === "thread" && section !== "images"}
+      hideLeading={item.kind === "thread" && section !== "automations"}
       inUse={
         item.expertCatalog
           ? view === "expert" && expertSetupId === item.id
@@ -445,8 +446,8 @@ export function Sidebar() {
             <div
               key={item.id}
               className={cn(
-                "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
-                active ? "shell-select-active" : SIDEBAR_ROW_HOVER,
+                "group relative flex w-full items-center rounded-[8px] transition-colors duration-200",
+                active ? "shell-nav-row-active" : SIDEBAR_ROW_HOVER,
               )}
             >
               <button
@@ -456,7 +457,7 @@ export function Sidebar() {
                   persistLastNavItem("workspaces", `workspace:${item.id}`);
                 }}
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-[7.2px] text-left text-[14px] tracking-[-0.01em]",
+                  "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]",
                   active && "font-medium",
                 )}
               >
@@ -494,7 +495,7 @@ export function Sidebar() {
       return;
     }
     if (section === "general") return;
-    openSpace("studio");
+    openSpace("build");
   };
 
   const contextInner = (
@@ -579,7 +580,7 @@ export function Sidebar() {
             <PrimaryNavRail section={section} onSection={selectSection} />
 
             <div
-              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-black/[0.06] dark:border-white/[0.06]"
+              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-black/[0.06] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.025]"
               style={{ width: CONTEXT_WIDTH_PX }}
             >
               <nav
@@ -605,9 +606,9 @@ function SidebarPinSectionBody({
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   section: PrimaryNavSection;
 }) {
-  if (section === "chats" || section === "images") {
+  if (section === "chats" || section === "automations") {
     const emptyLabel =
-      section === "images" ? "No images yet" : "No chats yet";
+      section === "automations" ? "No automations yet" : "No chats yet";
     return (
       <>
         {group.items.length ? (
@@ -626,20 +627,8 @@ function SidebarPinSectionBody({
     );
   }
 
-  // Apps — only connected apps (Add lives on the header + control).
-  if (!group.items.length) {
-    return (
-      <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
-        No apps connected yet
-      </p>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-0">
-      {group.items.map((item) => renderPinnedRow(item))}
-    </div>
-  );
+  // Apps — connected list structured for future favorites / recent / reorder.
+  return <AppsNavList items={group.items} renderRow={renderPinnedRow} />;
 }
 
 function PinnedRow({
@@ -697,10 +686,8 @@ function PinnedRow({
       ref={rowRef}
       data-pin-tree-key={dragKey}
       className={cn(
-        "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
-        inUse
-          ? "shell-select-active !text-[var(--shell-select-foreground)]"
-          : SIDEBAR_ROW_HOVER,
+        "group relative flex w-full items-center rounded-[8px] transition-colors duration-200",
+        inUse ? "shell-nav-row-active" : SIDEBAR_ROW_HOVER,
         dragging && "opacity-40",
       )}
       onDragOver={(event) => {
@@ -745,8 +732,7 @@ function PinnedRow({
         title={hoverTitle}
         onClick={onOpen}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
-          kind === "connector" || kind === "project" ? "py-[7.2px]" : "py-2",
+          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]",
           inUse && "font-medium",
         )}
       >

@@ -177,7 +177,7 @@ export function GeneralMenuBody({
             onClick={() => openTab(row.id)}
             className={cn(
               rowClassName ?? cn(SIDEBAR_ROW_SECONDARY, SIDEBAR_ROW_HOVER),
-              active && "shell-select-active !text-[var(--shell-select-foreground)]",
+              active && "shell-nav-row-active",
             )}
           >
             <Icon className={iconClassName} strokeWidth={2} />
