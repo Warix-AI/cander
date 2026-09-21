@@ -666,20 +666,18 @@ function SidebarPinSectionBody({
   filter: string;
 }) {
   if (section === "chats") {
-    const pinned = group.items.filter((item) => item.kind === "thread");
-    // Recency list is already ordered in usePinnedItems; treat first half cue as recent.
     return (
       <>
-        {pinned.length ? (
+        {group.items.length ? (
           <>
             <ContextualSectionLabel>Recent</ContextualSectionLabel>
             <div className="flex flex-col gap-0.5">
-              {pinned.map((item) => renderPinnedRow(item))}
+              {group.items.map((item) => renderPinnedRow(item))}
             </div>
           </>
         ) : (
           <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
-            No chats yet
+            {filter ? "No matching chats" : "No chats yet"}
           </p>
         )}
       </>
@@ -738,14 +736,11 @@ function SidebarPinSectionBody({
         </>
       ) : null}
       {group.id === "connectors" ? (
-        <>
-          <ContextualSectionLabel>Available</ContextualSectionLabel>
-          <AppsMoreSection
-            listedIds={group.items.map((item) => item.id)}
-            onConnect={onConnect}
-            query={filter}
-          />
-        </>
+        <AppsMoreSection
+          listedIds={group.items.map((item) => item.id)}
+          onConnect={onConnect}
+          query={filter}
+        />
       ) : null}
     </>
   );
