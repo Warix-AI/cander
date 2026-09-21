@@ -17,13 +17,9 @@ export async function guardEdgeAiChatUsage(input: {
   workspaceId: string;
   profileId: string;
 }): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  if (Deno.env.get("USAGE_ENFORCEMENT_ENABLED")?.trim().toLowerCase() === "false") {
-    return { ok: true };
-  }
-  if (
-    Deno.env.get("USAGE_ENFORCEMENT_ENABLED") === "0" ||
-    Deno.env.get("USAGE_ENFORCEMENT_ENABLED")?.toLowerCase() === "off"
-  ) {
+  // Opt-in enforcement — unset/false means all accounts can use usage.
+  const enforce = Deno.env.get("USAGE_ENFORCEMENT_ENABLED")?.trim().toLowerCase();
+  if (!(enforce === "1" || enforce === "true" || enforce === "on" || enforce === "yes")) {
     return { ok: true };
   }
 

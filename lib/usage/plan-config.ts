@@ -153,7 +153,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     includedMinutes: 25,
     minimumMinutes: 25,
     maximumMinutes: 25,
-    usageLimitBehavior: "hard",
+    usageLimitBehavior: "soft",
   },
   light: {
     plan: "light",
@@ -168,7 +168,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     includedMinutes: 100,
     minimumMinutes: 100,
     maximumMinutes: 100,
-    usageLimitBehavior: "hard",
+    usageLimitBehavior: "soft",
   },
   moderate: {
     plan: "moderate",
@@ -183,7 +183,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     includedMinutes: 250,
     minimumMinutes: 250,
     maximumMinutes: 250,
-    usageLimitBehavior: "hard",
+    usageLimitBehavior: "soft",
   },
   heavy: {
     plan: "heavy",
@@ -198,7 +198,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     includedMinutes: 500,
     minimumMinutes: 500,
     maximumMinutes: 500,
-    usageLimitBehavior: "hard",
+    usageLimitBehavior: "soft",
   },
   limitless: {
     plan: "limitless",
@@ -213,7 +213,7 @@ const PLAN_POLICIES: Record<BillingPlan, PlanUsagePolicy> = {
     includedMinutes: 1000,
     minimumMinutes: 501,
     maximumMinutes: null,
-    usageLimitBehavior: "hard",
+    usageLimitBehavior: "soft",
   },
 };
 

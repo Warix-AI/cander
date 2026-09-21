@@ -48,7 +48,8 @@ export function globalSpendCeilings() {
 }
 
 export function isUsageEnforcementEnabled(): boolean {
+  // Temporarily off by default so all accounts can use usage.
+  // Set USAGE_ENFORCEMENT_ENABLED=true|1|on to re-enable hard limits.
   const raw = process.env.USAGE_ENFORCEMENT_ENABLED?.trim().toLowerCase();
-  if (raw === "0" || raw === "false" || raw === "off") return false;
-  return true;
+  return raw === "1" || raw === "true" || raw === "on" || raw === "yes";
 }

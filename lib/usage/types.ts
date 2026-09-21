@@ -1,7 +1,7 @@
 import type { BillingPlan } from "../types.ts";
 
 /** Versioned plan config — bump when allowance structure changes. Active AI Minutes Minimal=20 / Light=30 / Moderate=100 / Heavy=250 / Limitless=custom. */
-export const USAGE_PLAN_CONFIG_VERSION = 5;
+export const USAGE_PLAN_CONFIG_VERSION = 6;
 
 /** Normalized feature categories for metering and enforcement. */
 export type UsageFeatureCategory =

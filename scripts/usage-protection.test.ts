@@ -236,6 +236,10 @@ describe("usage guard", () => {
   it("can bypass enforcement when disabled for emergencies", async () => {
     process.env.USAGE_ENFORCEMENT_ENABLED = "false";
     assert.equal(isUsageEnforcementEnabled(), false);
+    delete process.env.USAGE_ENFORCEMENT_ENABLED;
+    assert.equal(isUsageEnforcementEnabled(), false);
+    process.env.USAGE_ENFORCEMENT_ENABLED = "true";
+    assert.equal(isUsageEnforcementEnabled(), true);
     const store = new MemoryUsageStore();
     const result = await guardUsage(
       {
