@@ -1,36 +1,42 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent, type ReactNode } from "react";
 import {
-  AudioLines,
-  CircleUser,
-  GripVertical,
-  LayoutGrid,
-  MessageSquare,
-  SquarePen,
-  type LucideIcon,
-} from "lucide-react";
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DragEvent,
+  type ReactNode,
+} from "react";
+import { GripVertical, MessageSquare } from "lucide-react";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
+import { ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
 import { ExpertsMoreSection } from "@/components/shell/ExpertsMoreSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
+import { PrimaryNavRail } from "@/components/shell/PrimaryNavRail";
 import { WindowChrome } from "@/components/shell/WindowChrome";
 import { LeftNavToggleDock } from "@/components/shell/NavToggle";
 import { WorkspaceMark } from "@/components/shell/WorkspaceMark";
 import { useApp } from "@/components/app/AppProvider";
 import { useRunningExpertState } from "@/components/agents/useRunningExpertProjectIds";
 import { workspacesFor } from "@/lib/entitlements";
+import { SIDEBAR_ROW_HOVER } from "@/lib/mobile-menu-styles";
 import {
-  SIDEBAR_ROW,
-  SIDEBAR_ROW_HOVER,
-  SIDEBAR_ROW_ICON,
-  SIDEBAR_SEGMENT_ACTIVE,
-} from "@/lib/mobile-menu-styles";
+  persistContextNavOpen,
+  persistLastNavItem,
+  persistPrimaryNavSection,
+  PRIMARY_NAV_LABEL,
+  readContextNavOpen,
+  readLastNavItem,
+  readPrimaryNavSection,
+  type PrimaryNavSection,
+} from "@/lib/nav-primary";
 import { usePinDisplayPrefs } from "@/lib/pin-display-prefs";
 import {
   ensurePrimaryPinSections,
   groupPinnedItemsBySection,
-  PIN_SECTION_ICONS,
-  PIN_SECTION_LABEL,
   PRIMARY_PIN_SECTION_IDS,
   type PinSectionId,
 } from "@/lib/pin-sections";
@@ -45,7 +51,6 @@ import {
   getWorkspaceCatalogSnapshot,
   subscribeWorkspaceCatalog,
 } from "@/lib/workspace-catalog";
-import { isNewChatScreen } from "@/lib/right-panel";
 import type { PinKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
@@ -59,50 +64,24 @@ import {
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
+const CONTEXT_WIDTH_PX = 240;
+const RAIL_WIDTH_PX = 56;
 
-/** Top mode strip — Spaces / Apps / Experts / Chats (Apps remains default). */
-const SIDEBAR_SEGMENT_IDS = [
-  "workspaces",
-  "connectors",
-  "agents",
-  "chats",
-] as const;
-type SidebarSegmentId = (typeof SIDEBAR_SEGMENT_IDS)[number];
-const SEGMENT_STORAGE_KEY = "cander-sidebar-segment";
-
-const SEGMENT_META: Record<
-  SidebarSegmentId,
-  { label: string; Icon: LucideIcon }
+/** Map primary rail section → pin folder id (except workspaces). */
+const SECTION_TO_PIN: Record<
+  Exclude<PrimaryNavSection, "workspaces">,
+  PinSectionId
 > = {
-  workspaces: {
-    label: "Spaces",
-    Icon: LayoutGrid,
-  },
-  connectors: {
-    label: PIN_SECTION_LABEL.connectors,
-    Icon: PIN_SECTION_ICONS.connectors,
-  },
-  agents: {
-    label: PIN_SECTION_LABEL.agents,
-    Icon: PIN_SECTION_ICONS.agents,
-  },
-  chats: {
-    label: PIN_SECTION_LABEL.chats,
-    Icon: PIN_SECTION_ICONS.chats,
-  },
+  apps: "connectors",
+  automations: "agents",
+  chats: "chats",
 };
 
-/** ~10% under prior 20px mode icons. */
-const SEGMENT_ICON_CLASS = "h-[18px] w-[18px] shrink-0";
-
-function readStoredSegment(): SidebarSegmentId {
-  if (typeof window === "undefined") return "connectors";
-  const raw = window.localStorage.getItem(SEGMENT_STORAGE_KEY);
-  if (raw && (SIDEBAR_SEGMENT_IDS as readonly string[]).includes(raw)) {
-    return raw as SidebarSegmentId;
-  }
-  return "connectors";
-}
+const PIN_TO_SECTION: Partial<Record<PinSectionId, PrimaryNavSection>> = {
+  connectors: "apps",
+  agents: "automations",
+  chats: "chats",
+};
 
 export function Sidebar() {
   const {
@@ -110,12 +89,14 @@ export function Sidebar() {
     threadId,
     projectId,
     sidebarOpen,
+    setSidebarOpen,
     reorderPins,
     setPin,
     openThread,
     openProject,
     openConnector,
     openConnectorConnect,
+    openSpace,
     connectorId,
     entitlements,
     actor,
@@ -123,13 +104,10 @@ export function Sidebar() {
     workspace,
     setWorkspace,
     view,
-    drafting,
-    thread,
     newChat,
-    openVoice,
     openExpertSetup,
     expertSetupId,
-    openSettings,
+    openOverlay,
   } = useApp();
 
   const runningExperts = useRunningExpertState(workspaceId);
@@ -144,12 +122,26 @@ export function Sidebar() {
   const [peek, setPeek] = useState(false);
   const [peekVisible, setPeekVisible] = useState(false);
   const [pinDragKey, setPinDragKey] = useState<string | null>(null);
-  const [segment, setSegment] = useState<SidebarSegmentId>(readStoredSegment);
+  const [section, setSection] = useState<PrimaryNavSection>(readPrimaryNavSection);
+  const [contextFilter, setContextFilter] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const peekCloseTimer = useRef<number | null>(null);
   const peekExitTimer = useRef<number | null>(null);
   const edgeRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const peekRef = useRef(false);
+  const skipRestoreRef = useRef(false);
+
+  useEffect(() => {
+    // Hydrate collapse preference once on mount.
+    const open = readContextNavOpen();
+    if (!open) setSidebarOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+  }, []);
+
+  useEffect(() => {
+    persistContextNavOpen(sidebarOpen);
+  }, [sidebarOpen]);
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -170,6 +162,7 @@ export function Sidebar() {
 
   const peeking = peek && !sidebarOpen;
   peekRef.current = peek;
+  const contextVisible = sidebarOpen || peeking;
 
   useEffect(() => {
     setSidebarPeeking(peeking);
@@ -221,7 +214,6 @@ export function Sidebar() {
   useEffect(() => {
     return subscribeSidebarPeekHold(() => {
       if (sidebarOpen) return;
-      // Only keep an already-open peek — never open from project / content menus.
       if (!peekRef.current) return;
       clearPeekClose();
       clearPeekExit();
@@ -237,23 +229,24 @@ export function Sidebar() {
   const shellStyle = useShellStyle();
   const floating = shellStyle === "floating";
   const desktop = useDesktopShell();
-  /**
-   * Desktop (classic + floating): panel toggle / search / history live on the
-   * traffic-light row, outside the menu body. Menu content starts at New Chat.
-   * Web floating: same idea — chrome above the floating card, not inside it.
-   */
   const macDesktop = desktop;
   const chromeOutside = desktop || floating;
   const allowedWorkspaces = workspacesFor(actor, entitlements);
 
-  const selectSegment = useCallback((next: SidebarSegmentId) => {
-    setSegment(next);
-    try {
-      window.localStorage.setItem(SEGMENT_STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const openPinnedItem = useCallback(
+    (item: PinnedItem) => {
+      if (item.kind === "thread") openThread(item.id);
+      else if (item.kind === "connector") openConnector(item.id);
+      else if (item.expertCatalog) openExpertSetup(item.id);
+      else if (item.projectKind === "automation") {
+        openProject(item.id, {
+          agentSurface: "overview",
+          landOnPanel: true,
+        });
+      } else openProject(item.id);
+    },
+    [openThread, openConnector, openExpertSetup, openProject],
+  );
 
   const pinGroups = useMemo(
     () =>
@@ -276,7 +269,6 @@ export function Sidebar() {
     if (item.kind === "thread") return threadId === item.id;
     if (item.kind === "connector")
       return connectorId === item.id && spaceId === "connectors";
-    // openProject always sets threadId — still highlight the pin by project.
     return projectId === item.id;
   };
 
@@ -289,7 +281,7 @@ export function Sidebar() {
           ? `thread:${threadId}`
           : null;
 
-  // Follow destination into Apps / Experts / Chats.
+  // Follow destination into Apps / Automations / Chats.
   useEffect(() => {
     if (view === "settings") return;
     if (!activePinKey) return;
@@ -300,18 +292,99 @@ export function Sidebar() {
     if (!(PRIMARY_PIN_SECTION_IDS as readonly string[]).includes(owning.id)) {
       return;
     }
-    selectSegment(owning.id as SidebarSegmentId);
+    const next = PIN_TO_SECTION[owning.id];
+    if (!next) return;
+    skipRestoreRef.current = true;
+    setSection(next);
+    persistPrimaryNavSection(next);
+    persistLastNavItem(next, activePinKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pinGroups read on nav change only
-  }, [view, activePinKey, selectSegment]);
+  }, [view, activePinKey]);
 
-  const activeSegmentGroup = useMemo(
-    () =>
-      primaryPinGroups.find((group) => group.id === segment) ??
-      primaryPinGroups[0] ?? {
-        id: "connectors" as PinSectionId,
+  const activePinGroup = useMemo(() => {
+    if (section === "workspaces") return null;
+    const pinId = SECTION_TO_PIN[section];
+    return (
+      primaryPinGroups.find((group) => group.id === pinId) ?? {
+        id: pinId,
         items: [] as PinnedItem[],
-      },
-    [primaryPinGroups, segment],
+      }
+    );
+  }, [primaryPinGroups, section]);
+
+  const filterNeedle = contextFilter.trim().toLowerCase();
+
+  const filteredPinItems = useMemo(() => {
+    if (!activePinGroup) return [] as PinnedItem[];
+    if (!filterNeedle) return activePinGroup.items;
+    return activePinGroup.items.filter((item) =>
+      item.title.toLowerCase().includes(filterNeedle),
+    );
+  }, [activePinGroup, filterNeedle]);
+
+  const restoreLastItem = useCallback(
+    (next: PrimaryNavSection) => {
+      if (skipRestoreRef.current) {
+        skipRestoreRef.current = false;
+        return;
+      }
+      const last = readLastNavItem(next);
+      if (!last) return;
+      const [kind, id] = last.split(":") as [PinKind | "workspace", string];
+      if (!kind || !id) return;
+      if (kind === "workspace") {
+        setWorkspace(id);
+        return;
+      }
+      const item = pinnedItems.find((row) => row.kind === kind && row.id === id);
+      if (item) openPinnedItem(item);
+    },
+    [pinnedItems, openPinnedItem, setWorkspace],
+  );
+
+  const selectSection = useCallback(
+    (next: PrimaryNavSection) => {
+      setSection(next);
+      persistPrimaryNavSection(next);
+      setContextFilter("");
+      setSearchOpen(false);
+      if (!sidebarOpen) setSidebarOpen(true);
+      restoreLastItem(next);
+    },
+    [restoreLastItem, sidebarOpen, setSidebarOpen],
+  );
+
+  // Keyboard: Alt+1..4 switches primary section.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!(event.altKey || event.metaKey) || event.shiftKey || event.ctrlKey) {
+        return;
+      }
+      const map: Record<string, PrimaryNavSection> = {
+        Digit1: "workspaces",
+        Digit2: "chats",
+        Digit3: "apps",
+        Digit4: "automations",
+        Numpad1: "workspaces",
+        Numpad2: "chats",
+        Numpad3: "apps",
+        Numpad4: "automations",
+      };
+      const next = map[event.code];
+      if (!next) return;
+      event.preventDefault();
+      selectSection(next);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectSection]);
+
+  const rememberItem = useCallback(
+    (item: PinnedItem) => {
+      if (section === "workspaces") return;
+      persistLastNavItem(section, `${item.kind}:${item.id}`);
+    },
+    [section],
   );
 
   const renderPinnedRow = (item: PinnedItem) => (
@@ -327,7 +400,6 @@ export function Sidebar() {
         item.kind === "thread" ? null : <PinPreviewThumb item={item} />
       }
       hideLeading={item.kind === "thread"}
-      // Row background marks the active pin; pulse = Expert running.
       inUse={
         item.expertCatalog
           ? view === "expert" && expertSetupId === item.id
@@ -339,16 +411,8 @@ export function Sidebar() {
         runningExperts.projectIds.has(item.id)
       }
       onOpen={() => {
-        if (item.kind === "thread") openThread(item.id);
-        else if (item.kind === "connector") openConnector(item.id);
-        else if (item.expertCatalog) {
-          openExpertSetup(item.id);
-        } else if (item.projectKind === "automation") {
-          openProject(item.id, {
-            agentSurface: "overview",
-            landOnPanel: true,
-          });
-        } else openProject(item.id);
+        rememberItem(item);
+        openPinnedItem(item);
       }}
       onReorder={reorderPins}
       dragActiveKey={pinDragKey}
@@ -361,63 +425,127 @@ export function Sidebar() {
       id: PinSectionId;
       items: PinnedItem[];
     },
+    items: PinnedItem[],
   ) => (
     <SidebarPinSectionBody
-      group={group}
+      group={{ ...group, items }}
       renderPinnedRow={renderPinnedRow}
       onConnect={(id) => openConnectorConnect(id)}
       onAddExpert={(id) => setPin("project", id, "primary")}
+      section={section}
+      filter={filterNeedle}
     />
   );
 
-  const renderWorkspaceSegment = () => (
-    <div className="flex flex-col gap-0">
-      {allowedWorkspaces.map((item) => {
-        const active = item.id === workspace.id;
-        return (
-          <div
-            key={item.id}
-            className={cn(
-              "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
-              active ? "shell-select-active" : SIDEBAR_ROW_HOVER,
-            )}
-          >
-            <button
-              type="button"
-              onClick={() => setWorkspace(item.id)}
+  const renderWorkspaceSegment = () => {
+    const list = filterNeedle
+      ? allowedWorkspaces.filter((item) =>
+          item.name.toLowerCase().includes(filterNeedle),
+        )
+      : allowedWorkspaces;
+    return (
+      <div className="flex flex-col gap-0">
+        {list.map((item) => {
+          const active = item.id === workspace.id;
+          return (
+            <div
+              key={item.id}
               className={cn(
-                "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-[7.2px] text-left text-[14px] tracking-[-0.01em]",
-                active && "font-medium",
+                "group relative flex w-full items-center rounded-[8px] transition-colors duration-150",
+                active ? "shell-select-active" : SIDEBAR_ROW_HOVER,
               )}
             >
-              <span
-                data-pin-leading
-                className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
+              <button
+                type="button"
+                onClick={() => {
+                  setWorkspace(item.id);
+                  persistLastNavItem("workspaces", `workspace:${item.id}`);
+                }}
+                className={cn(
+                  "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-[7.2px] text-left text-[14px] tracking-[-0.01em]",
+                  active && "font-medium",
+                )}
               >
-                <WorkspaceMark
-                  id={item.id}
-                  name={item.name}
-                  active={active}
-                  size="nav"
-                />
-              </span>
-              <span className="min-w-0 flex-1 truncate">{item.name}</span>
-            </button>
+                <span
+                  data-pin-leading
+                  className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center overflow-visible"
+                >
+                  <WorkspaceMark
+                    id={item.id}
+                    name={item.name}
+                    active={active}
+                    size="nav"
+                  />
+                </span>
+                <span className="min-w-0 flex-1 truncate">{item.name}</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const onPrimaryAction = () => {
+    if (section === "apps") {
+      openSpace("connectors");
+      return;
+    }
+    if (section === "chats") {
+      newChat();
+      return;
+    }
+    if (section === "workspaces") {
+      openOverlay("workspace");
+      return;
+    }
+    openOverlay("agents-activity");
+  };
+
+  const contextInner = (
+    <>
+      <ContextualNavHeader
+        section={section}
+        onCollapse={() => setSidebarOpen(false)}
+        onPrimaryAction={onPrimaryAction}
+        searchOpen={searchOpen}
+        onToggleSearch={() => {
+          setSearchOpen((open) => {
+            if (open) setContextFilter("");
+            return !open;
+          });
+        }}
+        searchValue={contextFilter}
+        onSearchChange={setContextFilter}
+        searchPlaceholder={
+          section === "apps" ? "Filter apps" : "Search chats"
+        }
+      />
+
+      <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
+        <div className="h-full overflow-y-auto pb-1">
+          <div className="flex flex-col gap-0.5">
+            {section === "workspaces"
+              ? renderWorkspaceSegment()
+              : activePinGroup
+                ? renderPinSectionChildren(activePinGroup, filteredPinItems)
+                : null}
           </div>
-        );
-      })}
-    </div>
+        </div>
+      </div>
+    </>
   );
 
   return (
     <>
-      <LeftNavToggleDock showRail={false} peeking={peeking} />
+      <LeftNavToggleDock showRail peeking={peeking} />
       {!sidebarOpen ? (
         <div
           ref={edgeRef}
           aria-hidden
           data-sidebar-edge=""
-          className="fixed inset-y-0 left-0 z-30 hidden w-[15px] lg:block"
+          className="fixed inset-y-0 z-30 hidden w-[15px] lg:block"
+          style={{ left: RAIL_WIDTH_PX }}
           onMouseEnter={openPeek}
           onMouseLeave={scheduleClosePeek}
         />
@@ -430,182 +558,94 @@ export function Sidebar() {
         className={cn(
           "hidden h-full max-w-[100vw] shrink-0 gap-0 lg:flex",
           chromeOutside && "flex-col",
-          sidebarOpen
-            ? "lg:static lg:max-w-none"
-            : cn(
-                "lg:fixed lg:inset-y-0 lg:left-0 lg:z-40",
-                "will-change-transform transition-[transform,opacity]",
-                peek
-                  ? "translate-x-0 opacity-100 duration-[360ms] ease-out"
-                  : "pointer-events-none -translate-x-full opacity-0 duration-[420ms] ease-in",
-                !peekVisible && "invisible",
-              ),
+          "lg:static lg:max-w-none",
         )}
-        aria-hidden={!sidebarOpen && !peek}
+        aria-hidden={false}
       >
-      {macDesktop ? (
-        <WindowChrome
-          clearTrafficLights
-          hideHistory={peeking}
-          className={cn(
-            "w-full",
-            floating
-              ? "bg-transparent text-foreground"
-              : "bg-sidebar text-sidebar-foreground",
-          )}
-        />
-      ) : null}
+        {macDesktop ? (
+          <WindowChrome
+            clearTrafficLights
+            hideHistory
+            className={cn(
+              "w-full",
+              floating
+                ? "bg-transparent text-foreground"
+                : "bg-sidebar text-sidebar-foreground",
+            )}
+          />
+        ) : null}
 
-      <div
-        className={cn(
-          "flex min-h-0",
-          chromeOutside ? "flex-1" : "h-full",
-          floating && (macDesktop ? SHELL_FLOAT_MENU_TOP : SHELL_FLOAT_MARGIN),
-          floating && !macDesktop && "mt-2",
-        )}
-      >
-      <div
-        className={cn(
-          "flex w-[min(253px,calc(100vw-3.5rem))] shrink-0 flex-col text-sidebar-foreground lg:w-[253px]",
-          floating
-            ? cn(
-                "ml-2 overflow-hidden",
-                SHELL_ISLAND_SIDEBAR,
-                SHELL_G3_RADIUS,
-                chromeOutside
-                  ? "h-full"
-                  : "mb-2 mr-2 mt-[max(0.5rem,var(--desktop-titlebar))] h-[calc(100%-0.5rem-max(0.5rem,var(--desktop-titlebar)))]",
-              )
-            : cn(
-                "h-full overflow-hidden bg-sidebar",
-                peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
-              ),
-        )}
-      >
-      {/* Browser classic only — desktop chrome sits on the traffic-light row. */}
-      {!floating && !macDesktop ? (
         <div
-          className="w-full shrink-0"
-          style={{ height: "var(--desktop-titlebar)" }}
-          aria-hidden
-        />
-      ) : null}
-      <div
-        className={cn(
-          "flex min-h-0 flex-1 flex-col",
-        )}
-      >
-      {/* Web / floating — header icons live inside the menu column only. */}
-      {!macDesktop ? <WindowChrome hideHistory={peeking} /> : null}
-
-      <nav
           className={cn(
-            "flex min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2",
-            macDesktop || floating ? "mt-1.5" : "mt-3.5",
+            "flex min-h-0",
+            chromeOutside ? "flex-1" : "h-full",
+            floating && (macDesktop ? SHELL_FLOAT_MENU_TOP : SHELL_FLOAT_MARGIN),
+            floating && !macDesktop && "mt-2",
           )}
-          aria-label="Main"
         >
           <div
-            role="tablist"
-            aria-label="Sidebar section"
-            className="flex shrink-0 gap-0.5"
-          >
-            {SIDEBAR_SEGMENT_IDS.map((id) => {
-              const { label, Icon } = SEGMENT_META[id];
-              const active = segment === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-label={label}
-                  aria-selected={active}
-                  title={label}
-                  onClick={() => selectSegment(id)}
-                  className={cn(
-                    "flex min-w-0 items-center justify-center gap-1.5 px-1.5 py-2 transition-[background-color,box-shadow,color,backdrop-filter,flex-grow] duration-150",
+            className={cn(
+              "flex shrink-0 flex-col text-sidebar-foreground",
+              floating
+                ? cn(
+                    "ml-2 overflow-hidden",
+                    SHELL_ISLAND_SIDEBAR,
                     SHELL_G3_RADIUS,
-                    active
-                      ? cn(SIDEBAR_SEGMENT_ACTIVE, "flex-[1.35]")
-                      : cn("flex-1 text-muted-foreground", SIDEBAR_ROW_HOVER),
-                  )}
-                >
-                  {active ? (
-                    <span className="min-w-0 truncate text-[12px] tracking-[-0.01em]">
-                      {label}
-                    </span>
-                  ) : (
-                    <Icon className={SEGMENT_ICON_CLASS} strokeWidth={1.85} />
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                    chromeOutside
+                      ? "h-full"
+                      : "mb-2 mr-2 mt-[max(0.5rem,var(--desktop-titlebar))] h-[calc(100%-0.5rem-max(0.5rem,var(--desktop-titlebar)))]",
+                  )
+                : cn(
+                    "h-full overflow-hidden bg-sidebar",
+                    peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
+                  ),
+            )}
+          >
+            {!floating && !macDesktop ? (
+              <div
+                className="w-full shrink-0"
+                style={{ height: "var(--desktop-titlebar)" }}
+                aria-hidden
+              />
+            ) : null}
 
-          <div className="relative mt-2.5 min-h-0 flex-1 overflow-hidden">
-            <div className="h-full overflow-y-auto pb-1">
-              <div className="flex flex-col gap-0.5">
-                {segment === "workspaces"
-                  ? renderWorkspaceSegment()
-                  : renderPinSectionChildren(activeSegmentGroup)}
+            <div className="flex min-h-0 flex-1 flex-col">
+              {!macDesktop ? <WindowChrome hideHistory /> : null}
+
+              <div className="relative flex min-h-0 flex-1">
+                <PrimaryNavRail section={section} onSection={selectSection} />
+
+                <div
+                  className={cn(
+                    "flex min-h-0 flex-col overflow-hidden border-l border-black/[0.05] bg-sidebar/80 transition-[width,opacity] duration-200 ease-out dark:border-white/[0.06] dark:bg-transparent",
+                    contextVisible
+                      ? "opacity-100"
+                      : "pointer-events-none opacity-0",
+                    !sidebarOpen &&
+                      peek &&
+                      "absolute left-[56px] top-0 z-40 h-full shadow-[0_8px_30px_oklch(0_0_0/0.18)]",
+                    !sidebarOpen && !peekVisible && !peek && "invisible",
+                  )}
+                  style={{
+                    width: contextVisible ? CONTEXT_WIDTH_PX : 0,
+                  }}
+                  aria-hidden={!contextVisible}
+                >
+                  <nav
+                    className={cn(
+                      "flex h-full min-h-0 w-[240px] flex-1 flex-col overflow-hidden px-2 pb-2",
+                      macDesktop || floating ? "mt-1.5" : "mt-2",
+                    )}
+                    aria-label={PRIMARY_NAV_LABEL[section]}
+                  >
+                    {contextInner}
+                  </nav>
+                </div>
               </div>
             </div>
           </div>
-
-          <div className="mt-2 flex shrink-0 flex-col gap-0.5 border-t border-black/[0.06] pt-2 dark:border-white/[0.08]">
-            <button
-              type="button"
-              onClick={() => newChat()}
-              className={cn(
-                SIDEBAR_ROW,
-                SIDEBAR_ROW_HOVER,
-                isNewChatScreen({
-                  view,
-                  threadId,
-                  thread,
-                  spaceId,
-                  projectId,
-                  drafting,
-                }) && "shell-select-active",
-              )}
-            >
-              <SquarePen className={SIDEBAR_ROW_ICON} strokeWidth={2} />
-              <span className="min-w-0 flex-1 truncate">New</span>
-            </button>
-            {entitlements.hasVoice ? (
-              <button
-                type="button"
-                aria-pressed={view === "voice"}
-                onClick={() => openVoice()}
-                className={cn(
-                  SIDEBAR_ROW,
-                  SIDEBAR_ROW_HOVER,
-                  view === "voice" && "shell-select-active",
-                )}
-              >
-                <AudioLines className={SIDEBAR_ROW_ICON} strokeWidth={2} />
-                <span className="min-w-0 flex-1 truncate">Voice</span>
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => openSettings("general")}
-              className={cn(
-                SIDEBAR_ROW,
-                SIDEBAR_ROW_HOVER,
-                view === "settings" && "shell-select-active",
-              )}
-            >
-              <CircleUser className={SIDEBAR_ROW_ICON} strokeWidth={2} />
-              <span className="min-w-0 flex-1 truncate">General</span>
-            </button>
-          </div>
-        </nav>
-
+        </div>
       </div>
-    </div>
-      </div>
-    </div>
     </>
   );
 }
@@ -615,37 +655,97 @@ function SidebarPinSectionBody({
   renderPinnedRow,
   onConnect,
   onAddExpert,
+  section,
+  filter,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   onConnect: (id: string) => void;
   onAddExpert: (id: string) => void;
+  section: PrimaryNavSection;
+  filter: string;
 }) {
-  return (
-    <>
-      <div
-        className={cn(
-          "flex flex-col",
-          group.id === "connectors" || group.id === "agents"
-            ? "gap-0"
-            : "gap-0.5",
+  if (section === "chats") {
+    const pinned = group.items.filter((item) => item.kind === "thread");
+    // Recency list is already ordered in usePinnedItems; treat first half cue as recent.
+    return (
+      <>
+        {pinned.length ? (
+          <>
+            <ContextualSectionLabel>Recent</ContextualSectionLabel>
+            <div className="flex flex-col gap-0.5">
+              {pinned.map((item) => renderPinnedRow(item))}
+            </div>
+          </>
+        ) : (
+          <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
+            No chats yet
+          </p>
         )}
-      >
-        {group.items.map((item) => renderPinnedRow(item))}
-      </div>
-      {group.id === "connectors" ? (
-        <AppsMoreSection
-          listedIds={group.items.map((item) => item.id)}
-          onConnect={onConnect}
-          query=""
-        />
-      ) : null}
-      {group.id === "agents" ? (
+      </>
+    );
+  }
+
+  if (section === "automations") {
+    const running = group.items.filter(
+      (item) => item.projectKind === "automation" && !item.expertCatalog,
+    );
+    const catalog = group.items.filter((item) => item.expertCatalog);
+    const rest = group.items.filter(
+      (item) => !running.includes(item) && !catalog.includes(item),
+    );
+    return (
+      <>
+        {running.length ? (
+          <>
+            <ContextualSectionLabel>Active</ContextualSectionLabel>
+            <div className="flex flex-col gap-0">
+              {running.map((item) => renderPinnedRow(item))}
+            </div>
+          </>
+        ) : null}
+        {catalog.length || rest.length ? (
+          <>
+            <ContextualSectionLabel>Recent</ContextualSectionLabel>
+            <div className="flex flex-col gap-0">
+              {[...catalog, ...rest].map((item) => renderPinnedRow(item))}
+            </div>
+          </>
+        ) : null}
         <ExpertsMoreSection
           listedIds={group.items.map((item) => item.id)}
           onAdd={onAddExpert}
-          query=""
+          query={filter}
         />
+      </>
+    );
+  }
+
+  // Apps (and fallback)
+  return (
+    <>
+      {group.items.length ? (
+        <>
+          <ContextualSectionLabel>Connected</ContextualSectionLabel>
+          <div
+            className={cn(
+              "flex flex-col",
+              group.id === "connectors" ? "gap-0" : "gap-0.5",
+            )}
+          >
+            {group.items.map((item) => renderPinnedRow(item))}
+          </div>
+        </>
+      ) : null}
+      {group.id === "connectors" ? (
+        <>
+          <ContextualSectionLabel>Available</ContextualSectionLabel>
+          <AppsMoreSection
+            listedIds={group.items.map((item) => item.id)}
+            onConnect={onConnect}
+            query={filter}
+          />
+        </>
       ) : null}
     </>
   );
@@ -668,7 +768,6 @@ function PinnedRow({
   kind: PinKind;
   id: string;
   title: string;
-  /** Native tooltip — experts show “Summarize expert” on hover. */
   hoverTitle?: string;
   inUse: boolean;
   running?: boolean;
@@ -679,7 +778,6 @@ function PinnedRow({
     placement?: "before" | "after",
   ) => void;
   leading?: ReactNode;
-  /** Chats: title only — no icon column. */
   hideLeading?: boolean;
   dragActiveKey: string | null;
   onDragActiveKeyChange: (key: string | null) => void;
@@ -754,7 +852,6 @@ function PinnedRow({
         title={hoverTitle}
         onClick={onOpen}
         className={cn(
-          // Connected apps / experts: ~10% tighter vertical padding than discover rows.
           "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
           kind === "connector" || kind === "project" ? "py-[7.2px]" : "py-2",
           inUse && "font-medium",
@@ -802,7 +899,6 @@ function PinnedRow({
       >
         <GripVertical className="h-4 w-4" strokeWidth={1.8} />
       </button>
-      {/* Primary segments are auto-listed — no manual pin control. */}
       {running ? (
         <div className="relative mr-1 flex h-6 w-6 shrink-0 items-center justify-center">
           <span

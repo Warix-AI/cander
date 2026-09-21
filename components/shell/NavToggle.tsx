@@ -56,10 +56,11 @@ export function NavToggle({
  * Fully closed → only this control remains.
  */
 export function LeftNavToggleDock({
-  showRail: _showRail,
+  showRail = false,
   peeking,
 }: {
-  showRail: boolean;
+  /** When true, primary icon rail stays visible — dock sits just past it. */
+  showRail?: boolean;
   peeking: boolean;
 }) {
   const { sidebarOpen, projectId, drafting, thread } = useApp();
@@ -67,6 +68,7 @@ export function LeftNavToggleDock({
   const floating = useShellStyle() === "floating";
   const desktop = useDesktopShell();
   const projectFullscreen = Boolean(projectId) && !drafting && !thread;
+  const railOffset = showRail ? 56 : 0;
 
   if (mobile || sidebarOpen || peeking || projectFullscreen) return null;
 
@@ -74,7 +76,10 @@ export function LeftNavToggleDock({
     return (
       <div
         className="pointer-events-none fixed top-0 z-50 hidden h-[var(--desktop-titlebar,52px)] items-center lg:flex"
-        style={{ left: DESKTOP_TRAFFIC_CLEAR_PX, ...DESKTOP_NO_DRAG }}
+        style={{
+          left: DESKTOP_TRAFFIC_CLEAR_PX + railOffset,
+          ...DESKTOP_NO_DRAG,
+        }}
       >
         <NavToggle docked className="pointer-events-auto" />
       </div>
@@ -82,7 +87,7 @@ export function LeftNavToggleDock({
   }
 
   const leftPx =
-    (floating ? SHELL_FLOAT_INSET_PX : 0) + CHROME_PAD_PX;
+    (floating ? SHELL_FLOAT_INSET_PX : 0) + CHROME_PAD_PX + railOffset;
 
   return (
     <div
