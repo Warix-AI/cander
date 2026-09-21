@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { Bell, CircleHelp } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { NavToggle } from "@/components/shell/NavToggle";
 import {
   SHELL_HEADER_ICON_CLASS,
   ShellWindowChromeBar,
@@ -18,12 +19,18 @@ import { cn } from "@/lib/utils";
 export function WindowChrome({
   clearTrafficLights = false,
   hideHistory = false,
+  /**
+   * Two-layer desktop nav: PanelLeft (collapse) then Search, immediately
+   * right of the traffic lights. Notifications / Help live on the icon rail.
+   */
+  navChrome = false,
   className,
 }: {
   /** Pad past macOS traffic lights when chrome shares their row. */
   clearTrafficLights?: boolean;
   /** Hide header actions (e.g. floating sidebar peek over project tabs). */
   hideHistory?: boolean;
+  navChrome?: boolean;
   className?: string;
 }) {
   const { openSearch, openNotifications, openHelp } = useApp();
@@ -33,6 +40,17 @@ export function WindowChrome({
     getNotificationsSnapshot,
     getNotificationsServerSnapshot,
   );
+
+  if (navChrome) {
+    return (
+      <ShellWindowChromeBar
+        clearTrafficLights={clearTrafficLights}
+        className={className}
+        leading={<NavToggle />}
+        onSearch={() => openSearch()}
+      />
+    );
+  }
 
   return (
     <ShellWindowChromeBar

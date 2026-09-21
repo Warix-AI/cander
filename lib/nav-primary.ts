@@ -1,35 +1,43 @@
 /** Desktop primary nav sections — icon rail destinations. */
 export type PrimaryNavSection =
   | "workspaces"
-  | "chats"
   | "apps"
-  | "automations";
+  | "chats"
+  | "images";
 
 export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
   "workspaces",
-  "chats",
   "apps",
-  "automations",
+  "chats",
+  "images",
 ];
 
 export const PRIMARY_NAV_LABEL: Record<PrimaryNavSection, string> = {
   workspaces: "Workspaces",
-  chats: "Chats",
   apps: "Apps",
-  automations: "Automations",
+  chats: "Chats",
+  images: "Images",
 };
 
 const SECTION_KEY = "cander-primary-nav-section";
 const LAST_ITEM_KEY = "cander-primary-nav-last";
 const CONTEXT_OPEN_KEY = "cander-context-nav-open";
 
+/** Migrate renamed / removed section ids from earlier builds. */
+function normalizeSection(raw: string | null): PrimaryNavSection | null {
+  if (!raw) return null;
+  if (raw === "automations" || raw === "agents") return "images";
+  if ((PRIMARY_NAV_SECTIONS as readonly string[]).includes(raw)) {
+    return raw as PrimaryNavSection;
+  }
+  return null;
+}
+
 export function readPrimaryNavSection(): PrimaryNavSection {
   if (typeof window === "undefined") return "apps";
   try {
-    const raw = window.localStorage.getItem(SECTION_KEY);
-    if (raw && (PRIMARY_NAV_SECTIONS as readonly string[]).includes(raw)) {
-      return raw as PrimaryNavSection;
-    }
+    const next = normalizeSection(window.localStorage.getItem(SECTION_KEY));
+    if (next) return next;
   } catch {
     /* ignore */
   }

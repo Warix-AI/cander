@@ -1,15 +1,14 @@
 "use client";
 
 import {
+  AppWindow,
   AudioLines,
   Bell,
   CircleHelp,
   CircleUser,
+  Image as ImageIcon,
   LayoutGrid,
   MessageSquare,
-  PanelsTopLeft,
-  Search,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -24,16 +23,17 @@ const PRIMARY: {
   Icon: LucideIcon;
 }[] = [
   { id: "workspaces", Icon: LayoutGrid },
+  { id: "apps", Icon: AppWindow },
   { id: "chats", Icon: MessageSquare },
-  { id: "apps", Icon: PanelsTopLeft },
-  { id: "automations", Icon: Zap },
+  { id: "images", Icon: ImageIcon },
 ];
 
 const RAIL_BTN =
-  "inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-150 hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/20";
+  "inline-flex h-10 w-10 items-center justify-center rounded-[10px] text-muted-foreground transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:hover:bg-white/[0.08] dark:focus-visible:ring-white/20";
 
 /**
- * Narrow primary icon rail (~56px) — major product sections + utility actions.
+ * Narrow primary icon rail (~56px) — major product sections + account utilities.
+ * Search / collapse live in the desktop titlebar; notif + help sit above Settings.
  */
 export function PrimaryNavRail({
   section,
@@ -45,7 +45,6 @@ export function PrimaryNavRail({
   className?: string;
 }) {
   const {
-    openSearch,
     openHelp,
     openVoice,
     openSettings,
@@ -57,7 +56,7 @@ export function PrimaryNavRail({
   return (
     <aside
       className={cn(
-        "flex h-full w-[56px] shrink-0 flex-col items-center bg-black/25 py-2 dark:bg-black/40",
+        "flex h-full w-[56px] shrink-0 flex-col items-center py-2",
         className,
       )}
       aria-label="Primary navigation"
@@ -79,7 +78,7 @@ export function PrimaryNavRail({
               className={cn(
                 RAIL_BTN,
                 active &&
-                  "bg-white/[0.1] text-foreground shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]",
+                  "bg-black/[0.06] text-foreground dark:bg-white/[0.1] dark:shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]",
               )}
             >
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
@@ -88,20 +87,7 @@ export function PrimaryNavRail({
         })}
       </div>
 
-      <div className="mt-3 flex flex-col items-center gap-1 border-t border-black/[0.06] pt-3 dark:border-white/[0.06]">
-        <button
-          type="button"
-          title="Search"
-          aria-label="Search"
-          data-desktop-no-drag=""
-          onClick={() => openSearch()}
-          className={cn(
-            RAIL_BTN,
-            view === "search" && "bg-white/[0.1] text-foreground",
-          )}
-        >
-          <Search className="h-[17px] w-[17px]" strokeWidth={1.75} />
-        </button>
+      <div className="mt-auto flex flex-col items-center gap-1 pb-1">
         <button
           type="button"
           title="Notifications"
@@ -110,7 +96,8 @@ export function PrimaryNavRail({
           onClick={() => openNotifications()}
           className={cn(
             RAIL_BTN,
-            view === "notifications" && "bg-white/[0.1] text-foreground",
+            view === "notifications" &&
+              "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
           )}
         >
           <Bell className="h-[17px] w-[17px]" strokeWidth={1.75} />
@@ -123,14 +110,12 @@ export function PrimaryNavRail({
           onClick={() => openHelp()}
           className={cn(
             RAIL_BTN,
-            view === "help" && "bg-white/[0.1] text-foreground",
+            view === "help" &&
+              "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
           )}
         >
           <CircleHelp className="h-[17px] w-[17px]" strokeWidth={1.75} />
         </button>
-      </div>
-
-      <div className="mt-auto flex flex-col items-center gap-1 pb-1">
         {entitlements.hasVoice ? (
           <button
             type="button"
@@ -140,7 +125,8 @@ export function PrimaryNavRail({
             onClick={() => openVoice()}
             className={cn(
               RAIL_BTN,
-              view === "voice" && "bg-white/[0.1] text-foreground",
+              view === "voice" &&
+                "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
             )}
           >
             <AudioLines className="h-[17px] w-[17px]" strokeWidth={1.75} />
@@ -154,7 +140,8 @@ export function PrimaryNavRail({
           onClick={() => openSettings("general")}
           className={cn(
             RAIL_BTN,
-            view === "settings" && "bg-white/[0.1] text-foreground",
+            view === "settings" &&
+              "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
           )}
         >
           <CircleUser className="h-[17px] w-[17px]" strokeWidth={1.75} />

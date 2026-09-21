@@ -13,7 +13,6 @@ import {
 import { GripVertical, MessageSquare } from "lucide-react";
 import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
-import { ExpertsMoreSection } from "@/components/shell/ExpertsMoreSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
 import { PrimaryNavRail } from "@/components/shell/PrimaryNavRail";
 import { WindowChrome } from "@/components/shell/WindowChrome";
@@ -37,7 +36,6 @@ import { usePinDisplayPrefs } from "@/lib/pin-display-prefs";
 import {
   ensurePrimaryPinSections,
   groupPinnedItemsBySection,
-  PRIMARY_PIN_SECTION_IDS,
   type PinSectionId,
 } from "@/lib/pin-sections";
 import {
@@ -73,14 +71,14 @@ const SECTION_TO_PIN: Record<
   PinSectionId
 > = {
   apps: "connectors",
-  automations: "agents",
   chats: "chats",
+  images: "images",
 };
 
 const PIN_TO_SECTION: Partial<Record<PinSectionId, PrimaryNavSection>> = {
   connectors: "apps",
-  agents: "automations",
   chats: "chats",
+  images: "images",
 };
 
 export function Sidebar() {
@@ -257,13 +255,16 @@ export function Sidebar() {
       ),
     [pinnedItems, pinPrefs],
   );
-  const primaryPinGroups = useMemo(
-    () =>
-      pinGroups.filter((group) =>
-        PRIMARY_PIN_SECTION_IDS.includes(group.id),
-      ),
-    [pinGroups],
-  );
+  const navPinGroups = useMemo(() => {
+    const wanted: PinSectionId[] = ["connectors", "chats", "images"];
+    return wanted.map(
+      (id) =>
+        pinGroups.find((group) => group.id === id) ?? {
+          id,
+          items: [] as PinnedItem[],
+        },
+    );
+  }, [pinGroups]);
 
   const pinRowActive = (item: PinnedItem) => {
     if (item.kind === "thread") return threadId === item.id;
@@ -289,9 +290,6 @@ export function Sidebar() {
       group.items.some((item) => `${item.kind}:${item.id}` === activePinKey),
     );
     if (!owning) return;
-    if (!(PRIMARY_PIN_SECTION_IDS as readonly string[]).includes(owning.id)) {
-      return;
-    }
     const next = PIN_TO_SECTION[owning.id];
     if (!next) return;
     skipRestoreRef.current = true;
@@ -305,12 +303,12 @@ export function Sidebar() {
     if (section === "workspaces") return null;
     const pinId = SECTION_TO_PIN[section];
     return (
-      primaryPinGroups.find((group) => group.id === pinId) ?? {
+      navPinGroups.find((group) => group.id === pinId) ?? {
         id: pinId,
         items: [] as PinnedItem[],
       }
     );
-  }, [primaryPinGroups, section]);
+  }, [navPinGroups, section]);
 
   const filterNeedle = contextFilter.trim().toLowerCase();
 
@@ -362,13 +360,13 @@ export function Sidebar() {
       }
       const map: Record<string, PrimaryNavSection> = {
         Digit1: "workspaces",
-        Digit2: "chats",
-        Digit3: "apps",
-        Digit4: "automations",
+        Digit2: "apps",
+        Digit3: "chats",
+        Digit4: "images",
         Numpad1: "workspaces",
-        Numpad2: "chats",
-        Numpad3: "apps",
-        Numpad4: "automations",
+        Numpad2: "apps",
+        Numpad3: "chats",
+        Numpad4: "images",
       };
       const next = map[event.code];
       if (!next) return;
@@ -431,7 +429,6 @@ export function Sidebar() {
       group={{ ...group, items }}
       renderPinnedRow={renderPinnedRow}
       onConnect={(id) => openConnectorConnect(id)}
-      onAddExpert={(id) => setPin("project", id, "primary")}
       section={section}
       filter={filterNeedle}
     />
@@ -499,14 +496,13 @@ export function Sidebar() {
       openOverlay("workspace");
       return;
     }
-    openOverlay("agents-activity");
+    openSpace("studio");
   };
 
   const contextInner = (
     <>
       <ContextualNavHeader
         section={section}
-        onCollapse={() => setSidebarOpen(false)}
         onPrimaryAction={onPrimaryAction}
         searchOpen={searchOpen}
         onToggleSearch={() => {
@@ -518,7 +514,11 @@ export function Sidebar() {
         searchValue={contextFilter}
         onSearchChange={setContextFilter}
         searchPlaceholder={
-          section === "apps" ? "Filter apps" : "Search chats"
+          section === "apps"
+            ? "Filter apps"
+            : section === "images"
+              ? "Search images"
+              : "Search chats"
         }
       />
 
@@ -565,7 +565,7 @@ export function Sidebar() {
         {macDesktop ? (
           <WindowChrome
             clearTrafficLights
-            hideHistory
+            navChrome
             className={cn(
               "w-full",
               floating
@@ -610,14 +610,14 @@ export function Sidebar() {
             ) : null}
 
             <div className="flex min-h-0 flex-1 flex-col">
-              {!macDesktop ? <WindowChrome hideHistory /> : null}
+              {!macDesktop ? <WindowChrome navChrome /> : null}
 
               <div className="relative flex min-h-0 flex-1">
                 <PrimaryNavRail section={section} onSection={selectSection} />
 
                 <div
                   className={cn(
-                    "flex min-h-0 flex-col overflow-hidden border-l border-black/[0.05] bg-sidebar/80 transition-[width,opacity] duration-200 ease-out dark:border-white/[0.06] dark:bg-transparent",
+                    "flex min-h-0 flex-col overflow-hidden border-l border-black/[0.06] transition-[width,opacity] duration-200 ease-out dark:border-white/[0.06]",
                     contextVisible
                       ? "opacity-100"
                       : "pointer-events-none opacity-0",
@@ -654,18 +654,24 @@ function SidebarPinSectionBody({
   group,
   renderPinnedRow,
   onConnect,
-  onAddExpert,
   section,
   filter,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   onConnect: (id: string) => void;
-  onAddExpert: (id: string) => void;
   section: PrimaryNavSection;
   filter: string;
 }) {
-  if (section === "chats") {
+  if (section === "chats" || section === "images") {
+    const emptyLabel =
+      section === "images"
+        ? filter
+          ? "No matching images"
+          : "No images yet"
+        : filter
+          ? "No matching chats"
+          : "No chats yet";
     return (
       <>
         {group.items.length ? (
@@ -677,49 +683,14 @@ function SidebarPinSectionBody({
           </>
         ) : (
           <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
-            {filter ? "No matching chats" : "No chats yet"}
+            {emptyLabel}
           </p>
         )}
       </>
     );
   }
 
-  if (section === "automations") {
-    const running = group.items.filter(
-      (item) => item.projectKind === "automation" && !item.expertCatalog,
-    );
-    const catalog = group.items.filter((item) => item.expertCatalog);
-    const rest = group.items.filter(
-      (item) => !running.includes(item) && !catalog.includes(item),
-    );
-    return (
-      <>
-        {running.length ? (
-          <>
-            <ContextualSectionLabel>Active</ContextualSectionLabel>
-            <div className="flex flex-col gap-0">
-              {running.map((item) => renderPinnedRow(item))}
-            </div>
-          </>
-        ) : null}
-        {catalog.length || rest.length ? (
-          <>
-            <ContextualSectionLabel>Recent</ContextualSectionLabel>
-            <div className="flex flex-col gap-0">
-              {[...catalog, ...rest].map((item) => renderPinnedRow(item))}
-            </div>
-          </>
-        ) : null}
-        <ExpertsMoreSection
-          listedIds={group.items.map((item) => item.id)}
-          onAdd={onAddExpert}
-          query={filter}
-        />
-      </>
-    );
-  }
-
-  // Apps (and fallback)
+  // Apps
   return (
     <>
       {group.items.length ? (
