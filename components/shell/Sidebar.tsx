@@ -11,7 +11,6 @@ import {
   type ReactNode,
 } from "react";
 import { GripVertical, MessageSquare } from "lucide-react";
-import { AppsMoreSection } from "@/components/shell/AppsMoreSection";
 import { ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
 import { GeneralMenuBody } from "@/components/shell/GeneralMenuSection";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
@@ -89,7 +88,6 @@ export function Sidebar() {
     openThread,
     openProject,
     openConnector,
-    openConnectorConnect,
     openSpace,
     connectorId,
     entitlements,
@@ -433,12 +431,6 @@ export function Sidebar() {
     <SidebarPinSectionBody
       group={{ ...group, items }}
       renderPinnedRow={renderPinnedRow}
-      onConnect={(id) => openConnectorConnect(id)}
-      onOpenApp={(id) => {
-        persistLastNavItem("apps", `connector:${id}`);
-        openConnector(id);
-      }}
-      activeAppId={connectorId}
       section={section}
     />
   );
@@ -607,16 +599,10 @@ export function Sidebar() {
 function SidebarPinSectionBody({
   group,
   renderPinnedRow,
-  onConnect,
-  onOpenApp,
-  activeAppId,
   section,
 }: {
   group: { id: PinSectionId; items: PinnedItem[] };
   renderPinnedRow: (item: PinnedItem) => ReactNode;
-  onConnect: (id: string) => void;
-  onOpenApp: (id: string) => void;
-  activeAppId?: string | null;
   section: PrimaryNavSection;
 }) {
   if (section === "chats" || section === "images") {
@@ -640,32 +626,19 @@ function SidebarPinSectionBody({
     );
   }
 
-  // Apps
+  // Apps — only connected apps (Add lives on the header + control).
+  if (!group.items.length) {
+    return (
+      <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
+        No apps connected yet
+      </p>
+    );
+  }
+
   return (
-    <>
-      {group.items.length ? (
-        <>
-          <ContextualSectionLabel>Connected</ContextualSectionLabel>
-          <div
-            className={cn(
-              "flex flex-col",
-              group.id === "connectors" ? "gap-0" : "gap-0.5",
-            )}
-          >
-            {group.items.map((item) => renderPinnedRow(item))}
-          </div>
-        </>
-      ) : null}
-      {group.id === "connectors" ? (
-        <AppsMoreSection
-          listedIds={group.items.map((item) => item.id)}
-          onConnect={onConnect}
-          onOpen={onOpenApp}
-          activeId={activeAppId}
-          query=""
-        />
-      ) : null}
-    </>
+    <div className="flex flex-col gap-0">
+      {group.items.map((item) => renderPinnedRow(item))}
+    </div>
   );
 }
 
