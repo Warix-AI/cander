@@ -20,7 +20,7 @@ export function ContextualNavHeader({
 }) {
   if (section === "general") {
     return (
-      <div className="flex shrink-0 items-center gap-1 px-1 pb-1 pt-0.5">
+      <div className="flex shrink-0 items-center gap-1 px-1 pb-1 pt-0">
         <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
           {PRIMARY_NAV_LABEL.general}
         </h2>
@@ -38,7 +38,7 @@ export function ContextualNavHeader({
           : "New automation";
 
   return (
-    <div className="flex shrink-0 items-center gap-1 px-1 pb-1 pt-0.5">
+    <div className="flex h-10 shrink-0 items-center gap-1 px-1 pb-0 pt-0">
       <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
         {PRIMARY_NAV_LABEL[section]}
       </h2>

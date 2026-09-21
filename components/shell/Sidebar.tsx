@@ -576,15 +576,15 @@ export function Sidebar() {
             className="w-full bg-transparent text-foreground"
           />
 
-          <div className="relative flex min-h-0 flex-1">
+          <div className="relative flex min-h-0 flex-1 border-t border-sidebar-border">
             <PrimaryNavRail section={section} onSection={selectSection} />
 
             <div
-              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-black/[0.06] bg-black/[0.02] dark:border-white/[0.06] dark:bg-white/[0.025]"
+              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-sidebar-border"
               style={{ width: CONTEXT_WIDTH_PX }}
             >
               <nav
-                className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2 pt-1"
+                className="flex h-full min-h-0 flex-1 flex-col overflow-hidden px-2 pb-2 pt-1.5"
                 aria-label={PRIMARY_NAV_LABEL[section]}
               >
                 {contextInner}
