@@ -573,7 +573,7 @@ export function Sidebar() {
         */}
         <div
           className={cn(
-            "flex h-full w-[calc(56px+240px)] shrink-0 flex-col overflow-hidden border-r border-black/[0.08] bg-sidebar text-sidebar-foreground dark:border-white/[0.1]",
+            "flex h-full w-[calc(56px+240px)] shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
             peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
           )}
         >

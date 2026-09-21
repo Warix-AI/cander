@@ -64,33 +64,33 @@
 }
 
 .dark {
-  --card: oklch(0.14 0 0);
-  --mobile-menu-canvas: oklch(0.12 0 0);
-  --mobile-app-surface: oklch(0.17 0.005 265);
+  /* ChatGPT-like dark: near-black canvas, slightly lighter menu panel. */
+  --card: #212121;
+  --mobile-menu-canvas: #212121;
+  --mobile-app-surface: #171717;
   --ring: oklch(0.556 0 0);
-  --input: oklch(0.12 0 0);
-  --muted: oklch(0.22 0 0);
-  --accent: oklch(0.26 0 0);
-  --border: oklch(0.2 0 0);
+  --input: #2a2a2a;
+  --muted: #2f2f2f;
+  --accent: #2f2f2f;
+  --border: #2f2f2f;
   --radius: 10px;
   --chart-1: oklch(0.81 0.1 252);
   --chart-2: oklch(0.62 0.19 260);
   --chart-3: oklch(0.55 0.22 263);
   --chart-4: oklch(0.49 0.22 264);
   --chart-5: oklch(0.42 0.18 266);
-  --popover: oklch(0.14 0 0);
+  --popover: #212121;
   --primary: oklch(0.922 0 0);
-  --app-canvas: oklch(0 0 0);
-  --sidebar: oklch(0 0 0);
+  --app-canvas: #171717;
+  --sidebar: #212121;
   --shell-select: #0a84ff;
   --shell-select-foreground: oklch(0.99 0 0);
   --spacing: 0.25rem;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-sans: var(--font-dm-sans), ui-sans-serif, sans-serif, system-ui;
-  --secondary: oklch(0.22 0 0);
-  /* Desktop canvas is black; islands sit on top as translucent gray. */
-  --background: oklch(0 0 0);
-  --space-canvas: oklch(0 0 0);
+  --secondary: #2a2a2a;
+  --background: #171717;
+  --space-canvas: #171717;
   --canvas-hover: var(--muted);
   --canvas-active: var(--muted);
   --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
@@ -102,8 +102,8 @@
   --shadow-spread: 0px;
   --letter-spacing: 0.008em;
   --shadow-opacity: 0.1;
-  --sidebar-accent: oklch(0.18 0 0);
-  --sidebar-border: oklch(0.16 0 0);
+  --sidebar-accent: #2f2f2f;
+  --sidebar-border: #2f2f2f;
   --card-foreground: oklch(0.985 0 0);
   --shadow-offset-x: 0;
   --shadow-offset-y: 1px;
@@ -111,12 +111,12 @@
   --muted-foreground: oklch(0.708 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.12 0 0);
+  --primary-foreground: #171717;
   --sidebar-foreground: oklch(0.985 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --destructive-foreground: oklch(0.985 0 0);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --footer: oklch(0.12 0 0);
+  --footer: #212121;
   --footer-foreground: oklch(0.985 0 0);
 }
 
@@ -158,10 +158,11 @@ html:not(.dark).cander-narrow {
 
 html.dark.cander-mobile,
 html.dark.cander-narrow {
-  --app-canvas: #000;
-  --space-canvas: #000;
-  --background: #000;
-  background-color: #000;
+  --app-canvas: #171717;
+  --space-canvas: #171717;
+  --background: #171717;
+  --sidebar: #212121;
+  background-color: #171717;
 }
 
 @keyframes mobile-slide-in-from-right {
@@ -698,7 +699,7 @@ html.dark {
 }
 
 .dark .mobile-menu-canvas {
-  background-color: #000;
+  background-color: #212121;
 }
 
 /* The shadow follows the rounded shifted screen itself, preventing a straight seam.
@@ -757,14 +758,14 @@ html.cander-narrow .mobile-header-content {
   background-color: var(--mobile-app-surface);
 }
 
-/* Mobile dark mode uses a true black canvas across every app surface. */
+/* Mobile dark mode — ChatGPT-like near-black canvas. */
 html.dark.cander-mobile .mobile-app-surface,
 html.dark.cander-narrow .mobile-app-surface,
 html.dark.cander-mobile .bg-space-canvas,
 html.dark.cander-narrow .bg-space-canvas,
 html.dark.cander-mobile .bg-neutral-950,
 html.dark.cander-narrow .bg-neutral-950 {
-  background-color: #000 !important;
+  background-color: #171717 !important;
 }
 
 html:not(.dark).cander-mobile .bg-space-canvas,
@@ -822,18 +823,18 @@ html:not(.dark) .courier-app-appearance[data-palette="mono"] {
 /* Dark tinted / mono surfaces */
 html.dark .courier-app-appearance[data-palette="tint"],
 html.dark .courier-app-appearance[data-palette="mono"] {
-  --background: oklch(0.17 var(--app-chroma) var(--app-hue));
-  --card: oklch(0.14 calc(var(--app-chroma) * 0.85) var(--app-hue));
-  --muted: oklch(0.22 calc(var(--app-chroma) * 0.7) var(--app-hue));
-  --accent: oklch(0.26 calc(var(--app-chroma) * 0.9) var(--app-hue));
-  --border: oklch(0.2 calc(var(--app-chroma) * 0.55) var(--app-hue));
-  --input: oklch(0.12 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --sidebar: oklch(0.12 calc(var(--app-chroma) * 0.35) var(--app-hue));
-  --sidebar-accent: oklch(0.18 calc(var(--app-chroma) * 0.85) var(--app-hue));
-  --sidebar-border: oklch(0.16 calc(var(--app-chroma) * 0.5) var(--app-hue));
-  --secondary: oklch(0.22 calc(var(--app-chroma) * 0.55) var(--app-hue));
-  --popover: oklch(0.14 calc(var(--app-chroma) * 0.7) var(--app-hue));
-  --space-canvas: oklch(0.12 calc(var(--app-chroma) * 0.25) var(--app-hue));
+  --background: oklch(0.21 calc(var(--app-chroma) * 0.2) var(--app-hue));
+  --card: oklch(0.25 calc(var(--app-chroma) * 0.25) var(--app-hue));
+  --muted: oklch(0.30 calc(var(--app-chroma) * 0.2) var(--app-hue));
+  --accent: oklch(0.30 calc(var(--app-chroma) * 0.25) var(--app-hue));
+  --border: oklch(0.30 calc(var(--app-chroma) * 0.2) var(--app-hue));
+  --input: oklch(0.28 calc(var(--app-chroma) * 0.2) var(--app-hue));
+  --sidebar: oklch(0.25 calc(var(--app-chroma) * 0.25) var(--app-hue));
+  --sidebar-accent: oklch(0.30 calc(var(--app-chroma) * 0.25) var(--app-hue));
+  --sidebar-border: oklch(0.30 calc(var(--app-chroma) * 0.2) var(--app-hue));
+  --secondary: oklch(0.28 calc(var(--app-chroma) * 0.2) var(--app-hue));
+  --popover: oklch(0.25 calc(var(--app-chroma) * 0.25) var(--app-hue));
+  --space-canvas: oklch(0.21 calc(var(--app-chroma) * 0.15) var(--app-hue));
 }
 
 /* Keep the area around floating islands pure white / black (don't tint the canvas). */
@@ -843,8 +844,10 @@ html:not(.dark) .courier-app-appearance {
 }
 
 html.dark .courier-app-appearance {
-  --app-canvas: #000;
-  --background: #000;
+  --app-canvas: #171717;
+  --background: #171717;
+  --sidebar: #212121;
+  --space-canvas: #171717;
 }
 
 .courier-app-appearance .rounded-box {
@@ -1568,12 +1571,9 @@ html:not(.dark) .shell-island {
 }
 
 html.dark .shell-island {
-  /* Dense enough that a conjoined chat|app unit reads as one panel, not two. */
-  background: oklch(1 0 0 / 0.11);
-  box-shadow:
-    0 0 0 0.5px oklch(1 0 0 / 0.1),
-    0 1px 1px oklch(0 0 0 / 0.2),
-    0 8px 24px oklch(0 0 0 / 0.32);
+  /* Match canvas — no floating card lift in ChatGPT-style dark. */
+  background: #171717;
+  box-shadow: none;
 }
 
 /* Light: sidebar reads denser / cooler than content islands (macOS Settings). */
@@ -1590,7 +1590,7 @@ html:not(.dark) .shell-island-sidebar {
 }
 
 html.dark .shell-island-sidebar {
-  background: oklch(1 0 0 / 0.09);
+  background: #212121;
 }
 
 /* Leaf selection — quiet system blue (macOS sidebar). */
