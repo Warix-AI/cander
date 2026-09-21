@@ -576,11 +576,11 @@ export function Sidebar() {
             className="w-full bg-transparent text-foreground"
           />
 
-          <div className="relative flex min-h-0 flex-1 border-t border-sidebar-border">
+          <div className="relative flex min-h-0 flex-1">
             <PrimaryNavRail section={section} onSection={selectSection} />
 
             <div
-              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-sidebar-border"
+              className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-t border-sidebar-border bg-sidebar [border-top-left-radius:14px]"
               style={{ width: CONTEXT_WIDTH_PX }}
             >
               <nav
