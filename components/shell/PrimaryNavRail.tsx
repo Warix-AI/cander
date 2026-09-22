@@ -107,8 +107,8 @@ export function PrimaryNavRail({
           onClick={() => newChat()}
           className={cn(
             labeled
-              ? cn(LABELED_BTN, "w-full")
-              : RAIL_BTN,
+              ? cn(LABELED_BTN, "w-full", newChatActive && LABELED_BTN_ACTIVE)
+              : cn(RAIL_BTN, newChatActive && RAIL_BTN_ACTIVE),
           )}
         >
           <SquarePen
