@@ -466,7 +466,7 @@ export function Sidebar() {
       );
     }
     return (
-      <div className="flex flex-col gap-0">
+      <div className="flex flex-col gap-0.5">
         {list.map((item) => {
           const active = item.id === workspace.id;
           return (
@@ -484,7 +484,7 @@ export function Sidebar() {
                   persistLastNavItem("workspaces", `workspace:${item.id}`);
                 }}
                 className={cn(
-                  "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]",
+                  "flex h-9 min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
                   active && "font-medium",
                 )}
               >
@@ -799,7 +799,7 @@ function PinnedRow({
         title={hoverTitle}
         onClick={onOpen}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]",
+          "flex h-9 min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
           inUse && "font-medium",
         )}
       >

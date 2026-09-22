@@ -37,10 +37,12 @@ export const mobileMenuRowClass = [
 ].join(" ");
 
 /**
- * Desktop sidebar rows — primary nav (New / Apps / Experts / Chats / General).
+ * Desktop sidebar rows — primary nav + contextual lists.
+ * Fixed h-9 matches the primary rail icon buttons so main/sub menus share
+ * the same vertical rhythm (with gap-0.5 stacks).
  */
 export const SIDEBAR_ROW =
-  "flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left text-[14px] tracking-[-0.01em] transition-colors duration-150";
+  "flex h-9 w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[14px] tracking-[-0.01em] transition-colors duration-150";
 export const SIDEBAR_ROW_HOVER =
   "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]";
 export const SIDEBAR_ROW_ICON =

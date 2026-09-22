@@ -115,7 +115,7 @@ function AvailableAppRow({
         type="button"
         onClick={() => (onOpen ?? onConnect)(app.id)}
         className={cn(
-          "flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]",
+          "flex h-9 min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]",
           active && "font-medium",
         )}
       >

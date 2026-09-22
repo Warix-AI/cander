@@ -69,7 +69,7 @@ function AvailableExpertRow({
     >
       <div
         title={expertHoverLabel(expert)}
-        className="flex min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 py-2 text-left text-[14px] tracking-[-0.01em]"
+        className="flex h-9 min-w-0 flex-1 items-center gap-2.5 truncate px-2.5 text-left text-[14px] tracking-[-0.01em]"
       >
         <span className="inline-flex h-4 w-4 shrink-0 overflow-hidden rounded-[4px]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
