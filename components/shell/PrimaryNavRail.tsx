@@ -30,6 +30,10 @@ const PRIMARY: {
 const RAIL_BTN =
   "inline-flex h-10 w-10 items-center justify-center rounded-[12px] text-muted-foreground transition-colors duration-200 hover:bg-black/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:hover:bg-white/[0.08] dark:focus-visible:ring-white/20";
 
+/** Active primary-rail icon — shell-select blue glyph, no gray wash. */
+const RAIL_BTN_ACTIVE =
+  "text-[var(--shell-select)] hover:bg-transparent hover:text-[var(--shell-select)] dark:hover:bg-transparent";
+
 /**
  * Narrow primary icon rail (~56px) — major product sections + account utilities.
  * Search / Voice / collapse live in the desktop titlebar.
@@ -67,11 +71,7 @@ export function PrimaryNavRail({
               aria-current={active ? "page" : undefined}
               data-desktop-no-drag=""
               onClick={() => onSection(id)}
-              className={cn(
-                RAIL_BTN,
-                active &&
-                  "bg-black/[0.06] text-foreground dark:bg-white/[0.1] dark:shadow-[inset_0_0_0_1px_oklch(1_0_0/0.06)]",
-              )}
+              className={cn(RAIL_BTN, active && RAIL_BTN_ACTIVE)}
             >
               <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
             </button>
@@ -86,11 +86,7 @@ export function PrimaryNavRail({
           aria-label="Notifications"
           data-desktop-no-drag=""
           onClick={() => openNotifications()}
-          className={cn(
-            RAIL_BTN,
-            view === "notifications" &&
-              "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
-          )}
+          className={cn(RAIL_BTN, view === "notifications" && RAIL_BTN_ACTIVE)}
         >
           <Bell className="h-[17px] w-[17px]" strokeWidth={1.75} />
         </button>
@@ -100,11 +96,7 @@ export function PrimaryNavRail({
           aria-label="Help"
           data-desktop-no-drag=""
           onClick={() => openHelp()}
-          className={cn(
-            RAIL_BTN,
-            view === "help" &&
-              "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
-          )}
+          className={cn(RAIL_BTN, view === "help" && RAIL_BTN_ACTIVE)}
         >
           <CircleHelp className="h-[17px] w-[17px]" strokeWidth={1.75} />
         </button>
@@ -116,8 +108,7 @@ export function PrimaryNavRail({
           onClick={() => onSection("general")}
           className={cn(
             RAIL_BTN,
-            (section === "general" || view === "settings") &&
-              "bg-black/[0.06] text-foreground dark:bg-white/[0.1]",
+            (section === "general" || view === "settings") && RAIL_BTN_ACTIVE,
           )}
         >
           <CircleUser className="h-[17px] w-[17px]" strokeWidth={1.75} />

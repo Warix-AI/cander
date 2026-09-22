@@ -15,7 +15,7 @@ export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
 ];
 
 export const PRIMARY_NAV_LABEL: Record<PrimaryNavSection, string> = {
-  workspaces: "Business",
+  workspaces: "Workspaces",
   apps: "Apps",
   chats: "Chats",
   automations: "Automations",
