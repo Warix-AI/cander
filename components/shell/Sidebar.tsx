@@ -32,6 +32,8 @@ import {
   persistLastNavItem,
   persistPrimaryNavSection,
   PRIMARY_NAV_LABEL,
+  PRIMARY_NAV_RAIL_ICON_WIDTH_PX,
+  PRIMARY_NAV_RAIL_LABELED_WIDTH_PX,
   readContextNavOpen,
   readLastNavItem,
   readPrimaryNavSection,
@@ -62,8 +64,6 @@ import { SHELL_CHROME_ROW } from "@/lib/shell-chrome";
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 const CONTEXT_WIDTH_PX = 240;
-const RAIL_ICON_WIDTH_PX = 56;
-const RAIL_LABELED_WIDTH_PX = 180;
 
 /** Map primary rail section → pin folder id (except workspaces / general). */
 const SECTION_TO_PIN: Record<
@@ -174,8 +174,8 @@ export function Sidebar() {
   const navVisible = sidebarOpen || peeking;
   const railWidthPx =
     primaryNavRailMode === "labeled"
-      ? RAIL_LABELED_WIDTH_PX
-      : RAIL_ICON_WIDTH_PX;
+      ? PRIMARY_NAV_RAIL_LABELED_WIDTH_PX
+      : PRIMARY_NAV_RAIL_ICON_WIDTH_PX;
   const navWidthPx = railWidthPx + CONTEXT_WIDTH_PX;
 
   useEffect(() => {
