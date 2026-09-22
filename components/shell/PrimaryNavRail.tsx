@@ -86,13 +86,10 @@ export function PrimaryNavRail({
     openNotifications,
     newChat,
     view,
-    drafting,
     primaryNavRailMode,
   } = useApp();
 
   const labeled = primaryNavRailMode === "labeled";
-  // Home new chat sets drafting + a thread id — highlight while drafting.
-  const newChatActive = drafting;
 
   return (
     <aside
@@ -123,13 +120,7 @@ export function PrimaryNavRail({
           className={cn(
             labeled ? LABELED_BTN_BASE : RAIL_BTN_BASE,
             labeled && "w-full",
-            newChatActive
-              ? labeled
-                ? LABELED_BTN_ACTIVE
-                : RAIL_BTN_ACTIVE
-              : labeled
-                ? LABELED_BTN_IDLE
-                : RAIL_BTN_IDLE,
+            labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
           <SquarePen

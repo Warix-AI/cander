@@ -458,6 +458,13 @@ export function Sidebar() {
 
   const renderWorkspaceSegment = () => {
     const list = allowedWorkspaces;
+    if (!list.length) {
+      return (
+        <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
+          No workspaces yet
+        </p>
+      );
+    }
     return (
       <div className="flex flex-col gap-0">
         {list.map((item) => {
@@ -544,8 +551,8 @@ export function Sidebar() {
 
   const contextInner = (
     <>
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto pb-1">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-1">
           <div className="flex flex-col gap-0.5">
             {section === "general" ? (
               <GeneralMenuBody
@@ -554,24 +561,20 @@ export function Sidebar() {
                 iconClassName={SIDEBAR_ROW_ICON}
               />
             ) : section === "workspaces" ? (
-              <>
-                {renderWorkspaceSegment()}
-                <ContextualAddRow
-                  section="workspaces"
-                  onClick={onPrimaryAction}
-                />
-              </>
+              renderWorkspaceSegment()
             ) : activePinGroup ? (
-              <>
-                {renderPinSectionChildren(activePinGroup, filteredPinItems)}
-                <ContextualAddRow
-                  section={section}
-                  onClick={onPrimaryAction}
-                />
-              </>
+              renderPinSectionChildren(activePinGroup, filteredPinItems)
             ) : null}
           </div>
         </div>
+        {section !== "general" ? (
+          <div className="shrink-0 border-t border-sidebar-border/60 pt-1">
+            <ContextualAddRow
+              section={section}
+              onClick={onPrimaryAction}
+            />
+          </div>
+        ) : null}
       </div>
     </>
   );
