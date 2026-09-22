@@ -439,7 +439,7 @@ export function ConnectorBrowserPanel({
       {hideTopChrome ? null : (
       <div
         className={cn(
-          "hidden min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06] lg:flex",
+          "hidden min-w-0 shrink-0 items-center gap-1 px-2 lg:flex",
           SHELL_CHROME_ROW,
           surface,
         )}
