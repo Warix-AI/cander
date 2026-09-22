@@ -88,6 +88,7 @@ import {
   BROWSER_CHROME_BG,
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
+  SHELL_CHROME_ROW,
 } from "@/lib/shell-chrome";
 import { decodeTextDataUrl } from "@/lib/chat-document-attach";
 import {
@@ -2412,7 +2413,8 @@ export function ProjectBrowserPanel({
       ) : (
         <div
           className={cn(
-            "flex h-[45px] min-w-0 shrink-0 items-center gap-1",
+            "flex min-w-0 shrink-0 items-center gap-1",
+            SHELL_CHROME_ROW,
             BROWSER_CHROME_BG,
             showHeaderNav
               ? "pr-2 pl-[max(0.5rem,var(--desktop-traffic-clear,0px))]"
@@ -2552,7 +2554,8 @@ export function ProjectBrowserPanel({
       {mobile ? null : standalone ? null : showBrowserNavChrome ? (
         <div
           className={cn(
-            "relative flex h-[45px] min-w-0 shrink-0 items-center gap-0.5 border-t border-black/5 px-2 dark:border-white/5",
+            "relative flex min-w-0 shrink-0 items-center gap-0.5 border-t border-black/5 px-2 dark:border-white/5",
+            SHELL_CHROME_ROW,
             BROWSER_CHROME_BG,
           )}
         >
