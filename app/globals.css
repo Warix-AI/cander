@@ -1624,6 +1624,17 @@ html.dark .shell-island-sidebar {
   opacity: 0.92;
 }
 
+/** Primary rail selected glyph — blue icon, no fill wash. */
+.shell-rail-icon-active {
+  color: var(--shell-select) !important;
+}
+
+.shell-rail-icon-active svg.lucide,
+.shell-rail-icon-active [data-lucide],
+.shell-rail-icon-active svg {
+  color: var(--shell-select) !important;
+}
+
 /* Selected Apps | Experts | Chats — glass pill on the chosen mode only (no track). */
 .shell-segment-active {
   color: var(--foreground) !important;

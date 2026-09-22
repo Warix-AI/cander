@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { GripVertical, MessageSquare } from "lucide-react";
-import { ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
+import { ContextualAddRow, ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
 import { GeneralMenuBody } from "@/components/shell/GeneralMenuSection";
 import { AppsNavList } from "@/components/shell/AppsNavList";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
@@ -511,16 +511,31 @@ export function Sidebar() {
     openSpace("build");
   };
 
+  const onAddSection = (
+    next: Exclude<PrimaryNavSection, "general">,
+  ) => {
+    if (next === "apps") {
+      openSpace("connectors");
+      return;
+    }
+    if (next === "chats") {
+      newChat();
+      return;
+    }
+    if (next === "workspaces") {
+      openOverlay("workspace");
+      return;
+    }
+    if (next === "images") {
+      openSpace("studio");
+    }
+  };
+
   const contextInner = (
     <>
-      <ContextualNavHeader
-        section={section}
-        onPrimaryAction={
-          section === "general" ? undefined : onPrimaryAction
-        }
-      />
+      <ContextualNavHeader section={section} />
 
-      <div className="relative mt-1 min-h-0 flex-1 overflow-hidden">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="h-full overflow-y-auto pb-1">
           <div className="flex flex-col gap-0.5">
             {section === "general" ? (
@@ -530,9 +545,21 @@ export function Sidebar() {
                 iconClassName={SIDEBAR_ROW_ICON}
               />
             ) : section === "workspaces" ? (
-              renderWorkspaceSegment()
+              <>
+                {renderWorkspaceSegment()}
+                <ContextualAddRow
+                  section="workspaces"
+                  onClick={onPrimaryAction}
+                />
+              </>
             ) : activePinGroup ? (
-              renderPinSectionChildren(activePinGroup, filteredPinItems)
+              <>
+                {renderPinSectionChildren(activePinGroup, filteredPinItems)}
+                <ContextualAddRow
+                  section={section}
+                  onClick={onPrimaryAction}
+                />
+              </>
             ) : null}
           </div>
         </div>
@@ -604,7 +631,11 @@ export function Sidebar() {
           </div>
 
           <div className="relative flex min-h-0 flex-1">
-            <PrimaryNavRail section={section} onSection={selectSection} />
+            <PrimaryNavRail
+              section={section}
+              onSection={selectSection}
+              onAddSection={onAddSection}
+            />
 
             <div
               className="flex min-h-0 w-[240px] flex-col overflow-hidden border-l border-t border-sidebar-border bg-sidebar [border-top-left-radius:14px]"
@@ -639,12 +670,9 @@ function SidebarPinSectionBody({
     return (
       <>
         {group.items.length ? (
-          <>
-            <ContextualSectionLabel>Recent</ContextualSectionLabel>
-            <div className="flex flex-col gap-0.5">
-              {group.items.map((item) => renderPinnedRow(item))}
-            </div>
-          </>
+          <div className="flex flex-col gap-0.5">
+            {group.items.map((item) => renderPinnedRow(item))}
+          </div>
         ) : (
           <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
             {emptyLabel}

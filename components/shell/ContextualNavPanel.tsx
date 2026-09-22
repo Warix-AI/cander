@@ -3,58 +3,54 @@
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { PRIMARY_NAV_LABEL, type PrimaryNavSection } from "@/lib/nav-primary";
-
-const HEADER_ICON =
-  "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] text-muted-foreground transition-colors duration-150 hover:bg-black/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:hover:bg-white/[0.08] dark:focus-visible:ring-white/20";
+import { PRIMARY_NAV_ADD_LABEL } from "@/components/shell/PrimaryNavRail";
+import {
+  SIDEBAR_ROW,
+  SIDEBAR_ROW_HOVER,
+  SIDEBAR_ROW_ICON,
+} from "@/lib/mobile-menu-styles";
+import { cn } from "@/lib/utils";
 
 /**
- * Contextual sidebar chrome — title + primary action.
- * Global Search lives next to PanelLeft in the desktop titlebar.
+ * Contextual sidebar — General keeps a quiet title; other sections put the
+ * first list row at the top (no title + plus header).
  */
 export function ContextualNavHeader({
   section,
-  onPrimaryAction,
 }: {
   section: PrimaryNavSection;
-  onPrimaryAction?: () => void;
 }) {
-  if (section === "general") {
-    return (
-      <div className="flex shrink-0 items-center gap-1 px-1 pb-1 pt-0">
-        <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
-          {PRIMARY_NAV_LABEL.general}
-        </h2>
-      </div>
-    );
-  }
-
-  const primaryLabel =
-    section === "apps"
-      ? "Connect app"
-      : section === "chats"
-        ? "New chat"
-        : section === "workspaces"
-          ? "Create workspace"
-          : "New image";
-
+  if (section !== "general") return null;
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 px-1 pb-0 pt-0">
       <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
-        {PRIMARY_NAV_LABEL[section]}
+        {PRIMARY_NAV_LABEL.general}
       </h2>
-      {onPrimaryAction ? (
-        <button
-          type="button"
-          title={primaryLabel}
-          aria-label={primaryLabel}
-          data-desktop-no-drag=""
-          onClick={onPrimaryAction}
-          className={HEADER_ICON}
-        >
-          <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
-        </button>
-      ) : null}
     </div>
+  );
+}
+
+/** Trailing “Add …” row under the section’s items. */
+export function ContextualAddRow({
+  section,
+  onClick,
+}: {
+  section: Exclude<PrimaryNavSection, "general">;
+  onClick: () => void;
+}) {
+  const label = PRIMARY_NAV_ADD_LABEL[section];
+  return (
+    <button
+      type="button"
+      data-desktop-no-drag=""
+      onClick={onClick}
+      className={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER, "text-muted-foreground")}
+    >
+      <Plus className={SIDEBAR_ROW_ICON} strokeWidth={1.75} />
+      <span className="min-w-0 flex-1 truncate text-[14px] tracking-[-0.01em]">
+        {label}
+      </span>
+    </button>
   );
 }
 
