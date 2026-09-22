@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-/** Static waveform — thicker rounded bars to match nav stroke weight. */
+/** Static 3-bar waveform — bars use currentColor so header icons stay light. */
 export function VoiceWaveIcon({
   size = 14,
   className,
@@ -12,7 +12,7 @@ export function VoiceWaveIcon({
   className?: string;
   barClassName?: string;
 }) {
-  const heights = [0.45, 1, 0.62];
+  const heights = [0.48, 1, 0.62];
 
   return (
     <div
@@ -22,8 +22,8 @@ export function VoiceWaveIcon({
       {heights.map((ratio, index) => (
         <span
           key={index}
-          className={cn("w-[2.25px] rounded-full bg-current", barClassName)}
-          style={{ height: Math.max(4, Math.round(size * ratio)) }}
+          className={cn("w-[2.5px] rounded-full bg-current", barClassName)}
+          style={{ height: Math.max(3, Math.round(size * ratio)) }}
         />
       ))}
     </div>

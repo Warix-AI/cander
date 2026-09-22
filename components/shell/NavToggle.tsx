@@ -1,6 +1,6 @@
 "use client";
 
-import { IconNewChat, IconPanel, NAV_ICON_HEADER } from "@/components/brand/NavIcons";
+import { PanelLeft, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DESKTOP_NO_DRAG,
@@ -49,7 +49,7 @@ export function NavToggle({
         className,
       )}
     >
-      <IconPanel size={NAV_ICON_HEADER} />
+      <PanelLeft className="h-4 w-4" strokeWidth={1.6} />
     </button>
   );
 }
@@ -93,7 +93,7 @@ export function LeftNavToggleDock({
         onClick={() => newChat()}
         className={cn(SHELL_HEADER_ICON_CLASS, "pointer-events-auto")}
       >
-        <IconNewChat size={NAV_ICON_HEADER} />
+        <SquarePen className="h-4 w-4" strokeWidth={1.7} />
       </button>
     </div>
   );

@@ -1,8 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { IconPanel, IconSearch, NAV_ICON_HEADER } from "@/components/brand/NavIcons";
+import { ChevronLeft, ChevronRight, PanelLeft, Search } from "lucide-react";
 import {
   DESKTOP_DRAG,
   DESKTOP_NO_DRAG,
@@ -109,7 +108,7 @@ export function ShellWindowChromeBar({
                     searchActive && "shell-rail-icon-active",
                   )}
                 >
-                  <IconSearch size={NAV_ICON_HEADER} />
+                  <Search className="h-4 w-4" strokeWidth={1.7} />
                 </button>
               ) : null}
               {afterSearch}
@@ -173,7 +172,7 @@ export function ShellNavToggleButton({
       onClick={onClick}
       className={SHELL_HEADER_ICON_CLASS}
     >
-      <IconPanel size={NAV_ICON_HEADER} />
+      <PanelLeft className="h-4 w-4" strokeWidth={1.6} />
     </button>
   );
 }

@@ -7,20 +7,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useApp } from "@/components/app/AppProvider";
 import {
-  IconApps,
-  IconChats,
-  IconGeneral,
-  IconImages,
-  IconNewChat,
-  IconNotifications,
-  IconPlus,
-  IconWorkspaces,
-  NAV_ICON_HEADER,
-  NAV_ICON_RAIL,
-  type NavIconComponent,
-} from "@/components/brand/NavIcons";
+  Bell,
+  CircleUser,
+  ImageIcon,
+  Layers,
+  LayoutGrid,
+  MessageSquare,
+  Plus,
+  SquarePen,
+  type LucideIcon,
+} from "lucide-react";
+import { useApp } from "@/components/app/AppProvider";
 import {
   PRIMARY_NAV_LABEL,
   type PrimaryNavSection,
@@ -33,12 +31,12 @@ import { cn } from "@/lib/utils";
 
 const PRIMARY: {
   id: Exclude<PrimaryNavSection, "general">;
-  Icon: NavIconComponent;
+  Icon: LucideIcon;
 }[] = [
-  { id: "workspaces", Icon: IconWorkspaces },
-  { id: "apps", Icon: IconApps },
-  { id: "chats", Icon: IconChats },
-  { id: "images", Icon: IconImages },
+  { id: "workspaces", Icon: Layers },
+  { id: "apps", Icon: LayoutGrid },
+  { id: "chats", Icon: MessageSquare },
+  { id: "images", Icon: ImageIcon },
 ];
 
 const HOVER_PLUS_MS = 1000;
@@ -125,7 +123,13 @@ export function PrimaryNavRail({
             labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
-          <IconNewChat size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
+          <SquarePen
+            className={cn(
+              "shrink-0",
+              labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
+            )}
+            strokeWidth={1.75}
+          />
           {labeled ? (
             <span className="min-w-0 truncate">New chat</span>
           ) : null}
@@ -163,8 +167,9 @@ export function PrimaryNavRail({
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
-          <IconNotifications
-            size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL}
+          <Bell
+            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
+            strokeWidth={1.75}
           />
         </UtilityButton>
         <UtilityButton
@@ -173,7 +178,10 @@ export function PrimaryNavRail({
           active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
         >
-          <IconGeneral size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
+          <CircleUser
+            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
+            strokeWidth={1.75}
+          />
         </UtilityButton>
       </div>
     </aside>
@@ -189,7 +197,7 @@ function RailSectionButton({
   onAdd,
 }: {
   id: Exclude<PrimaryNavSection, "general">;
-  Icon: NavIconComponent;
+  Icon: LucideIcon;
   labeled: boolean;
   active: boolean;
   onSelect: () => void;
@@ -233,13 +241,6 @@ function RailSectionButton({
     ? PRIMARY_NAV_ADD_LABEL[id]
     : PRIMARY_NAV_LABEL[id];
 
-  const isImages = id === "images";
-  /** Images: blue translucent squircle instead of the gray wash. */
-  const imagesHoverPad =
-    isImages && !showPlus
-      ? "relative overflow-visible hover:bg-transparent dark:hover:bg-transparent"
-      : null;
-
   return (
     <button
       type="button"
@@ -258,6 +259,7 @@ function RailSectionButton({
           return;
         }
         onSelect();
+        // Keep hover-plus arming if the pointer stays after selecting.
         if (onAdd) {
           clearTimer();
           timerRef.current = window.setTimeout(() => {
@@ -267,7 +269,6 @@ function RailSectionButton({
         }
       }}
       className={cn(
-        "group",
         labeled ? LABELED_BTN_BASE : RAIL_BTN_BASE,
         active
           ? labeled
@@ -276,30 +277,27 @@ function RailSectionButton({
           : labeled
             ? LABELED_BTN_IDLE
             : RAIL_BTN_IDLE,
-        imagesHoverPad,
       )}
     >
-      {isImages && !showPlus ? (
-        <span
-          aria-hidden
+      {showPlus ? (
+        <Plus
           className={cn(
-            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[10px] opacity-0 transition-opacity duration-200 ease-out",
-            "bg-[linear-gradient(180deg,rgba(48,110,230,0.58)_0%,rgba(72,148,255,0.4)_100%)]",
-            "shadow-[0_0_12px_rgba(64,136,255,0.4)] ring-1 ring-white/25",
-            /* Slightly larger than the glyph — extends past underside + L/R */
-            "h-[30px] w-[30px] group-hover:opacity-100",
+            "shrink-0",
+            labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
           )}
+          strokeWidth={1.75}
         />
-      ) : null}
-      <span className={cn(isImages && !showPlus && "relative z-[1]")}>
-        {showPlus ? (
-          <IconPlus size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
-        ) : (
-          <Icon size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
-        )}
-      </span>
+      ) : (
+        <Icon
+          className={cn(
+            "shrink-0",
+            labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
+          )}
+          strokeWidth={1.75}
+        />
+      )}
       {labeled ? (
-        <span className="relative z-[1] min-w-0 truncate">{label}</span>
+        <span className="min-w-0 truncate">{label}</span>
       ) : null}
     </button>
   );
