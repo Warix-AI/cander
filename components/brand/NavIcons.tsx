@@ -137,8 +137,8 @@ export function IconChats({
 }
 
 /**
- * Images — stacked photo frames with a soft landscape mark
- * (aligned to the refined inspiration glyph).
+ * Images — two stacked rounded frames with sun + mountains
+ * (matches the reference gallery glyph).
  */
 export function IconImages({
   className,
@@ -148,13 +148,14 @@ export function IconImages({
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      {/* Rear cards — offset up-right */}
-      <rect x="6.75" y="3.5" width="13.5" height="11.25" rx="2.75" />
-      <rect x="5" y="5.5" width="13.5" height="11.25" rx="2.75" />
-      {/* Front card */}
-      <rect x="3.25" y="7.5" width="13.5" height="12.25" rx="2.75" />
-      {/* Landscape */}
-      <path d="M5.1 16.85 8.35 13.9l2.4 2 3.15-3.45 3.45 4.4" />
+      {/* Back frame — offset up-right */}
+      <rect x="6.5" y="3.25" width="14" height="14" rx="3.25" />
+      {/* Front frame */}
+      <rect x="3.25" y="6.5" width="14" height="14" rx="3.25" />
+      {/* Sun */}
+      <circle cx="13.85" cy="11.15" r="1.35" />
+      {/* Mountains */}
+      <path d="M5.35 17.85 9.1 14.35l2.55 2.15 2.95-3.2 2.75 4.55" />
     </NavIconBase>
   );
 }
