@@ -7,18 +7,18 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Bell,
-  CircleUser,
-  ImageIcon,
-  Layers,
-  LayoutGrid,
-  MessageSquare,
-  Plus,
-  SquarePen,
-  type LucideIcon,
-} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  IconApps,
+  IconChats,
+  IconGeneral,
+  IconImages,
+  IconNewChat,
+  IconNotifications,
+  IconPlus,
+  IconWorkspaces,
+  type NavIconComponent,
+} from "@/components/brand/NavIcons";
 import {
   PRIMARY_NAV_LABEL,
   type PrimaryNavSection,
@@ -31,12 +31,12 @@ import { cn } from "@/lib/utils";
 
 const PRIMARY: {
   id: Exclude<PrimaryNavSection, "general">;
-  Icon: LucideIcon;
+  Icon: NavIconComponent;
 }[] = [
-  { id: "workspaces", Icon: Layers },
-  { id: "apps", Icon: LayoutGrid },
-  { id: "chats", Icon: MessageSquare },
-  { id: "images", Icon: ImageIcon },
+  { id: "workspaces", Icon: IconWorkspaces },
+  { id: "apps", Icon: IconApps },
+  { id: "chats", Icon: IconChats },
+  { id: "images", Icon: IconImages },
 ];
 
 const HOVER_PLUS_MS = 1000;
@@ -123,13 +123,7 @@ export function PrimaryNavRail({
             labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
-          <SquarePen
-            className={cn(
-              "shrink-0",
-              labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-            )}
-            strokeWidth={1.75}
-          />
+          <IconNewChat size={labeled ? 16 : 18} strokeWidth={1.5} />
           {labeled ? (
             <span className="min-w-0 truncate">New chat</span>
           ) : null}
@@ -167,10 +161,7 @@ export function PrimaryNavRail({
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
-          <Bell
-            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
-            strokeWidth={1.75}
-          />
+          <IconNotifications size={labeled ? 16 : 17} strokeWidth={1.5} />
         </UtilityButton>
         <UtilityButton
           labeled={labeled}
@@ -178,10 +169,7 @@ export function PrimaryNavRail({
           active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
         >
-          <CircleUser
-            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
-            strokeWidth={1.75}
-          />
+          <IconGeneral size={labeled ? 16 : 17} strokeWidth={1.5} />
         </UtilityButton>
       </div>
     </aside>
@@ -197,7 +185,7 @@ function RailSectionButton({
   onAdd,
 }: {
   id: Exclude<PrimaryNavSection, "general">;
-  Icon: LucideIcon;
+  Icon: NavIconComponent;
   labeled: boolean;
   active: boolean;
   onSelect: () => void;
@@ -259,7 +247,6 @@ function RailSectionButton({
           return;
         }
         onSelect();
-        // Keep hover-plus arming if the pointer stays after selecting.
         if (onAdd) {
           clearTimer();
           timerRef.current = window.setTimeout(() => {
@@ -280,21 +267,9 @@ function RailSectionButton({
       )}
     >
       {showPlus ? (
-        <Plus
-          className={cn(
-            "shrink-0",
-            labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-          )}
-          strokeWidth={1.75}
-        />
+        <IconPlus size={labeled ? 16 : 18} strokeWidth={1.5} />
       ) : (
-        <Icon
-          className={cn(
-            "shrink-0",
-            labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-          )}
-          strokeWidth={1.75}
-        />
+        <Icon size={labeled ? 16 : 18} strokeWidth={1.5} />
       )}
       {labeled ? (
         <span className="min-w-0 truncate">{label}</span>

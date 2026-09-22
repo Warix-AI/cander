@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-/** Static 3-bar waveform — bars use currentColor so header icons stay light. */
+/** Static 3-bar waveform — thin futuristic bars, currentColor for chrome. */
 export function VoiceWaveIcon({
   size = 14,
   className,
@@ -12,17 +12,17 @@ export function VoiceWaveIcon({
   className?: string;
   barClassName?: string;
 }) {
-  const heights = [0.48, 1, 0.62];
+  const heights = [0.42, 1, 0.58, 0.78];
 
   return (
     <div
-      className={cn("flex items-center justify-center gap-[2.5px]", className)}
+      className={cn("flex items-center justify-center gap-[2px]", className)}
       aria-hidden
     >
       {heights.map((ratio, index) => (
         <span
           key={index}
-          className={cn("w-[2.5px] rounded-full bg-current", barClassName)}
+          className={cn("w-[1.75px] rounded-full bg-current", barClassName)}
           style={{ height: Math.max(3, Math.round(size * ratio)) }}
         />
       ))}
