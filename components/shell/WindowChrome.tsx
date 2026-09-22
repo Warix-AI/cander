@@ -91,8 +91,8 @@ export function WindowChrome({
             type="button"
             aria-label={
               unreadCount > 0
-                ? `Notifications, ${unreadCount} unread`
-                : "Notifications"
+                ? `Alerts, ${unreadCount} unread`
+                : "Alerts"
             }
             style={desktop ? DESKTOP_NO_DRAG : undefined}
             onClick={() => openNotifications()}

@@ -73,7 +73,7 @@ export function NotificationsView() {
     <SettingsPage>
       <SettingsHeader
         kicker="Inbox"
-        title="Notifications"
+        title="Alerts"
         subtitle="Emails, expert updates, and other activity across your spaces."
         actions={
           items.length > 0 ? (

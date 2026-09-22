@@ -461,7 +461,7 @@ export function Sidebar() {
     if (!list.length) {
       return (
         <p className="px-2.5 py-3 text-[13px] text-muted-foreground">
-          No workspaces yet
+          No spaces yet
         </p>
       );
     }

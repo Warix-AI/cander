@@ -168,7 +168,7 @@ export function PrimaryNavRail({
       >
         <UtilityButton
           labeled={labeled}
-          title="Notifications"
+          title="Alerts"
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
@@ -304,7 +304,7 @@ export const PRIMARY_NAV_ADD_LABEL: Record<
   Exclude<PrimaryNavSection, "general">,
   string
 > = {
-  workspaces: "Add workspace",
+  workspaces: "Add space",
   apps: "Add app",
   chats: "New chat",
   images: "New image",

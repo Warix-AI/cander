@@ -12,7 +12,7 @@ export type PrimaryNavRailMode = "icon" | "labeled";
 /** Desktop primary rail widths — keep Sidebar + PrimaryNavRail in sync. */
 export const PRIMARY_NAV_RAIL_ICON_WIDTH_PX = 56;
 /** Labeled mode: tight to longest label; leaves ~half the prior dead space before context. */
-export const PRIMARY_NAV_RAIL_LABELED_WIDTH_PX = 150;
+export const PRIMARY_NAV_RAIL_LABELED_WIDTH_PX = 140;
 
 /** Top rail destinations (General lives on the bottom account control). */
 export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
@@ -23,7 +23,7 @@ export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
 ];
 
 export const PRIMARY_NAV_LABEL: Record<PrimaryNavSection, string> = {
-  workspaces: "Workspaces",
+  workspaces: "Spaces",
   apps: "Apps",
   chats: "Chats",
   images: "Images",

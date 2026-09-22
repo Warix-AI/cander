@@ -79,7 +79,7 @@ export function WorkspaceRail() {
             )
           : "bg-sidebar",
       )}
-      aria-label="Workspaces"
+      aria-label="Spaces"
     >
       {/* Browser classic only — desktop chrome sits on the traffic-light row. */}
       {!floating && !macDesktop ? (
