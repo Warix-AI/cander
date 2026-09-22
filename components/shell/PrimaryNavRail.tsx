@@ -1,14 +1,15 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   Bell,
   CircleHelp,
   CircleUser,
+  ImageIcon,
   Layers,
   LayoutGrid,
   MessageSquare,
   Search,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
@@ -18,6 +19,10 @@ import {
   PRIMARY_NAV_LABEL,
   type PrimaryNavSection,
 } from "@/lib/nav-primary";
+import {
+  SIDEBAR_ROW,
+  SIDEBAR_ROW_HOVER,
+} from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 const PRIMARY: {
@@ -27,7 +32,7 @@ const PRIMARY: {
   { id: "workspaces", Icon: Layers },
   { id: "apps", Icon: LayoutGrid },
   { id: "chats", Icon: MessageSquare },
-  { id: "automations", Icon: Zap },
+  { id: "images", Icon: ImageIcon },
 ];
 
 const RAIL_BTN =
@@ -37,9 +42,17 @@ const RAIL_BTN =
 const RAIL_BTN_ACTIVE =
   "text-[var(--shell-select)] hover:bg-transparent hover:text-[var(--shell-select)] dark:hover:bg-transparent";
 
+const LABELED_BTN = cn(
+  SIDEBAR_ROW,
+  SIDEBAR_ROW_HOVER,
+  "h-10 gap-2.5 px-2.5 text-[13.5px] font-medium text-muted-foreground",
+);
+
+const LABELED_BTN_ACTIVE = "shell-nav-row-active text-[var(--shell-select-foreground)]";
+
 /**
- * Narrow primary icon rail (~56px) — brand mark, product sections, then
- * Search / Voice / account utilities. Panel collapse stays in the titlebar.
+ * Primary nav rail — icon-only (56px) or labeled tabs (~180px) for the
+ * wide dual-menu mode. Search / Voice / account utilities sit at the bottom.
  */
 export function PrimaryNavRail({
   section,
@@ -57,12 +70,18 @@ export function PrimaryNavRail({
     openVoice,
     entitlements,
     view,
+    primaryNavRailMode,
   } = useApp();
+
+  const labeled = primaryNavRailMode === "labeled";
 
   return (
     <aside
       className={cn(
-        "flex h-full w-[56px] shrink-0 flex-col items-center pb-2 pt-1.5",
+        "flex h-full shrink-0 flex-col pb-2 pt-1.5",
+        labeled
+          ? "w-[180px] items-stretch px-1.5"
+          : "w-[56px] items-center",
         className,
       )}
       aria-label="Primary navigation"
@@ -72,12 +91,21 @@ export function PrimaryNavRail({
         submenu row — brand mark fills that alignment slot at icon size.
       */}
       <div
-        className="flex h-10 w-full shrink-0 items-center justify-center"
+        className={cn(
+          "flex h-10 w-full shrink-0 items-center",
+          labeled ? "justify-start px-2.5" : "justify-center",
+        )}
         aria-hidden
       >
         <CanderMark className="!h-[18px] !w-[18px]" />
       </div>
-      <div className="flex flex-col items-center gap-1" role="tablist">
+      <div
+        className={cn(
+          "flex flex-col gap-1",
+          labeled ? "items-stretch" : "items-center",
+        )}
+        role="tablist"
+      >
         {PRIMARY.map(({ id, Icon }) => {
           const active = section === id;
           return (
@@ -91,71 +119,120 @@ export function PrimaryNavRail({
               aria-current={active ? "page" : undefined}
               data-desktop-no-drag=""
               onClick={() => onSection(id)}
-              className={cn(RAIL_BTN, active && RAIL_BTN_ACTIVE)}
+              className={cn(
+                labeled
+                  ? cn(LABELED_BTN, active && LABELED_BTN_ACTIVE)
+                  : cn(RAIL_BTN, active && RAIL_BTN_ACTIVE),
+              )}
             >
-              <Icon className="h-[18px] w-[18px]" strokeWidth={1.75} />
+              <Icon
+                className={cn(
+                  "shrink-0",
+                  labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
+                )}
+                strokeWidth={1.75}
+              />
+              {labeled ? (
+                <span className="min-w-0 truncate">{PRIMARY_NAV_LABEL[id]}</span>
+              ) : null}
             </button>
           );
         })}
       </div>
 
-      <div className="mt-auto flex flex-col items-center gap-1 pb-1">
-        <button
-          type="button"
+      <div
+        className={cn(
+          "mt-auto flex flex-col gap-1 pb-1",
+          labeled ? "items-stretch" : "items-center",
+        )}
+      >
+        <UtilityButton
+          labeled={labeled}
           title="Search"
-          aria-label="Search"
-          data-desktop-no-drag=""
+          active={view === "search"}
           onClick={() => openSearch()}
-          className={cn(RAIL_BTN, view === "search" && RAIL_BTN_ACTIVE)}
         >
-          <Search className="h-[17px] w-[17px]" strokeWidth={1.75} />
-        </button>
+          <Search
+            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
+            strokeWidth={1.75}
+          />
+        </UtilityButton>
         {entitlements.hasVoice ? (
-          <button
-            type="button"
+          <UtilityButton
+            labeled={labeled}
             title="Voice"
-            aria-label="Voice"
-            data-desktop-no-drag=""
+            active={view === "voice"}
             onClick={() => openVoice()}
-            className={cn(RAIL_BTN, view === "voice" && RAIL_BTN_ACTIVE)}
           >
-            <VoiceWaveIcon size={15} />
-          </button>
+            <VoiceWaveIcon size={labeled ? 14 : 15} />
+          </UtilityButton>
         ) : null}
-        <button
-          type="button"
+        <UtilityButton
+          labeled={labeled}
           title="Notifications"
-          aria-label="Notifications"
-          data-desktop-no-drag=""
+          active={view === "notifications"}
           onClick={() => openNotifications()}
-          className={cn(RAIL_BTN, view === "notifications" && RAIL_BTN_ACTIVE)}
         >
-          <Bell className="h-[17px] w-[17px]" strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
+          <Bell
+            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
+            strokeWidth={1.75}
+          />
+        </UtilityButton>
+        <UtilityButton
+          labeled={labeled}
           title="Help"
-          aria-label="Help"
-          data-desktop-no-drag=""
+          active={view === "help"}
           onClick={() => openHelp()}
-          className={cn(RAIL_BTN, view === "help" && RAIL_BTN_ACTIVE)}
         >
-          <CircleHelp className="h-[17px] w-[17px]" strokeWidth={1.75} />
-        </button>
-        <button
-          type="button"
+          <CircleHelp
+            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
+            strokeWidth={1.75}
+          />
+        </UtilityButton>
+        <UtilityButton
+          labeled={labeled}
           title="General"
-          aria-label="General"
-          data-desktop-no-drag=""
+          active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
-          className={cn(
-            RAIL_BTN,
-            (section === "general" || view === "settings") && RAIL_BTN_ACTIVE,
-          )}
         >
-          <CircleUser className="h-[17px] w-[17px]" strokeWidth={1.75} />
-        </button>
+          <CircleUser
+            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
+            strokeWidth={1.75}
+          />
+        </UtilityButton>
       </div>
     </aside>
+  );
+}
+
+function UtilityButton({
+  labeled,
+  title,
+  active,
+  onClick,
+  children,
+}: {
+  labeled: boolean;
+  title: string;
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      data-desktop-no-drag=""
+      onClick={onClick}
+      className={cn(
+        labeled
+          ? cn(LABELED_BTN, active && LABELED_BTN_ACTIVE)
+          : cn(RAIL_BTN, active && RAIL_BTN_ACTIVE),
+      )}
+    >
+      {children}
+      {labeled ? <span className="min-w-0 truncate">{title}</span> : null}
+    </button>
   );
 }

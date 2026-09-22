@@ -162,6 +162,11 @@ import {
   NEW_CHAT_CHOICE_PANEL_RATIO,
   PANEL_RATIO_OPEN_FLOOR,
 } from "@/lib/right-panel";
+import {
+  persistPrimaryNavRailMode,
+  readPrimaryNavRailMode,
+  type PrimaryNavRailMode,
+} from "@/lib/nav-primary";
 import { isChatSpace, chatSpaceId, isDockChatSpace, PRIMARY_NAV_SPACES, resolveNavSpaceId, resolveProductSpaceId, spaceAllowed, isDashboardOnlySpace, type SidebarLayout, type SidebarNavId } from "@/lib/spaces";
 import {
   clearSpaceProjectFocus,
@@ -371,6 +376,13 @@ type AppContextValue = {
   setMobileMenuScreen: (screen: MobileMenuScreen) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  /** Icon rail vs labeled tabs in the dual left menu. */
+  primaryNavRailMode: PrimaryNavRailMode;
+  setPrimaryNavRailMode: (mode: PrimaryNavRailMode) => void;
+  /**
+   * PanelLeft cycle: closed → wide labeled dual menu → icon rail → closed.
+   */
+  cycleLeftNav: () => void;
   workspaceRailOpen: boolean;
   setWorkspaceRailOpen: (open: boolean) => void;
   toggleLeftPanel: () => void;
@@ -746,6 +758,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [mobileMenuScreen, setMobileMenuScreen] =
     useState<MobileMenuScreen>("main");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [primaryNavRailMode, setPrimaryNavRailModeState] =
+    useState<PrimaryNavRailMode>("icon");
   const [workspaceRailOpen, setWorkspaceRailOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -1144,11 +1158,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const toggleLeftPanel = useCallback(() => {
+  const setPrimaryNavRailMode = useCallback((mode: PrimaryNavRailMode) => {
+    setPrimaryNavRailModeState(mode);
+    persistPrimaryNavRailMode(mode);
+  }, []);
+
+  useEffect(() => {
+    setPrimaryNavRailModeState(readPrimaryNavRailMode());
+  }, []);
+
+  /**
+   * PanelLeft: closed → open labeled (wide) → condense to icons → closed.
+   */
+  const cycleLeftNav = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
     if (!desktop) return;
-    setSidebarOpen((open) => !open);
-  }, []);
+    if (!sidebarOpen) {
+      setPrimaryNavRailMode("labeled");
+      setSidebarOpen(true);
+      return;
+    }
+    if (primaryNavRailMode === "labeled") {
+      setPrimaryNavRailMode("icon");
+      return;
+    }
+    setSidebarOpen(false);
+  }, [sidebarOpen, primaryNavRailMode, setPrimaryNavRailMode]);
+
+  const toggleLeftPanel = useCallback(() => {
+    cycleLeftNav();
+  }, [cycleLeftNav]);
 
   const toggleRightPanel = useCallback(() => {
     const desktop = window.matchMedia("(min-width: 1024px)").matches;
@@ -6640,6 +6679,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setMobileMenuScreen,
       sidebarOpen,
       setSidebarOpen,
+      primaryNavRailMode,
+      setPrimaryNavRailMode,
+      cycleLeftNav,
       workspaceRailOpen,
       setWorkspaceRailOpen,
       toggleLeftPanel,
@@ -6828,11 +6870,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       mobileContentSurface,
       mobileMenuScreen,
       sidebarOpen,
+      primaryNavRailMode,
       workspaceRailOpen,
       toggleLeftPanel,
       toggleRightPanel,
       cycleShellPanels,
       shellPanelCycleStep,
+      cycleLeftNav,
       expandedLayout,
       expandedPinned,
       toggleExpandedLayout,

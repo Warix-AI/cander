@@ -62,6 +62,8 @@ import { SHELL_CHROME_ROW } from "@/lib/shell-chrome";
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
 const CONTEXT_WIDTH_PX = 240;
+const RAIL_ICON_WIDTH_PX = 56;
+const RAIL_LABELED_WIDTH_PX = 180;
 
 /** Map primary rail section → pin folder id (except workspaces / general). */
 const SECTION_TO_PIN: Record<
@@ -70,13 +72,13 @@ const SECTION_TO_PIN: Record<
 > = {
   apps: "connectors",
   chats: "chats",
-  automations: "agents",
+  images: "images",
 };
 
 const PIN_TO_SECTION: Partial<Record<PinSectionId, PrimaryNavSection>> = {
   connectors: "apps",
   chats: "chats",
-  agents: "automations",
+  images: "images",
 };
 
 export function Sidebar() {
@@ -86,6 +88,7 @@ export function Sidebar() {
     projectId,
     sidebarOpen,
     setSidebarOpen,
+    primaryNavRailMode,
     reorderPins,
     openThread,
     openProject,
@@ -158,6 +161,11 @@ export function Sidebar() {
   peekRef.current = peek;
   /** Entire left nav (rail + contextual) — not just the context column. */
   const navVisible = sidebarOpen || peeking;
+  const railWidthPx =
+    primaryNavRailMode === "labeled"
+      ? RAIL_LABELED_WIDTH_PX
+      : RAIL_ICON_WIDTH_PX;
+  const navWidthPx = railWidthPx + CONTEXT_WIDTH_PX;
 
   useEffect(() => {
     setSidebarPeeking(peeking);
@@ -250,7 +258,7 @@ export function Sidebar() {
     [pinnedItems, pinPrefs],
   );
   const navPinGroups = useMemo(() => {
-    const wanted: PinSectionId[] = ["connectors", "chats", "agents"];
+    const wanted: PinSectionId[] = ["connectors", "chats", "images"];
     return wanted.map(
       (id) =>
         pinGroups.find((group) => group.id === id) ?? {
@@ -275,7 +283,7 @@ export function Sidebar() {
           ? `thread:${threadId}`
           : null;
 
-  // Follow destination into Apps / Chats / Automations / General.
+  // Follow destination into Apps / Chats / Images / General.
   useEffect(() => {
     if (view === "settings") {
       skipRestoreRef.current = true;
@@ -363,11 +371,11 @@ export function Sidebar() {
         Digit1: "workspaces",
         Digit2: "apps",
         Digit3: "chats",
-        Digit4: "automations",
+        Digit4: "images",
         Numpad1: "workspaces",
         Numpad2: "apps",
         Numpad3: "chats",
-        Numpad4: "automations",
+        Numpad4: "images",
       };
       const next = map[event.code];
       if (!next) return;
@@ -396,13 +404,13 @@ export function Sidebar() {
         item.expertKind ? `${item.expertKind} expert` : undefined
       }
       leading={
-        item.kind === "thread" && section !== "automations" ? (
+        item.kind === "thread" && section !== "images" ? (
           null
         ) : (
           <PinPreviewThumb item={item} />
         )
       }
-      hideLeading={item.kind === "thread" && section !== "automations"}
+      hideLeading={item.kind === "thread" && section !== "images"}
       inUse={
         item.expertCatalog
           ? view === "expert" && expertSetupId === item.id
@@ -495,6 +503,10 @@ export function Sidebar() {
       openOverlay("workspace");
       return;
     }
+    if (section === "images") {
+      openSpace("studio");
+      return;
+    }
     if (section === "general") return;
     openSpace("build");
   };
@@ -567,9 +579,10 @@ export function Sidebar() {
         */}
         <div
           className={cn(
-            "flex h-full w-[calc(56px+240px)] shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+            "flex h-full shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-out",
             peeking && "shadow-[0_8px_30px_oklch(0_0_0/0.12)]",
           )}
+          style={{ width: navWidthPx }}
         >
           {/*
             Match connector / browser header row height so the stroke under
@@ -620,9 +633,9 @@ function SidebarPinSectionBody({
   renderPinnedRow: (item: PinnedItem) => ReactNode;
   section: PrimaryNavSection;
 }) {
-  if (section === "chats" || section === "automations") {
+  if (section === "chats" || section === "images") {
     const emptyLabel =
-      section === "automations" ? "No automations yet" : "No chats yet";
+      section === "images" ? "No images yet" : "No chats yet";
     return (
       <>
         {group.items.length ? (

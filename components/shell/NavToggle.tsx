@@ -22,18 +22,24 @@ export function NavToggle({
   /** Fixed on the main canvas when the sidebar is collapsed. */
   docked?: boolean;
 }) {
-  const { sidebarOpen, setSidebarOpen } = useApp();
+  const { sidebarOpen, primaryNavRailMode, cycleLeftNav } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
 
   if (mobile) return null;
 
+  const label = !sidebarOpen
+    ? "Open left panel"
+    : primaryNavRailMode === "labeled"
+      ? "Condense left panel"
+      : "Close left panel";
+
   return (
     <button
       type="button"
       style={desktop ? DESKTOP_NO_DRAG : undefined}
-      aria-label={sidebarOpen ? "Close left panel" : "Open left panel"}
-      onClick={() => setSidebarOpen(!sidebarOpen)}
+      aria-label={label}
+      onClick={() => cycleLeftNav()}
       className={cn(
         "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
         docked

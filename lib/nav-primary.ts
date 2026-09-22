@@ -3,34 +3,38 @@ export type PrimaryNavSection =
   | "workspaces"
   | "apps"
   | "chats"
-  | "automations"
+  | "images"
   | "general";
+
+/** Icon-only rail vs labeled tabs (wide dual menu). */
+export type PrimaryNavRailMode = "icon" | "labeled";
 
 /** Top rail destinations (General lives on the bottom account control). */
 export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
   "workspaces",
   "apps",
   "chats",
-  "automations",
+  "images",
 ];
 
 export const PRIMARY_NAV_LABEL: Record<PrimaryNavSection, string> = {
   workspaces: "Workspaces",
   apps: "Apps",
   chats: "Chats",
-  automations: "Automations",
+  images: "Images",
   general: "General",
 };
 
 const SECTION_KEY = "cander-primary-nav-section";
 const LAST_ITEM_KEY = "cander-primary-nav-last";
 const CONTEXT_OPEN_KEY = "cander-context-nav-open";
+const RAIL_MODE_KEY = "cander-primary-nav-rail-mode";
 
 /** Migrate renamed / removed section ids from earlier builds. */
 function normalizeSection(raw: string | null): PrimaryNavSection | null {
   if (!raw) return null;
-  // Images rail → Automations; agents alias → Automations.
-  if (raw === "images" || raw === "agents") return "automations";
+  // Automations / agents aliases → Images.
+  if (raw === "automations" || raw === "agents") return "images";
   if (
     (PRIMARY_NAV_SECTIONS as readonly string[]).includes(raw) ||
     raw === "general"
@@ -79,6 +83,25 @@ export function persistContextNavOpen(open: boolean) {
   }
 }
 
+export function readPrimaryNavRailMode(): PrimaryNavRailMode {
+  if (typeof window === "undefined") return "icon";
+  try {
+    const raw = window.localStorage.getItem(RAIL_MODE_KEY);
+    if (raw === "labeled" || raw === "icon") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "icon";
+}
+
+export function persistPrimaryNavRailMode(mode: PrimaryNavRailMode) {
+  try {
+    window.localStorage.setItem(RAIL_MODE_KEY, mode);
+  } catch {
+    /* ignore */
+  }
+}
+
 type LastMap = Partial<Record<PrimaryNavSection, string>>;
 
 export function readLastNavItem(section: PrimaryNavSection): string | null {
@@ -86,10 +109,13 @@ export function readLastNavItem(section: PrimaryNavSection): string | null {
   try {
     const raw = window.localStorage.getItem(LAST_ITEM_KEY);
     if (!raw) return null;
-    const map = JSON.parse(raw) as LastMap;
-    // Migrate last-item map key from images → automations.
-    if (section === "automations" && map.automations == null) {
-      const legacy = (map as LastMap & { images?: string }).images;
+    const map = JSON.parse(raw) as LastMap & {
+      automations?: string;
+      agents?: string;
+    };
+    // Migrate last-item map keys from automations/agents → images.
+    if (section === "images" && map.images == null) {
+      const legacy = map.automations ?? map.agents;
       if (legacy) return legacy;
     }
     return map[section] ?? null;

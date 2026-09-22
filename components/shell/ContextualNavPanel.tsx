@@ -35,7 +35,7 @@ export function ContextualNavHeader({
         ? "New chat"
         : section === "workspaces"
           ? "Create workspace"
-          : "New automation";
+          : "New image";
 
   return (
     <div className="flex h-10 shrink-0 items-center gap-1 px-1 pb-0 pt-0">
