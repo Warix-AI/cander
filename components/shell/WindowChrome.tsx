@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { Bell, CircleHelp } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import { SHELL_ICON_CLASS, SHELL_ICON_PX } from "@/components/brand/NavIcons";
 import { NavToggle } from "@/components/shell/NavToggle";
 import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import {
@@ -70,7 +71,7 @@ export function WindowChrome({
                 view === "voice" && "shell-rail-icon-active",
               )}
             >
-              <VoiceWaveIcon size={14} />
+              <VoiceWaveIcon size={SHELL_ICON_PX} />
             </button>
           ) : null
         }
@@ -97,7 +98,7 @@ export function WindowChrome({
             onClick={() => openNotifications()}
             className={cn(SHELL_HEADER_ICON_CLASS, "relative")}
           >
-            <Bell className="h-4 w-4" strokeWidth={1.7} />
+            <Bell className={SHELL_ICON_CLASS} strokeWidth={1.75} />
             {unreadCount > 0 ? (
               <span
                 aria-hidden
@@ -112,7 +113,7 @@ export function WindowChrome({
             onClick={() => openHelp()}
             className={SHELL_HEADER_ICON_CLASS}
           >
-            <CircleHelp className="h-4 w-4" strokeWidth={1.7} />
+            <CircleHelp className={SHELL_ICON_CLASS} strokeWidth={1.75} />
           </button>
         </>
       }

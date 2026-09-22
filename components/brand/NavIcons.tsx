@@ -11,11 +11,15 @@ type NavIconProps = SVGProps<SVGSVGElement> & {
 /**
  * Lucide-shaped shell icons with slightly softer corner radii.
  * Images stays on the stock Lucide ImageIcon.
+ * Size matches the primary nav rail glyphs.
  */
+export const SHELL_ICON_PX = 18;
+export const SHELL_ICON_CLASS = "h-[18px] w-[18px] shrink-0";
+
 const DEFAULT_STROKE = 1.75;
 
 function NavIconBase({
-  size = 18,
+  size = SHELL_ICON_PX,
   strokeWidth = DEFAULT_STROKE,
   className,
   children,
@@ -44,8 +48,8 @@ function NavIconBase({
 /** PanelLeft — frame with a softer rail. */
 export function IconPanel({
   className,
-  size = 16,
-  strokeWidth = 1.6,
+  size = SHELL_ICON_PX,
+  strokeWidth = 1.75,
   ...rest
 }: NavIconProps) {
   return (
@@ -59,8 +63,8 @@ export function IconPanel({
 /** Search — same silhouette, matched stroke. */
 export function IconSearch({
   className,
-  size = 16,
-  strokeWidth = 1.7,
+  size = SHELL_ICON_PX,
+  strokeWidth = 1.75,
   ...rest
 }: NavIconProps) {
   return (
@@ -76,8 +80,8 @@ export function IconSearch({
  */
 export function IconNewChat({
   className,
-  size = 16,
-  strokeWidth = 1.7,
+  size = SHELL_ICON_PX,
+  strokeWidth = 1.75,
   ...rest
 }: NavIconProps) {
   return (

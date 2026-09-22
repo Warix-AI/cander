@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 /** Static 3-bar waveform — bars use currentColor so header icons stay light. */
 export function VoiceWaveIcon({
-  size = 14,
+  size = 18,
   className,
   barClassName,
 }: {

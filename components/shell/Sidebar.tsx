@@ -568,7 +568,7 @@ export function Sidebar() {
           </div>
         </div>
         {section !== "general" ? (
-          <div className="shrink-0 border-t border-sidebar-border/60 pt-1">
+          <div className="shrink-0 pt-1">
             <ContextualAddRow
               section={section}
               onClick={onPrimaryAction}

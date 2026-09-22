@@ -14,6 +14,8 @@ import {
   IconGeneral,
   IconNotifications,
   IconWorkspaces,
+  SHELL_ICON_CLASS,
+  SHELL_ICON_PX,
   type NavIconComponent,
 } from "@/components/brand/NavIcons";
 import {
@@ -129,10 +131,7 @@ export function PrimaryNavRail({
           )}
         >
           <SquarePen
-            className={cn(
-              "shrink-0",
-              labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-            )}
+            className={cn("shrink-0", labeled ? "h-4 w-4" : SHELL_ICON_CLASS)}
             strokeWidth={1.75}
           />
           {labeled ? (
@@ -166,7 +165,7 @@ export function PrimaryNavRail({
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
-          <IconNotifications size={labeled ? 16 : 17} />
+          <IconNotifications size={labeled ? 16 : SHELL_ICON_PX} />
         </UtilityButton>
         <UtilityButton
           labeled={labeled}
@@ -174,7 +173,7 @@ export function PrimaryNavRail({
           active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
         >
-          <IconGeneral size={labeled ? 16 : 17} />
+          <IconGeneral size={labeled ? 16 : SHELL_ICON_PX} />
         </UtilityButton>
       </div>
     </aside>
@@ -276,22 +275,16 @@ function RailSectionButton({
     >
       {showPlus ? (
         <Plus
-          className={cn(
-            "shrink-0",
-            labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-          )}
+          className={cn("shrink-0", labeled ? "h-4 w-4" : SHELL_ICON_CLASS)}
           strokeWidth={1.75}
         />
       ) : lucide ? (
         <Icon
-          className={cn(
-            "shrink-0",
-            labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-          )}
+          className={cn("shrink-0", labeled ? "h-4 w-4" : SHELL_ICON_CLASS)}
           strokeWidth={1.75}
         />
       ) : (
-        <Icon size={labeled ? 16 : 18} className="shrink-0" />
+        <Icon size={labeled ? 16 : SHELL_ICON_PX} className="shrink-0" />
       )}
       {labeled ? (
         <span className="min-w-0 truncate">{label}</span>

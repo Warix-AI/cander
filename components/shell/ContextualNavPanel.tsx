@@ -2,12 +2,12 @@
 
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
+import { SHELL_ICON_CLASS } from "@/components/brand/NavIcons";
 import type { PrimaryNavSection } from "@/lib/nav-primary";
 import { PRIMARY_NAV_ADD_LABEL } from "@/components/shell/PrimaryNavRail";
 import {
   SIDEBAR_ROW,
   SIDEBAR_ROW_HOVER,
-  SIDEBAR_ROW_ICON,
 } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
@@ -27,7 +27,7 @@ export function ContextualAddRow({
       onClick={onClick}
       className={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER, "text-muted-foreground")}
     >
-      <Plus className={SIDEBAR_ROW_ICON} strokeWidth={1.75} />
+      <Plus className={SHELL_ICON_CLASS} strokeWidth={1.75} />
       <span className="min-w-0 flex-1 truncate text-[14px] tracking-[-0.01em]">
         {label}
       </span>
