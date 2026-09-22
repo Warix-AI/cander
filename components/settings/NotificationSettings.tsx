@@ -145,7 +145,7 @@ export function NotificationSettings() {
 
   return (
     <SettingsPage>
-      <SettingsSection title="Notifications">
+      <SettingsSection title="Alerts">
         <SettingsGroup>
           <label className="flex items-center justify-between gap-3 px-1 py-2 text-[13px]">
             <span>Enable notifications</span>
