@@ -89,46 +89,49 @@ export function ShellWindowChromeBar({
       {!hideHistory ? (
         <>
           {leading ? <div className="w-1 shrink-0" aria-hidden /> : null}
-          <div
-            className="flex shrink-0 items-center gap-1.5"
-            style={desktop ? DESKTOP_NO_DRAG : undefined}
-          >
-            <button
-              type="button"
-              aria-label="Search"
+          {onSearch || afterSearch || showHistory ? (
+            <div
+              className="flex shrink-0 items-center gap-1.5"
               style={desktop ? DESKTOP_NO_DRAG : undefined}
-              onClick={onSearch}
-              disabled={!onSearch}
-              className={SHELL_HEADER_ICON_CLASS}
             >
-              <Search className="h-4 w-4" strokeWidth={1.7} />
-            </button>
-            {afterSearch}
-            {showHistory ? (
-              <>
+              {onSearch ? (
                 <button
                   type="button"
-                  aria-label="Back"
-                  disabled={!canGoBack}
+                  aria-label="Search"
                   style={desktop ? DESKTOP_NO_DRAG : undefined}
-                  onClick={onBack}
+                  onClick={onSearch}
                   className={SHELL_HEADER_ICON_CLASS}
                 >
-                  <ChevronLeft className="h-4 w-4" strokeWidth={1.7} />
+                  <Search className="h-4 w-4" strokeWidth={1.7} />
                 </button>
-                <button
-                  type="button"
-                  aria-label="Forward"
-                  disabled={!canGoForward}
-                  style={desktop ? DESKTOP_NO_DRAG : undefined}
-                  onClick={onForward}
-                  className={SHELL_HEADER_ICON_CLASS}
-                >
-                  <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
-                </button>
-              </>
-            ) : null}
-          </div>
+              ) : null}
+              {afterSearch}
+              {showHistory ? (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Back"
+                    disabled={!canGoBack}
+                    style={desktop ? DESKTOP_NO_DRAG : undefined}
+                    onClick={onBack}
+                    className={SHELL_HEADER_ICON_CLASS}
+                  >
+                    <ChevronLeft className="h-4 w-4" strokeWidth={1.7} />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Forward"
+                    disabled={!canGoForward}
+                    style={desktop ? DESKTOP_NO_DRAG : undefined}
+                    onClick={onForward}
+                    className={SHELL_HEADER_ICON_CLASS}
+                  >
+                    <ChevronRight className="h-4 w-4" strokeWidth={1.7} />
+                  </button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {dragSpacer}
           {trailing ? (
             <div

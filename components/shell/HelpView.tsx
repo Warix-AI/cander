@@ -38,7 +38,7 @@ const HELP_TOPICS = [
   {
     Icon: Search,
     title: "Search & alerts",
-    body: "Use Search in the header to jump anywhere fast. The bell opens your inbox for emails, expert updates, and other activity.",
+    body: "Use Search on the left rail to jump anywhere fast. The bell opens your inbox for emails, expert updates, and other activity.",
   },
 ] as const;
 

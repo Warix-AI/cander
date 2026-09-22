@@ -7,11 +7,13 @@ import {
   Layers,
   LayoutGrid,
   MessageSquare,
+  Search,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { CanderMark } from "@/components/brand/CanderMark";
+import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import {
   PRIMARY_NAV_LABEL,
   type PrimaryNavSection,
@@ -36,8 +38,8 @@ const RAIL_BTN_ACTIVE =
   "text-[var(--shell-select)] hover:bg-transparent hover:text-[var(--shell-select)] dark:hover:bg-transparent";
 
 /**
- * Narrow primary icon rail (~56px) — major product sections + account utilities.
- * Search / Voice / collapse live in the desktop titlebar.
+ * Narrow primary icon rail (~56px) — brand mark, product sections, then
+ * Search / Voice / account utilities. Panel collapse stays in the titlebar.
  */
 export function PrimaryNavRail({
   section,
@@ -48,7 +50,14 @@ export function PrimaryNavRail({
   onSection: (next: PrimaryNavSection) => void;
   className?: string;
 }) {
-  const { openHelp, openNotifications, view } = useApp();
+  const {
+    openHelp,
+    openNotifications,
+    openSearch,
+    openVoice,
+    entitlements,
+    view,
+  } = useApp();
 
   return (
     <aside
@@ -91,6 +100,28 @@ export function PrimaryNavRail({
       </div>
 
       <div className="mt-auto flex flex-col items-center gap-1 pb-1">
+        <button
+          type="button"
+          title="Search"
+          aria-label="Search"
+          data-desktop-no-drag=""
+          onClick={() => openSearch()}
+          className={cn(RAIL_BTN, view === "search" && RAIL_BTN_ACTIVE)}
+        >
+          <Search className="h-[17px] w-[17px]" strokeWidth={1.75} />
+        </button>
+        {entitlements.hasVoice ? (
+          <button
+            type="button"
+            title="Voice"
+            aria-label="Voice"
+            data-desktop-no-drag=""
+            onClick={() => openVoice()}
+            className={cn(RAIL_BTN, view === "voice" && RAIL_BTN_ACTIVE)}
+          >
+            <VoiceWaveIcon size={15} />
+          </button>
+        ) : null}
         <button
           type="button"
           title="Notifications"
