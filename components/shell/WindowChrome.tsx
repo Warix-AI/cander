@@ -20,8 +20,8 @@ export function WindowChrome({
   clearTrafficLights = false,
   hideHistory = false,
   /**
-   * Two-layer desktop nav: PanelLeft only in the titlebar.
-   * Search / Voice / Notifications / Help live on the icon rail.
+   * Two-layer desktop nav: PanelLeft + Search in the titlebar.
+   * Voice / Notifications live on the icon rail; Help under General.
    */
   navChrome = false,
   className,
@@ -51,6 +51,7 @@ export function WindowChrome({
         clearTrafficLights={clearTrafficLights}
         className={className}
         leading={<NavToggle />}
+        onSearch={() => openSearch()}
       />
     );
   }

@@ -6,6 +6,7 @@ import {
   Bell,
   Building2,
   ChartNoAxesColumn,
+  CircleHelp,
   CreditCard,
   LayoutGrid,
   Mic,
@@ -47,6 +48,7 @@ const SETTINGS_LABEL: Partial<Record<SettingsTab, string>> = {
 
 type MenuRow =
   | { kind: "admin" }
+  | { kind: "help" }
   | { kind: "settings"; id: SettingsTab; label: string };
 
 function buildGeneralMenuRows(
@@ -65,6 +67,7 @@ function buildGeneralMenuRows(
         label: SETTINGS_LABEL[tab.id] ?? tab.label,
       });
     }
+    rows.push({ kind: "help" });
     return rows;
   }
 
@@ -85,6 +88,7 @@ function buildGeneralMenuRows(
       label: SETTINGS_LABEL[tab.id] ?? tab.label,
     });
   }
+  rows.push({ kind: "help" });
   return rows;
 }
 
@@ -111,7 +115,7 @@ export function GeneralMenuBody({
   hideSearch?: boolean;
 }) {
   const router = useRouter();
-  const { entitlements, openSettings, settingsTab, view } = useApp();
+  const { entitlements, openSettings, openHelp, settingsTab, view } = useApp();
   const isPlatformAdmin = useIsPlatformAdmin();
   const [internalQuery, setInternalQuery] = useState("");
   const query = queryProp ?? internalQuery;
@@ -125,7 +129,8 @@ export function GeneralMenuBody({
   const needle = query.trim().toLowerCase();
   const filtered = needle
     ? rows.filter((row) => {
-        const label = row.kind === "admin" ? "Admin" : row.label;
+        const label =
+          row.kind === "admin" ? "Admin" : row.kind === "help" ? "Help" : row.label;
         return label.toLowerCase().includes(needle);
       })
     : rows;
@@ -164,6 +169,26 @@ export function GeneralMenuBody({
             >
               <Shield className={iconClassName} strokeWidth={2} />
               <span className="min-w-0 flex-1 truncate">Admin</span>
+            </button>
+          );
+        }
+
+        if (row.kind === "help") {
+          return (
+            <button
+              key="help"
+              type="button"
+              onClick={() => {
+                openHelp();
+                onNavigate?.();
+              }}
+              className={cn(
+                rowClassName ?? cn(SIDEBAR_ROW_SECONDARY, SIDEBAR_ROW_HOVER),
+                view === "help" && "shell-nav-row-active",
+              )}
+            >
+              <CircleHelp className={iconClassName} strokeWidth={2} />
+              <span className="min-w-0 flex-1 truncate">Help</span>
             </button>
           );
         }

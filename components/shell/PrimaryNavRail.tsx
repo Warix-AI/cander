@@ -3,17 +3,15 @@
 import type { ReactNode } from "react";
 import {
   Bell,
-  CircleHelp,
   CircleUser,
   ImageIcon,
   Layers,
   LayoutGrid,
   MessageSquare,
-  Search,
+  SquarePen,
   type LucideIcon,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { CanderMark } from "@/components/brand/CanderMark";
 import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import {
   PRIMARY_NAV_LABEL,
@@ -48,11 +46,13 @@ const LABELED_BTN = cn(
   "h-10 gap-2.5 px-2.5 text-[13.5px] font-medium text-muted-foreground",
 );
 
-const LABELED_BTN_ACTIVE = "shell-nav-row-active text-[var(--shell-select-foreground)]";
+const LABELED_BTN_ACTIVE =
+  "shell-nav-row-active text-[var(--shell-select-foreground)]";
 
 /**
- * Primary nav rail — icon-only (56px) or labeled tabs (~180px) for the
- * wide dual-menu mode. Search / Voice / account utilities sit at the bottom.
+ * Primary nav rail — icon-only (56px) or labeled tabs (~180px).
+ * New chat sits in the header-alignment slot; Voice / Notifications /
+ * General at the bottom. Search lives next to PanelLeft in the titlebar.
  */
 export function PrimaryNavRail({
   section,
@@ -64,10 +64,9 @@ export function PrimaryNavRail({
   className?: string;
 }) {
   const {
-    openHelp,
     openNotifications,
-    openSearch,
     openVoice,
+    newChat,
     entitlements,
     view,
     primaryNavRailMode,
@@ -88,16 +87,37 @@ export function PrimaryNavRail({
     >
       {/*
         Match ContextualNavHeader (h-10) so Workspaces sits beside the first
-        submenu row — brand mark fills that alignment slot at icon size.
+        submenu row — New chat fills that alignment slot.
       */}
       <div
         className={cn(
           "flex h-10 w-full shrink-0 items-center",
-          labeled ? "justify-start px-2.5" : "justify-center",
+          labeled ? "justify-stretch" : "justify-center",
         )}
-        aria-hidden
       >
-        <CanderMark className="!h-[18px] !w-[18px]" />
+        <button
+          type="button"
+          title="New chat"
+          aria-label="New chat"
+          data-desktop-no-drag=""
+          onClick={() => newChat()}
+          className={cn(
+            labeled
+              ? cn(LABELED_BTN, "w-full")
+              : RAIL_BTN,
+          )}
+        >
+          <SquarePen
+            className={cn(
+              "shrink-0",
+              labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
+            )}
+            strokeWidth={1.75}
+          />
+          {labeled ? (
+            <span className="min-w-0 truncate">New chat</span>
+          ) : null}
+        </button>
       </div>
       <div
         className={cn(
@@ -146,17 +166,6 @@ export function PrimaryNavRail({
           labeled ? "items-stretch" : "items-center",
         )}
       >
-        <UtilityButton
-          labeled={labeled}
-          title="Search"
-          active={view === "search"}
-          onClick={() => openSearch()}
-        >
-          <Search
-            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
-            strokeWidth={1.75}
-          />
-        </UtilityButton>
         {entitlements.hasVoice ? (
           <UtilityButton
             labeled={labeled}
@@ -174,17 +183,6 @@ export function PrimaryNavRail({
           onClick={() => openNotifications()}
         >
           <Bell
-            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
-            strokeWidth={1.75}
-          />
-        </UtilityButton>
-        <UtilityButton
-          labeled={labeled}
-          title="Help"
-          active={view === "help"}
-          onClick={() => openHelp()}
-        >
-          <CircleHelp
             className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
             strokeWidth={1.75}
           />

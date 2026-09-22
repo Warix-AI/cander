@@ -9,7 +9,7 @@ const HEADER_ICON =
 
 /**
  * Contextual sidebar chrome — title + primary action.
- * Global Search lives on the primary icon rail.
+ * Global Search lives next to PanelLeft in the desktop titlebar.
  */
 export function ContextualNavHeader({
   section,
