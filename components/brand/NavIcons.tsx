@@ -71,7 +71,9 @@ export function IconSearch({
   );
 }
 
-/** New chat / SquarePen — softer rounded square. */
+/** New chat / SquarePen — softer rounded square.
+ * Prefer Lucide SquarePen at call sites when stock glyph is wanted.
+ */
 export function IconNewChat({
   className,
   size = 16,
@@ -87,24 +89,8 @@ export function IconNewChat({
   );
 }
 
-/** Workspaces — soft stacked sheets. */
+/** Workspaces — soft 2×2 tiles (grid; Layers moved to Apps). */
 export function IconWorkspaces({
-  className,
-  size = 18,
-  strokeWidth = DEFAULT_STROKE,
-  ...rest
-}: NavIconProps) {
-  return (
-    <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <rect x="5" y="4.25" width="14" height="4.5" rx="2" />
-      <rect x="5" y="9.75" width="14" height="4.5" rx="2" />
-      <rect x="5" y="15.25" width="14" height="4.5" rx="2" />
-    </NavIconBase>
-  );
-}
-
-/** Apps / LayoutGrid — tiles with softer corners. */
-export function IconApps({
   className,
   size = 18,
   strokeWidth = DEFAULT_STROKE,
@@ -116,6 +102,25 @@ export function IconApps({
       <rect x="13.5" y="3" width="7.5" height="7.5" rx="2.35" />
       <rect x="3" y="13.5" width="7.5" height="7.5" rx="2.35" />
       <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2.35" />
+    </NavIconBase>
+  );
+}
+
+/** @deprecated Apps uses Lucide Layers — kept for call-site compatibility. */
+export function IconApps({
+  className,
+  size = 18,
+  strokeWidth = DEFAULT_STROKE,
+  ...rest
+}: NavIconProps) {
+  return (
+    <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
+      <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1.4 1.4 0 0 0 0 2.54l8.57 3.9a2 2 0 0 0 1.66 0l8.57-3.9a1.4 1.4 0 0 0 0-2.54Z" />
+      <path d="m2 12 1.76.8" />
+      <path d="M20.24 12.8 22 12" />
+      <path d="m2 17 1.76.8" />
+      <path d="M20.24 17.8 22 17" />
+      <path d="m6.4 15.4 4.77 2.17a2 2 0 0 0 1.66 0l4.77-2.17" />
     </NavIconBase>
   );
 }

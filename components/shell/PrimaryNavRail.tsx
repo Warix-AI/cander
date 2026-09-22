@@ -7,13 +7,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ImageIcon, Plus, type LucideIcon } from "lucide-react";
+import { ImageIcon, Layers, Plus, SquarePen, type LucideIcon } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
-  IconApps,
   IconChats,
   IconGeneral,
-  IconNewChat,
   IconNotifications,
   IconWorkspaces,
   type NavIconComponent,
@@ -33,19 +31,20 @@ type RailIcon = LucideIcon | NavIconComponent;
 const PRIMARY: {
   id: Exclude<PrimaryNavSection, "general">;
   Icon: RailIcon;
-  /** Stock Lucide Images — not the custom rounded set. */
+  /** Stock Lucide glyph (vs custom rounded set). */
   lucide?: boolean;
 }[] = [
   { id: "workspaces", Icon: IconWorkspaces },
-  { id: "apps", Icon: IconApps },
+  { id: "apps", Icon: Layers, lucide: true },
   { id: "chats", Icon: IconChats },
   { id: "images", Icon: ImageIcon, lucide: true },
 ];
 
 const HOVER_PLUS_MS = 1000;
 
+/** Match Apps sidebar row rhythm (py-2 + gap-0.5), not the taller h-10 dock. */
 const RAIL_BTN_BASE =
-  "inline-flex h-10 w-10 items-center justify-center rounded-[12px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:focus-visible:ring-white/20";
+  "inline-flex h-9 w-9 items-center justify-center rounded-[10px] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:focus-visible:ring-white/20";
 
 const RAIL_BTN_IDLE =
   "text-muted-foreground hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/[0.08]";
@@ -56,7 +55,7 @@ const RAIL_BTN_ACTIVE =
 
 const LABELED_BTN_BASE = cn(
   SIDEBAR_ROW,
-  "h-10 gap-2.5 px-2.5 text-[13.5px] font-medium transition-colors duration-150",
+  "gap-2.5 px-2.5 text-[13.5px] font-medium transition-colors duration-150",
 );
 
 const LABELED_BTN_IDLE = cn(
@@ -68,6 +67,8 @@ const LABELED_BTN_ACTIVE = cn(
   "shell-rail-icon-active",
   "hover:bg-black/[0.04] dark:hover:bg-white/[0.06]",
 );
+
+const RAIL_STACK = "flex flex-col gap-0.5";
 
 /**
  * Primary nav rail — icon-only (56px) or labeled tabs (~180px).
@@ -107,9 +108,10 @@ export function PrimaryNavRail({
     >
       <div
         className={cn(
-          "flex h-10 w-full shrink-0 items-center",
-          labeled ? "justify-stretch" : "justify-center",
+          RAIL_STACK,
+          labeled ? "items-stretch" : "items-center",
         )}
+        role="tablist"
       >
         <button
           type="button"
@@ -126,22 +128,17 @@ export function PrimaryNavRail({
             labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
-          <IconNewChat
-            size={labeled ? 16 : 18}
-            className="shrink-0"
+          <SquarePen
+            className={cn(
+              "shrink-0",
+              labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
+            )}
+            strokeWidth={1.75}
           />
           {labeled ? (
             <span className="min-w-0 truncate">New chat</span>
           ) : null}
         </button>
-      </div>
-      <div
-        className={cn(
-          "flex flex-col gap-1",
-          labeled ? "items-stretch" : "items-center",
-        )}
-        role="tablist"
-      >
         {PRIMARY.map(({ id, Icon, lucide }) => (
           <RailSectionButton
             key={id}
@@ -158,7 +155,8 @@ export function PrimaryNavRail({
 
       <div
         className={cn(
-          "mt-auto flex flex-col gap-1 pb-1",
+          "mt-auto pb-1",
+          RAIL_STACK,
           labeled ? "items-stretch" : "items-center",
         )}
       >
