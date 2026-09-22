@@ -7,18 +7,17 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  Bell,
-  CircleUser,
-  ImageIcon,
-  Layers,
-  LayoutGrid,
-  MessageSquare,
-  Plus,
-  SquarePen,
-  type LucideIcon,
-} from "lucide-react";
+import { ImageIcon, Plus, type LucideIcon } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
+import {
+  IconApps,
+  IconChats,
+  IconGeneral,
+  IconNewChat,
+  IconNotifications,
+  IconWorkspaces,
+  type NavIconComponent,
+} from "@/components/brand/NavIcons";
 import {
   PRIMARY_NAV_LABEL,
   type PrimaryNavSection,
@@ -29,14 +28,18 @@ import {
 } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
+type RailIcon = LucideIcon | NavIconComponent;
+
 const PRIMARY: {
   id: Exclude<PrimaryNavSection, "general">;
-  Icon: LucideIcon;
+  Icon: RailIcon;
+  /** Stock Lucide Images — not the custom rounded set. */
+  lucide?: boolean;
 }[] = [
-  { id: "workspaces", Icon: Layers },
-  { id: "apps", Icon: LayoutGrid },
-  { id: "chats", Icon: MessageSquare },
-  { id: "images", Icon: ImageIcon },
+  { id: "workspaces", Icon: IconWorkspaces },
+  { id: "apps", Icon: IconApps },
+  { id: "chats", Icon: IconChats },
+  { id: "images", Icon: ImageIcon, lucide: true },
 ];
 
 const HOVER_PLUS_MS = 1000;
@@ -123,12 +126,9 @@ export function PrimaryNavRail({
             labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
-          <SquarePen
-            className={cn(
-              "shrink-0",
-              labeled ? "h-4 w-4" : "h-[18px] w-[18px]",
-            )}
-            strokeWidth={1.75}
+          <IconNewChat
+            size={labeled ? 16 : 18}
+            className="shrink-0"
           />
           {labeled ? (
             <span className="min-w-0 truncate">New chat</span>
@@ -142,11 +142,12 @@ export function PrimaryNavRail({
         )}
         role="tablist"
       >
-        {PRIMARY.map(({ id, Icon }) => (
+        {PRIMARY.map(({ id, Icon, lucide }) => (
           <RailSectionButton
             key={id}
             id={id}
             Icon={Icon}
+            lucide={lucide}
             labeled={labeled}
             active={section === id}
             onSelect={() => onSection(id)}
@@ -167,10 +168,7 @@ export function PrimaryNavRail({
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
-          <Bell
-            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
-            strokeWidth={1.75}
-          />
+          <IconNotifications size={labeled ? 16 : 17} />
         </UtilityButton>
         <UtilityButton
           labeled={labeled}
@@ -178,10 +176,7 @@ export function PrimaryNavRail({
           active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
         >
-          <CircleUser
-            className={labeled ? "h-4 w-4" : "h-[17px] w-[17px]"}
-            strokeWidth={1.75}
-          />
+          <IconGeneral size={labeled ? 16 : 17} />
         </UtilityButton>
       </div>
     </aside>
@@ -191,13 +186,15 @@ export function PrimaryNavRail({
 function RailSectionButton({
   id,
   Icon,
+  lucide,
   labeled,
   active,
   onSelect,
   onAdd,
 }: {
   id: Exclude<PrimaryNavSection, "general">;
-  Icon: LucideIcon;
+  Icon: RailIcon;
+  lucide?: boolean;
   labeled: boolean;
   active: boolean;
   onSelect: () => void;
@@ -287,7 +284,7 @@ function RailSectionButton({
           )}
           strokeWidth={1.75}
         />
-      ) : (
+      ) : lucide ? (
         <Icon
           className={cn(
             "shrink-0",
@@ -295,6 +292,8 @@ function RailSectionButton({
           )}
           strokeWidth={1.75}
         />
+      ) : (
+        <Icon size={labeled ? 16 : 18} className="shrink-0" />
       )}
       {labeled ? (
         <span className="min-w-0 truncate">{label}</span>
