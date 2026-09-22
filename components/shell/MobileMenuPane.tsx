@@ -281,10 +281,6 @@ function MenuMain({
             >
               <GeneralMenuBody
                 rowClassName={cn(mobileMenuRowClass, "text-foreground")}
-                iconClassName={cn(
-                  MOBILE_MENU_ICON_SIZE,
-                  "shrink-0 text-muted-foreground",
-                )}
                 onNavigate={onSelectPin}
               />
             </PinSectionFolder>

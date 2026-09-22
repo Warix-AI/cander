@@ -558,7 +558,6 @@ export function Sidebar() {
               <GeneralMenuBody
                 hideSearch
                 rowClassName={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER)}
-                iconClassName={SIDEBAR_ROW_ICON}
               />
             ) : section === "workspaces" ? (
               renderWorkspaceSegment()

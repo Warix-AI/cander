@@ -2,19 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Bell,
-  Building2,
-  ChartNoAxesColumn,
-  CircleHelp,
-  CreditCard,
-  LayoutGrid,
-  Mic,
-  Palette,
-  Shield,
-  UserRound,
-  type LucideIcon,
-} from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { PinSectionSearch } from "@/components/shell/PinSectionSearch";
 import { useIsPlatformAdmin } from "@/lib/admin/use-platform-admin";
@@ -24,23 +11,11 @@ import { closeAllPinSections, openPinSection } from "@/lib/pin-display-prefs";
 import {
   SIDEBAR_ROW_HOVER,
   SIDEBAR_ROW_SECONDARY,
-  SIDEBAR_ROW_SECONDARY_ICON,
 } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
 
 /** Accordion id for the General folder in the primary nav card. */
 export const GENERAL_MENU_SECTION_ID = "account";
-
-const SETTINGS_ICONS: Record<SettingsTab, LucideIcon> = {
-  organization: Building2,
-  workspaces: LayoutGrid,
-  plans: CreditCard,
-  usage: ChartNoAxesColumn,
-  voice: Mic,
-  notifications: Bell,
-  general: UserRound,
-  appearance: Palette,
-};
 
 const SETTINGS_LABEL: Partial<Record<SettingsTab, string>> = {
   plans: "Your plan",
@@ -86,11 +61,11 @@ function buildGeneralMenuRows(
 
 /**
  * Expanded General list — settings destinations (plus Admin for platform admins).
+ * Text-only rows (no leading icons) to match a clean submenu.
  */
 export function GeneralMenuBody({
   matchPrimaryCard = false,
   rowClassName,
-  iconClassName = SIDEBAR_ROW_SECONDARY_ICON,
   onNavigate,
   query: queryProp,
   onQueryChange,
@@ -98,6 +73,7 @@ export function GeneralMenuBody({
 }: {
   matchPrimaryCard?: boolean;
   rowClassName?: string;
+  /** @deprecated Icons removed from General submenu rows. */
   iconClassName?: string;
   /** Called after a destination is chosen (e.g. close mobile menu). */
   onNavigate?: () => void;
@@ -159,7 +135,6 @@ export function GeneralMenuBody({
                 rowClassName ?? cn(SIDEBAR_ROW_SECONDARY, SIDEBAR_ROW_HOVER),
               )}
             >
-              <Shield className={iconClassName} strokeWidth={2} />
               <span className="min-w-0 flex-1 truncate">Admin</span>
             </button>
           );
@@ -179,13 +154,11 @@ export function GeneralMenuBody({
                 view === "help" && "shell-nav-row-active",
               )}
             >
-              <CircleHelp className={iconClassName} strokeWidth={2} />
               <span className="min-w-0 flex-1 truncate">Help</span>
             </button>
           );
         }
 
-        const Icon = SETTINGS_ICONS[row.id];
         const active = view === "settings" && settingsTab === row.id;
         return (
           <button
@@ -197,7 +170,6 @@ export function GeneralMenuBody({
               active && "shell-nav-row-active",
             )}
           >
-            <Icon className={iconClassName} strokeWidth={2} />
             <span className="min-w-0 flex-1 truncate">{row.label}</span>
           </button>
         );
