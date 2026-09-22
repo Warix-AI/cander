@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 
-const MARK_VERSION = "14";
+const MARK_VERSION = "15";
 
 /** Brand mark — circular Cander orb (all tones share the color mark). */
 export function CanderMark({
