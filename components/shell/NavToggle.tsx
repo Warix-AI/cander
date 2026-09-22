@@ -49,7 +49,7 @@ export function NavToggle({
         className,
       )}
     >
-      <IconPanel size={16} strokeWidth={1.55} />
+      <IconPanel size={16} />
     </button>
   );
 }
@@ -93,7 +93,7 @@ export function LeftNavToggleDock({
         onClick={() => newChat()}
         className={cn(SHELL_HEADER_ICON_CLASS, "pointer-events-auto")}
       >
-        <IconNewChat size={16} strokeWidth={1.55} />
+        <IconNewChat size={16} />
       </button>
     </div>
   );

@@ -123,7 +123,7 @@ export function PrimaryNavRail({
             labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
-          <IconNewChat size={labeled ? 16 : 18} strokeWidth={1.5} />
+          <IconNewChat size={labeled ? 16 : 18} />
           {labeled ? (
             <span className="min-w-0 truncate">New chat</span>
           ) : null}
@@ -161,7 +161,7 @@ export function PrimaryNavRail({
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
-          <IconNotifications size={labeled ? 16 : 17} strokeWidth={1.5} />
+          <IconNotifications size={labeled ? 16 : 18} />
         </UtilityButton>
         <UtilityButton
           labeled={labeled}
@@ -169,7 +169,7 @@ export function PrimaryNavRail({
           active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
         >
-          <IconGeneral size={labeled ? 16 : 17} strokeWidth={1.5} />
+          <IconGeneral size={labeled ? 16 : 18} />
         </UtilityButton>
       </div>
     </aside>
@@ -267,9 +267,9 @@ function RailSectionButton({
       )}
     >
       {showPlus ? (
-        <IconPlus size={labeled ? 16 : 18} strokeWidth={1.5} />
+        <IconPlus size={labeled ? 16 : 18} />
       ) : (
-        <Icon size={labeled ? 16 : 18} strokeWidth={1.5} />
+        <Icon size={labeled ? 16 : 18} />
       )}
       {labeled ? (
         <span className="min-w-0 truncate">{label}</span>

@@ -27,7 +27,7 @@ export function ContextualAddRow({
       onClick={onClick}
       className={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER, "text-muted-foreground")}
     >
-      <IconPlus className={SIDEBAR_ROW_ICON} size={16} strokeWidth={1.5} />
+      <IconPlus className={SIDEBAR_ROW_ICON} size={16} />
       <span className="min-w-0 flex-1 truncate text-[14px] tracking-[-0.01em]">
         {label}
       </span>

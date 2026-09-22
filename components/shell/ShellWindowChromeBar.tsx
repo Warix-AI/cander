@@ -109,7 +109,7 @@ export function ShellWindowChromeBar({
                     searchActive && "shell-rail-icon-active",
                   )}
                 >
-                  <IconSearch size={16} strokeWidth={1.55} />
+                  <IconSearch size={16} />
                 </button>
               ) : null}
               {afterSearch}
@@ -173,7 +173,7 @@ export function ShellNavToggleButton({
       onClick={onClick}
       className={SHELL_HEADER_ICON_CLASS}
     >
-      <IconPanel size={16} strokeWidth={1.55} />
+      <IconPanel size={16} />
     </button>
   );
 }
