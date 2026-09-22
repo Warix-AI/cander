@@ -25,7 +25,6 @@ import { workspacesFor } from "@/lib/entitlements";
 import {
   SIDEBAR_ROW,
   SIDEBAR_ROW_HOVER,
-  SIDEBAR_ROW_ICON,
 } from "@/lib/mobile-menu-styles";
 import {
   persistContextNavOpen,
