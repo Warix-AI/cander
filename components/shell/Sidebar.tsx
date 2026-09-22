@@ -57,6 +57,7 @@ import {
 import type { PinKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useDesktopShell } from "@/lib/desktop-shell";
+import { SHELL_CHROME_ROW } from "@/lib/shell-chrome";
 
 const PEEK_CLOSE_MS = 160;
 const PEEK_EXIT_MS = 420;
@@ -359,12 +360,12 @@ export function Sidebar() {
         return;
       }
       const map: Record<string, PrimaryNavSection> = {
-        Digit1: "apps",
-        Digit2: "workspaces",
+        Digit1: "workspaces",
+        Digit2: "apps",
         Digit3: "chats",
         Digit4: "automations",
-        Numpad1: "apps",
-        Numpad2: "workspaces",
+        Numpad1: "workspaces",
+        Numpad2: "apps",
         Numpad3: "chats",
         Numpad4: "automations",
       };
@@ -571,23 +572,20 @@ export function Sidebar() {
           )}
         >
           {/*
-            Match connector / browser tab strip height (45px) so the stroke under
-            this chrome lines up with the stroke under pinned app tabs.
+            Match connector / browser header row height so the stroke under
+            Search lines up with the stroke under pinned app tabs.
           */}
           <div
             className={cn(
               "flex shrink-0 flex-col justify-center overflow-hidden",
-              macDesktop
-                ? "h-[max(52px,var(--desktop-titlebar,52px))]"
-                : "h-[45px]",
+              SHELL_CHROME_ROW,
             )}
           >
             <WindowChrome
               clearTrafficLights={macDesktop}
               navChrome
               className={cn(
-                "w-full bg-transparent text-foreground",
-                macDesktop ? undefined : "h-full min-h-0",
+                "h-full min-h-0 w-full bg-transparent text-foreground",
               )}
             />
           </div>

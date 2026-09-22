@@ -21,8 +21,8 @@ const PRIMARY: {
   id: Exclude<PrimaryNavSection, "general">;
   Icon: LucideIcon;
 }[] = [
-  { id: "apps", Icon: LayoutGrid },
   { id: "workspaces", Icon: Layers },
+  { id: "apps", Icon: LayoutGrid },
   { id: "chats", Icon: MessageSquare },
   { id: "automations", Icon: Zap },
 ];

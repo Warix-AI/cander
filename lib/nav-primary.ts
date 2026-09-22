@@ -1,22 +1,22 @@
 /** Desktop primary nav sections — icon rail destinations. */
 export type PrimaryNavSection =
-  | "apps"
   | "workspaces"
+  | "apps"
   | "chats"
   | "automations"
   | "general";
 
 /** Top rail destinations (General lives on the bottom account control). */
 export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
-  "apps",
   "workspaces",
+  "apps",
   "chats",
   "automations",
 ];
 
 export const PRIMARY_NAV_LABEL: Record<PrimaryNavSection, string> = {
+  workspaces: "Business",
   apps: "Apps",
-  workspaces: "Workspaces",
   chats: "Chats",
   automations: "Automations",
   general: "General",

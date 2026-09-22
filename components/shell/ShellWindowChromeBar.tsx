@@ -73,16 +73,15 @@ export function ShellWindowChromeBar({
         // strip `cander-desktop`, which collapsed admin chrome to the top edge.
         ...(clearTrafficLights
           ? {
-              height: `max(${DESKTOP_TITLEBAR_PX}px, var(--desktop-titlebar, ${DESKTOP_TITLEBAR_PX}px))`,
+              height: `var(--shell-chrome-row, ${DESKTOP_TITLEBAR_PX}px)`,
               paddingLeft: `max(${DESKTOP_TRAFFIC_CLEAR_PX}px, var(--desktop-traffic-clear, ${DESKTOP_TRAFFIC_CLEAR_PX}px))`,
             }
           : undefined),
       }}
       className={cn(
         "relative flex shrink-0 items-center gap-1 pr-3",
-        // Match connector / browser tab strip (h-[45px]) so the stroke under
-        // Search lines up with the stroke under pinned app tabs.
-        clearTrafficLights ? undefined : "h-[45px] px-3",
+        // Match connector / browser header rows via --shell-chrome-row.
+        clearTrafficLights ? undefined : "h-[var(--shell-chrome-row,45px)] px-3",
         className,
       )}
     >

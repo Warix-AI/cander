@@ -16,6 +16,8 @@
   --radius: 10px;
   --desktop-titlebar: 0px;
   --desktop-traffic-clear: 0px;
+  /* Sidebar title chrome + connector/browser header rows share this height. */
+  --shell-chrome-row: 45px;
   --chart-1: oklch(0.81 0.1 252);
   --chart-2: oklch(0.62 0.19 260);
   --chart-3: oklch(0.55 0.22 263);
@@ -125,6 +127,7 @@ html.cander-desktop {
   --desktop-titlebar: 52px;
   --desktop-traffic-clear: 84px;
   --desktop-window-radius: 24px;
+  --shell-chrome-row: var(--desktop-titlebar);
   border-radius: var(--desktop-window-radius);
   overflow: hidden;
   -electron-corner-smoothing: system-ui;

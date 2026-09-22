@@ -8,6 +8,9 @@ type Listener = () => void;
 const STORAGE_KEY = "courier-shell-style";
 const listeners = new Set<Listener>();
 
+/** Shared height class for sidebar chrome + connector/browser header rows. */
+export const SHELL_CHROME_ROW = "h-[var(--shell-chrome-row,45px)]";
+export const SHELL_CHROME_ROW_PX = 45;
 /** G3 corner radius — matches composer-shell (20px). Use class only, not rounded-[20px]. */
 export const SHELL_G3_RADIUS_PX = 20;
 /** Electron desktop window outer radius — slightly larger than in-app G3 cards. */

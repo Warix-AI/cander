@@ -34,7 +34,7 @@ export function ContextualNavHeader({
       : section === "chats"
         ? "New chat"
         : section === "workspaces"
-          ? "Create workspace"
+          ? "Create business"
           : "New automation";
 
   return (

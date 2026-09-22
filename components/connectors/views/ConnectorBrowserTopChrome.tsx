@@ -36,6 +36,7 @@ import {
 } from "@/lib/connector-browser-session";
 import {
   BROWSER_CHROME_CHIP_HOVER,
+  SHELL_CHROME_ROW,
   SHELL_G3_RADIUS,
   useShellStyle,
 } from "@/lib/shell-chrome";
@@ -153,7 +154,8 @@ export function ConnectorBrowserTopChrome({
   return (
     <div
       className={cn(
-        "hidden h-[45px] min-w-0 shrink-0 items-center gap-1 px-1 lg:flex",
+        "hidden min-w-0 shrink-0 items-center gap-1 px-1 lg:flex",
+        SHELL_CHROME_ROW,
         // Detached chrome floats on the canvas — no island fill / divider.
         floating
           ? "bg-transparent"

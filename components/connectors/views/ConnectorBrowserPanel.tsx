@@ -77,6 +77,7 @@ import { recordBrowserVisit } from "@/lib/browser-recent-history";
 import {
   BROWSER_CHROME_CHIP,
   BROWSER_CHROME_CHIP_HOVER,
+  SHELL_CHROME_ROW,
   SHELL_G3_RADIUS,
   SHELL_PANEL_BODY,
   useShellStyle,
@@ -438,7 +439,8 @@ export function ConnectorBrowserPanel({
       {hideTopChrome ? null : (
       <div
         className={cn(
-          "hidden h-[45px] min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06] lg:flex",
+          "hidden min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06] lg:flex",
+          SHELL_CHROME_ROW,
           surface,
         )}
         onPointerLeave={clearBrowserChromeHovers}
@@ -494,7 +496,8 @@ export function ConnectorBrowserPanel({
       {/* Bottom header — connector tools or web URL nav */}
       <div
         className={cn(
-          "relative h-[45px] min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06]",
+          "relative min-w-0 shrink-0 items-center gap-1 border-b border-black/[0.035] px-2 dark:border-white/[0.06]",
+          SHELL_CHROME_ROW,
           isConnectorTab ? "hidden lg:flex" : "flex",
           surface,
         )}
