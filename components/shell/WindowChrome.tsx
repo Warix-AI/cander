@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { Bell, CircleHelp } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import { NavToggle } from "@/components/shell/NavToggle";
+import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import {
   SHELL_HEADER_ICON_CLASS,
   ShellWindowChromeBar,
@@ -20,8 +21,8 @@ export function WindowChrome({
   clearTrafficLights = false,
   hideHistory = false,
   /**
-   * Two-layer desktop nav: PanelLeft + Search in the titlebar.
-   * Voice / Notifications live on the icon rail; Help under General.
+   * Two-layer desktop nav: PanelLeft + Search + Voice in the titlebar.
+   * Notifications live on the icon rail; Help under General.
    */
   navChrome = false,
   className,
@@ -35,8 +36,11 @@ export function WindowChrome({
 }) {
   const {
     openSearch,
+    openVoice,
     openNotifications,
     openHelp,
+    entitlements,
+    view,
   } = useApp();
   const desktop = useDesktopShell();
   const { unreadCount } = useSyncExternalStore(
@@ -52,6 +56,23 @@ export function WindowChrome({
         className={className}
         leading={<NavToggle />}
         onSearch={() => openSearch()}
+        afterSearch={
+          entitlements.hasVoice ? (
+            <button
+              type="button"
+              aria-label="Voice"
+              title="Voice"
+              style={desktop ? DESKTOP_NO_DRAG : undefined}
+              onClick={() => openVoice()}
+              className={cn(
+                SHELL_HEADER_ICON_CLASS,
+                view === "voice" && "text-[var(--shell-select)]",
+              )}
+            >
+              <VoiceWaveIcon size={14} />
+            </button>
+          ) : null
+        }
       />
     );
   }

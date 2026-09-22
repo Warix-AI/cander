@@ -8,7 +8,6 @@ import {
   useDesktopShell,
 } from "@/lib/desktop-shell";
 import { SHELL_HEADER_ICON_CLASS } from "@/components/shell/ShellWindowChromeBar";
-import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import { useMobileShell } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
@@ -56,8 +55,8 @@ export function NavToggle({
 }
 
 /**
- * Fixed PanelLeft + New chat + Voice when the entire left nav is hidden.
- * Search stays in the open-menu titlebar next to PanelLeft.
+ * Fixed PanelLeft + New chat when the entire left nav is hidden.
+ * Search + Voice live in the open-menu titlebar next to PanelLeft.
  */
 export function LeftNavToggleDock({
   peeking,
@@ -70,9 +69,6 @@ export function LeftNavToggleDock({
     drafting,
     thread,
     newChat,
-    openVoice,
-    entitlements,
-    view,
   } = useApp();
   const mobile = useMobileShell();
   const desktop = useDesktopShell();
@@ -99,22 +95,6 @@ export function LeftNavToggleDock({
       >
         <SquarePen className="h-4 w-4" strokeWidth={1.7} />
       </button>
-      {entitlements.hasVoice ? (
-        <button
-          type="button"
-          aria-label="Voice"
-          title="Voice"
-          style={desktop ? DESKTOP_NO_DRAG : undefined}
-          onClick={() => openVoice()}
-          className={cn(
-            SHELL_HEADER_ICON_CLASS,
-            "pointer-events-auto",
-            view === "voice" && "text-[var(--shell-select)]",
-          )}
-        >
-          <VoiceWaveIcon size={14} />
-        </button>
-      ) : null}
     </div>
   );
 }
