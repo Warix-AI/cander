@@ -7,7 +7,7 @@ const filesBridge = require("./files-bridge");
 const desktopShell = require("./desktop-shell");
 const speechBridge = require("./speech-bridge");
 
-const APP_NAME = "Cander";
+const APP_NAME = "One";
 const DEFAULT_URL = "https://cander.app";
 const FALLBACK_URL = "https://cander.vercel.app";
 const START_URL = process.env.CANDER_URL || DEFAULT_URL;
@@ -87,7 +87,7 @@ function loadErrorPage(code, desc, failedUrl) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cander</title>
+  <title>One</title>
   <script>
     (function () {
       try {
@@ -137,7 +137,7 @@ function loadErrorPage(code, desc, failedUrl) {
 </head>
 <body>
   <main>
-    <h1>Cander can’t load right now</h1>
+    <h1>One can’t load right now</h1>
     <p>The desktop shell opens the hosted web app. Check your connection, then try again.</p>
     <p><code>${escapeHtml(failedUrl || activeUrl)}</code></p>
     <p><code>${escapeHtml(String(code))} · ${escapeHtml(desc || "load failed")}</code></p>
@@ -709,7 +709,7 @@ app.whenReady().then(() => {
     const title =
       typeof opts?.title === "string" && opts.title.trim()
         ? opts.title.trim()
-        : "Cander";
+        : "One";
     const body =
       typeof opts?.body === "string" ? opts.body.trim().slice(0, 240) : "";
     const data =

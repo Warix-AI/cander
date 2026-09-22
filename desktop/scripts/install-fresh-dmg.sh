@@ -1,22 +1,24 @@
 #!/bin/bash
-# Quit every Cander, remove stale installs, build + install 0.1.32 DMG.
+# Quit every One/Cander install, remove stale apps, build + install One DMG.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 VERSION="$(node -p "require('./package.json').version")"
-APP_SRC="release/mac-arm64/Cander.app"
-DMG="release/Cander-${VERSION}-arm64.dmg"
+APP_SRC="release/mac-arm64/One.app"
+DMG="release/One-${VERSION}-arm64.dmg"
 
-echo "→ Quitting Cander…"
+echo "→ Quitting One / Cander…"
+osascript -e 'tell application "One" to quit' 2>/dev/null || true
 osascript -e 'tell application "Cander" to quit' 2>/dev/null || true
+killall One 2>/dev/null || true
 killall Cander 2>/dev/null || true
 sleep 1
 
-echo "→ Removing other Cander apps…"
+echo "→ Removing other installs…"
+rm -rf /Applications/One.app
 rm -rf /Applications/Cander.app
+rm -rf "$ROOT/.dev/One.app"
 rm -rf "$ROOT/.dev/Cander.app"
-# Remove Dock persistent items named Cander (best-effort)
-defaults read com.apple.dock persistent-apps >/dev/null 2>&1 || true
 
 if [[ ! -d "$APP_SRC" ]]; then
   echo "Missing $APP_SRC — packaging first…"
@@ -24,23 +26,22 @@ if [[ ! -d "$APP_SRC" ]]; then
 fi
 
 echo "→ Installing to /Applications…"
-# Prefer copying the packaged .app directly (works when hdiutil is blocked).
-ditto --rsrc --extattr "$APP_SRC" /Applications/Cander.app
+ditto --rsrc --extattr "$APP_SRC" /Applications/One.app
 
 if command -v hdiutil >/dev/null 2>&1; then
   echo "→ Building $DMG (optional)…"
-  STAGE="$(mktemp -d /tmp/cander-dmg-XXXX)"
+  STAGE="$(mktemp -d /tmp/one-dmg-XXXX)"
   rm -f "$DMG"
-  if cp -R "$APP_SRC" "$STAGE/Cander.app" \
+  if cp -R "$APP_SRC" "$STAGE/One.app" \
     && ln -s /Applications "$STAGE/Applications" \
-    && hdiutil create -volname "Cander" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then
+    && hdiutil create -volname "One" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then
     open -R "$DMG"
   else
-    echo "DMG create skipped (hdiutil unavailable). Zip still at release/Cander-${VERSION}-arm64.zip"
+    echo "DMG create skipped (hdiutil unavailable). Zip still at release/One-${VERSION}-arm64.zip"
   fi
   rm -rf "$STAGE"
 fi
 
-echo "→ Opening Cander…"
-open -a Cander
-echo "Done. Only /Applications/Cander.app (${VERSION}) should remain."
+echo "→ Opening One…"
+open -a One
+echo "Done. Only /Applications/One.app (${VERSION}) should remain."

@@ -1,6 +1,6 @@
-# Cander Desktop (macOS)
+# One Desktop (macOS)
 
-Thin Electron shell that opens the **hosted** Cander web app in a native Mac window — same pattern as the Capacitor iOS/Android shells. Product UI stays in Next.js at `cander.app`; this package adds Dock presence, custom chrome, and the Apple Foundation Models bridge.
+Thin Electron shell that opens the **hosted** Cander web app in a native Mac window — same pattern as the Capacitor iOS/Android shells. Product UI stays in Next.js at `cander.app`; this package ships as **One** (Dock name + `One-<version>-arm64.dmg`).
 
 ## Production vs dev (like mobile)
 
@@ -35,9 +35,9 @@ cd desktop
 npm run dist:unsigned
 ```
 
-Output: `desktop/release/Cander-<version>.dmg` — install to `/Applications`. The bundle includes:
+Output: `desktop/release/One-<version>-arm64.dmg` — install to `/Applications`. The bundle includes:
 
-- Cander-branded Electron shell (`2026-08-30-traffic-lights`, v0.1.2+)
+- One-branded Electron shell (`2026-08-30-traffic-lights`, v0.1.2+)
 - Local `WebContentsView` browser bridge for right-panel web / preview tabs
 - `FoundationModelsHelper` binary (Apple Intelligence CLI)
 - Loads `https://cander.app` (not localhost)

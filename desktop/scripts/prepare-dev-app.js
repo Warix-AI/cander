@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * macOS dev shell: copy Electron.app → .dev/Cander.app with Cander branding
- * so the Dock shows "Cander" (not "Electron") while developing.
+ * macOS dev shell: copy Electron.app → .dev/One.app with One branding
+ * so the Dock shows "One" (not "Electron") while developing.
  */
 const { spawnSync } = require("child_process");
 const fs = require("fs");
@@ -12,12 +12,12 @@ const electronApp = path.join(
   path.dirname(require.resolve("electron/package.json")),
   "dist/Electron.app",
 );
-const devApp = path.join(desktopRoot, ".dev/Cander.app");
+const devApp = path.join(desktopRoot, ".dev/One.app");
 const plistPath = path.join(devApp, "Contents/Info.plist");
 const iconSrc = path.join(desktopRoot, "assets/icon.icns");
 const iconDest = path.join(devApp, "Contents/Resources/electron.icns");
 
-const APP_NAME = "Cander";
+const APP_NAME = "One";
 const BUNDLE_ID = "ai.warix.cander.dev";
 
 function run(cmd, args) {
@@ -77,15 +77,15 @@ function ensurePlistString(key, value) {
 function ensurePrivacyPlist() {
   ensurePlistString(
     "NSCameraUsageDescription",
-    "Cander uses the camera for in-app browsing and video calls.",
+    "One uses the camera for in-app browsing and video calls.",
   );
   ensurePlistString(
     "NSMicrophoneUsageDescription",
-    "Cander uses the microphone for dictation, voice chat, and in-app browsing.",
+    "One uses the microphone for dictation, voice chat, and in-app browsing.",
   );
   ensurePlistString(
     "NSSpeechRecognitionUsageDescription",
-    "Cander turns your speech into text for dictation and voice chat.",
+    "One turns your speech into text for dictation and voice chat.",
   );
 }
 
@@ -123,4 +123,4 @@ if (fs.existsSync(iconSrc)) {
 
 const version = require("electron/package.json").version;
 fs.writeFileSync(path.join(desktopRoot, ".dev/.electron-version"), `${version}\n`);
-console.log("Cander dev app ready.");
+console.log("One dev app ready.");

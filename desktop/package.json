@@ -2,7 +2,7 @@
   "name": "cander-desktop",
   "version": "0.1.32",
   "private": true,
-  "description": "Cander macOS desktop shell",
+  "description": "One macOS desktop shell",
   "main": "src/main.js",
   "author": "Warix AI",
   "scripts": {
@@ -10,8 +10,8 @@
     "build:fm-helper": "node scripts/build-fm-helper.js",
     "build:speech-helper": "node scripts/build-speech-helper.js",
     "build:helpers": "npm run build:fm-helper && npm run build:speech-helper",
-    "dev": "node scripts/prepare-dev-app.js && npm run build:speech-helper && env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 .dev/Cander.app/Contents/MacOS/Electron .",
-    "start": "node scripts/prepare-dev-app.js && npm run build:speech-helper && env -u ELECTRON_RUN_AS_NODE .dev/Cander.app/Contents/MacOS/Electron .",
+    "dev": "node scripts/prepare-dev-app.js && npm run build:speech-helper && env -u ELECTRON_RUN_AS_NODE CANDER_URL=http://localhost:3000 .dev/One.app/Contents/MacOS/Electron .",
+    "start": "node scripts/prepare-dev-app.js && npm run build:speech-helper && env -u ELECTRON_RUN_AS_NODE .dev/One.app/Contents/MacOS/Electron .",
     "pack": "npm run build:helpers && env -u ELECTRON_RUN_AS_NODE electron-builder --dir",
     "dist": "npm run build:helpers && env -u ELECTRON_RUN_AS_NODE electron-builder --mac dmg",
     "dist:unsigned": "npm run build:helpers && env -u ELECTRON_RUN_AS_NODE CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg",
@@ -19,7 +19,8 @@
   },
   "build": {
     "appId": "ai.warix.cander",
-    "productName": "Cander",
+    "productName": "One",
+    "artifactName": "One-${version}-${arch}.${ext}",
     "copyright": "Copyright © Warix AI",
     "directories": {
       "output": "release"
@@ -48,14 +49,14 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "extendInfo": {
-        "NSCameraUsageDescription": "Cander uses the camera for in-app browsing and video calls.",
-        "NSMicrophoneUsageDescription": "Cander uses the microphone for dictation, voice chat, and in-app browsing.",
-        "NSSpeechRecognitionUsageDescription": "Cander turns your speech into text for dictation and voice chat.",
-        "NSLocationWhenInUseUsageDescription": "Cander allows websites you open in the browser panel to use your location when you approve their request."
+        "NSCameraUsageDescription": "One uses the camera for in-app browsing and video calls.",
+        "NSMicrophoneUsageDescription": "One uses the microphone for dictation, voice chat, and in-app browsing.",
+        "NSSpeechRecognitionUsageDescription": "One turns your speech into text for dictation and voice chat.",
+        "NSLocationWhenInUseUsageDescription": "One allows websites you open in the browser panel to use your location when you approve their request."
       }
     },
     "dmg": {
-      "title": "Cander"
+      "title": "One"
     }
   },
   "devDependencies": {
