@@ -17,6 +17,8 @@ import {
   IconNotifications,
   IconPlus,
   IconWorkspaces,
+  NAV_ICON_HEADER,
+  NAV_ICON_RAIL,
   type NavIconComponent,
 } from "@/components/brand/NavIcons";
 import {
@@ -123,7 +125,7 @@ export function PrimaryNavRail({
             labeled ? LABELED_BTN_IDLE : RAIL_BTN_IDLE,
           )}
         >
-          <IconNewChat size={labeled ? 16 : 18} />
+          <IconNewChat size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
           {labeled ? (
             <span className="min-w-0 truncate">New chat</span>
           ) : null}
@@ -161,7 +163,9 @@ export function PrimaryNavRail({
           active={view === "notifications"}
           onClick={() => openNotifications()}
         >
-          <IconNotifications size={labeled ? 16 : 18} />
+          <IconNotifications
+            size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL}
+          />
         </UtilityButton>
         <UtilityButton
           labeled={labeled}
@@ -169,7 +173,7 @@ export function PrimaryNavRail({
           active={section === "general" || view === "settings"}
           onClick={() => onSection("general")}
         >
-          <IconGeneral size={labeled ? 16 : 18} />
+          <IconGeneral size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
         </UtilityButton>
       </div>
     </aside>
@@ -267,9 +271,9 @@ function RailSectionButton({
       )}
     >
       {showPlus ? (
-        <IconPlus size={labeled ? 16 : 18} />
+        <IconPlus size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
       ) : (
-        <Icon size={labeled ? 16 : 18} />
+        <Icon size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
       )}
       {labeled ? (
         <span className="min-w-0 truncate">{label}</span>

@@ -8,11 +8,16 @@ type NavIconProps = SVGProps<SVGSVGElement> & {
   strokeWidth?: number;
 };
 
-/** ChatGPT-adjacent stroke language: medium-thick, fully rounded caps/joins. */
+/**
+ * Medium-heavy rounded stroke language.
+ * Default sizes are ~20% above the prior Lucide 16/18 footprint.
+ */
 const DEFAULT_STROKE = 2;
+export const NAV_ICON_RAIL = 22;
+export const NAV_ICON_HEADER = 19;
 
 function NavIconBase({
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   className,
   children,
@@ -38,111 +43,118 @@ function NavIconBase({
   );
 }
 
-/** Close / open left panel. */
+/** Close / open left panel — rounded frame with a rail. */
 export function IconPanel({
   className,
-  size = 16,
+  size = NAV_ICON_HEADER,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <rect x="3" y="4" width="18" height="16" rx="4" />
-      <path d="M9 4v16" />
+      <rect x="3.25" y="4.25" width="17.5" height="15.5" rx="3.75" />
+      <path d="M9.25 4.25v15.5" />
     </NavIconBase>
   );
 }
 
-/** Search. */
+/** Search — clear ring + handle. */
 export function IconSearch({
   className,
-  size = 16,
+  size = NAV_ICON_HEADER,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <circle cx="11" cy="11" r="6.25" />
-      <path d="M16.25 16.25 20.5 20.5" />
+      <circle cx="10.75" cy="10.75" r="6" />
+      <path d="M15.5 15.5 20.25 20.25" />
     </NavIconBase>
   );
 }
 
-/** New chat — rounded square + stylus (inspiration: compose). */
+/** New chat — rounded square + pencil (compose). */
 export function IconNewChat({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <rect x="4" y="4" width="16" height="16" rx="4.5" />
-      <path d="M13.25 6.75 17.25 10.75" />
-      <path d="M9 15.5h4.5" />
+      <rect x="3.75" y="3.75" width="16.5" height="16.5" rx="4.25" />
+      <path d="M13.5 6.5 17.5 10.5" />
+      <path d="M14.75 5.75h3.5v3.5" />
     </NavIconBase>
   );
 }
 
-/** Workspaces — soft stacked planes. */
+/** Workspaces — three soft stacked sheets. */
 export function IconWorkspaces({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <path d="M5 10.25 12 6.5l7 3.75-7 3.75-7-3.75Z" />
-      <path d="M5 13.5 12 17.25l7-3.75" />
-      <path d="M5 16.5 12 20.25l7-3.75" />
+      <rect x="5.5" y="4.5" width="13" height="4.25" rx="1.75" />
+      <rect x="5.5" y="9.875" width="13" height="4.25" rx="1.75" />
+      <rect x="5.5" y="15.25" width="13" height="4.25" rx="1.75" />
     </NavIconBase>
   );
 }
 
-/** Apps — four soft modules (inspiration: sites / command grid). */
+/** Apps — 2×2 soft tiles. */
 export function IconApps({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <rect x="3.75" y="3.75" width="6.75" height="6.75" rx="2.25" />
-      <rect x="13.5" y="3.75" width="6.75" height="6.75" rx="2.25" />
-      <rect x="3.75" y="13.5" width="6.75" height="6.75" rx="2.25" />
-      <rect x="13.5" y="13.5" width="6.75" height="6.75" rx="2.25" />
+      <rect x="3.5" y="3.5" width="7" height="7" rx="2.35" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="2.35" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="2.35" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="2.35" />
     </NavIconBase>
   );
 }
 
-/** Chats — rounded message capsule. */
+/** Chats — single rounded bubble with a soft tail. */
 export function IconChats({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <path d="M6 6.5h12a3.5 3.5 0 0 1 3.5 3.5v4A3.5 3.5 0 0 1 18 17.5h-5.25L8 21v-3.5H6A3.5 3.5 0 0 1 2.5 14V10A3.5 3.5 0 0 1 6 6.5Z" />
+      <path d="M5.75 5.75h12.5A3.25 3.25 0 0 1 21.5 9v5.25a3.25 3.25 0 0 1-3.25 3.25h-5.4L8.25 20.5v-3H5.75A3.25 3.25 0 0 1 2.5 14.25V9A3.25 3.25 0 0 1 5.75 5.75Z" />
     </NavIconBase>
   );
 }
 
-/** Images — overlapping rounded frames + landscape (inspiration). */
+/**
+ * Images — stacked photo frames with a soft landscape mark
+ * (aligned to the refined inspiration glyph).
+ */
 export function IconImages({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <rect x="2.75" y="6.5" width="14.5" height="12.25" rx="3.25" />
-      <path d="M7.5 4.75h9.75A3.25 3.25 0 0 1 20.5 8v8.25" />
-      <path d="M5.25 15.75 8.5 12.75l2.35 2.1 2.9-3.15 3.25 4.05" />
+      {/* Rear cards — offset up-right */}
+      <rect x="6.75" y="3.5" width="13.5" height="11.25" rx="2.75" />
+      <rect x="5" y="5.5" width="13.5" height="11.25" rx="2.75" />
+      {/* Front card */}
+      <rect x="3.25" y="7.5" width="13.5" height="12.25" rx="2.75" />
+      {/* Landscape */}
+      <path d="M5.1 16.85 8.35 13.9l2.4 2 3.15-3.45 3.45 4.4" />
     </NavIconBase>
   );
 }
@@ -150,16 +162,16 @@ export function IconImages({
 /** Notifications — soft bell. */
 export function IconNotifications({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <path d="M7 18h10" />
-      <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
-      <path d="M6.25 11a5.75 5.75 0 0 1 11.5 0c0 2.85 1 4.25 1 4.25H5.25S6.25 13.85 6.25 11Z" />
-      <path d="M12 4.5v1.25" />
+      <path d="M7.25 18.25h9.5" />
+      <path d="M9.6 18.25a2.4 2.4 0 0 0 4.8 0" />
+      <path d="M6.35 11a5.65 5.65 0 0 1 11.3 0c0 2.9 1.05 4.4 1.05 4.4H5.3S6.35 13.9 6.35 11Z" />
+      <path d="M12 4.6v1.35" />
     </NavIconBase>
   );
 }
@@ -167,14 +179,14 @@ export function IconNotifications({
 /** General / account. */
 export function IconGeneral({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <circle cx="12" cy="8.25" r="3.5" />
-      <path d="M5.25 19.5c1-3.5 3.4-5.25 6.75-5.25s5.75 1.75 6.75 5.25" />
+      <circle cx="12" cy="8" r="3.35" />
+      <path d="M5.4 19.35c.95-3.35 3.35-5.1 6.6-5.1s5.65 1.75 6.6 5.1" />
     </NavIconBase>
   );
 }
@@ -182,14 +194,14 @@ export function IconGeneral({
 /** Plus — matched stroke for hover-add / Add rows. */
 export function IconPlus({
   className,
-  size = 18,
+  size = NAV_ICON_RAIL,
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      <path d="M12 5.5v13" />
-      <path d="M5.5 12h13" />
+      <path d="M12 5.25v13.5" />
+      <path d="M5.25 12h13.5" />
     </NavIconBase>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { IconNewChat, IconPanel } from "@/components/brand/NavIcons";
+import { IconNewChat, IconPanel, NAV_ICON_HEADER } from "@/components/brand/NavIcons";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DESKTOP_NO_DRAG,
@@ -49,7 +49,7 @@ export function NavToggle({
         className,
       )}
     >
-      <IconPanel size={16} />
+      <IconPanel size={NAV_ICON_HEADER} />
     </button>
   );
 }
@@ -93,7 +93,7 @@ export function LeftNavToggleDock({
         onClick={() => newChat()}
         className={cn(SHELL_HEADER_ICON_CLASS, "pointer-events-auto")}
       >
-        <IconNewChat size={16} />
+        <IconNewChat size={NAV_ICON_HEADER} />
       </button>
     </div>
   );

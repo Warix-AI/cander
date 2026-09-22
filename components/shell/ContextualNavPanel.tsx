@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { IconPlus } from "@/components/brand/NavIcons";
+import { IconPlus, NAV_ICON_HEADER } from "@/components/brand/NavIcons";
 import type { PrimaryNavSection } from "@/lib/nav-primary";
 import { PRIMARY_NAV_ADD_LABEL } from "@/components/shell/PrimaryNavRail";
 import {
@@ -27,7 +27,7 @@ export function ContextualAddRow({
       onClick={onClick}
       className={cn(SIDEBAR_ROW, SIDEBAR_ROW_HOVER, "text-muted-foreground")}
     >
-      <IconPlus className={SIDEBAR_ROW_ICON} size={16} />
+      <IconPlus className={SIDEBAR_ROW_ICON} size={NAV_ICON_HEADER} />
       <span className="min-w-0 flex-1 truncate text-[14px] tracking-[-0.01em]">
         {label}
       </span>
