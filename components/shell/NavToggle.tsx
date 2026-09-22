@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelLeft, Search } from "lucide-react";
+import { PanelLeft, SquarePen } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
 import {
   DESKTOP_NO_DRAG,
@@ -56,8 +56,8 @@ export function NavToggle({
 }
 
 /**
- * Fixed PanelLeft + Search + Voice when the entire left nav is hidden.
- * Single control cluster — avoids stacking a second toggle under Search.
+ * Fixed PanelLeft + New chat + Voice when the entire left nav is hidden.
+ * Search stays in the open-menu titlebar next to PanelLeft.
  */
 export function LeftNavToggleDock({
   peeking,
@@ -69,7 +69,7 @@ export function LeftNavToggleDock({
     projectId,
     drafting,
     thread,
-    openSearch,
+    newChat,
     openVoice,
     entitlements,
     view,
@@ -91,12 +91,13 @@ export function LeftNavToggleDock({
       <NavToggle docked className="pointer-events-auto" />
       <button
         type="button"
-        aria-label="Search"
+        aria-label="New chat"
+        title="New chat"
         style={desktop ? DESKTOP_NO_DRAG : undefined}
-        onClick={() => openSearch()}
+        onClick={() => newChat()}
         className={cn(SHELL_HEADER_ICON_CLASS, "pointer-events-auto")}
       >
-        <Search className="h-4 w-4" strokeWidth={1.7} />
+        <SquarePen className="h-4 w-4" strokeWidth={1.7} />
       </button>
       {entitlements.hasVoice ? (
         <button
@@ -108,7 +109,7 @@ export function LeftNavToggleDock({
           className={cn(
             SHELL_HEADER_ICON_CLASS,
             "pointer-events-auto",
-            view === "voice" && "bg-muted text-foreground",
+            view === "voice" && "text-[var(--shell-select)]",
           )}
         >
           <VoiceWaveIcon size={14} />

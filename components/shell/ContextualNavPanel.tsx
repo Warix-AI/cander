@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Plus, SquarePen } from "lucide-react";
+import { Plus } from "lucide-react";
 import { PRIMARY_NAV_LABEL, type PrimaryNavSection } from "@/lib/nav-primary";
 
 const HEADER_ICON =
@@ -51,11 +51,7 @@ export function ContextualNavHeader({
           onClick={onPrimaryAction}
           className={HEADER_ICON}
         >
-          {section === "chats" ? (
-            <SquarePen className="h-3.5 w-3.5" strokeWidth={1.7} />
-          ) : (
-            <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
-          )}
+          <Plus className="h-3.5 w-3.5" strokeWidth={1.7} />
         </button>
       ) : null}
     </div>

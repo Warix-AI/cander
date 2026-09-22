@@ -36,9 +36,9 @@ const PRIMARY: {
 const RAIL_BTN =
   "inline-flex h-10 w-10 items-center justify-center rounded-[12px] text-muted-foreground transition-colors duration-200 hover:bg-black/[0.05] hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-black/10 dark:hover:bg-white/[0.08] dark:focus-visible:ring-white/20";
 
-/** Active primary-rail icon — shell-select blue glyph, no gray wash. */
+/** Active primary-rail icon — shell-select blue glyph; keep light-gray hover wash. */
 const RAIL_BTN_ACTIVE =
-  "text-[var(--shell-select)] hover:bg-transparent hover:text-[var(--shell-select)] dark:hover:bg-transparent";
+  "text-[var(--shell-select)] hover:bg-black/[0.05] hover:text-[var(--shell-select)] dark:hover:bg-white/[0.08]";
 
 const LABELED_BTN = cn(
   SIDEBAR_ROW,
@@ -46,8 +46,9 @@ const LABELED_BTN = cn(
   "h-10 gap-2.5 px-2.5 text-[13.5px] font-medium text-muted-foreground",
 );
 
+/** Active labeled tab — blue text/icon only; hover stays the light gray wash. */
 const LABELED_BTN_ACTIVE =
-  "shell-nav-row-active text-[var(--shell-select-foreground)]";
+  "text-[var(--shell-select)] hover:bg-black/[0.04] dark:hover:bg-white/[0.06]";
 
 /**
  * Primary nav rail — icon-only (56px) or labeled tabs (~180px).
@@ -69,10 +70,13 @@ export function PrimaryNavRail({
     newChat,
     entitlements,
     view,
+    drafting,
+    thread,
     primaryNavRailMode,
   } = useApp();
 
   const labeled = primaryNavRailMode === "labeled";
+  const newChatActive = drafting && !thread;
 
   return (
     <aside
