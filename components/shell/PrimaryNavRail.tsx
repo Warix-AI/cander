@@ -12,7 +12,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useApp } from "@/components/app/AppProvider";
-import { VoiceWaveIcon } from "@/components/shell/VoiceOrb";
 import {
   PRIMARY_NAV_LABEL,
   type PrimaryNavSection,
@@ -52,8 +51,8 @@ const LABELED_BTN_ACTIVE =
 
 /**
  * Primary nav rail — icon-only (56px) or labeled tabs (~180px).
- * New chat sits in the header-alignment slot; Voice / Notifications /
- * General at the bottom. Search lives next to PanelLeft in the titlebar.
+ * New chat sits in the header-alignment slot; Notifications / General
+ * at the bottom. Search + Voice live next to PanelLeft in the titlebar.
  */
 export function PrimaryNavRail({
   section,
@@ -66,9 +65,7 @@ export function PrimaryNavRail({
 }) {
   const {
     openNotifications,
-    openVoice,
     newChat,
-    entitlements,
     view,
     drafting,
     thread,
@@ -170,16 +167,6 @@ export function PrimaryNavRail({
           labeled ? "items-stretch" : "items-center",
         )}
       >
-        {entitlements.hasVoice ? (
-          <UtilityButton
-            labeled={labeled}
-            title="Voice"
-            active={view === "voice"}
-            onClick={() => openVoice()}
-          >
-            <VoiceWaveIcon size={labeled ? 14 : 15} />
-          </UtilityButton>
-        ) : null}
         <UtilityButton
           labeled={labeled}
           title="Notifications"
