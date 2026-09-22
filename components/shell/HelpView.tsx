@@ -92,7 +92,7 @@ export function HelpView() {
             </li>
             <li>
               Notification delivery preferences (push, email alerts) stay under
-              General → Notifications.
+              General → Alerts.
             </li>
           </ul>
         </SettingsGroup>
