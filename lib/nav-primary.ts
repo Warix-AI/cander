@@ -9,6 +9,11 @@ export type PrimaryNavSection =
 /** Icon-only rail vs labeled tabs (wide dual menu). */
 export type PrimaryNavRailMode = "icon" | "labeled";
 
+/** Desktop primary rail widths — keep Sidebar + PrimaryNavRail in sync. */
+export const PRIMARY_NAV_RAIL_ICON_WIDTH_PX = 56;
+/** Labeled mode: tight to longest label; leaves ~half the prior dead space before context. */
+export const PRIMARY_NAV_RAIL_LABELED_WIDTH_PX = 155;
+
 /** Top rail destinations (General lives on the bottom account control). */
 export const PRIMARY_NAV_SECTIONS: PrimaryNavSection[] = [
   "workspaces",

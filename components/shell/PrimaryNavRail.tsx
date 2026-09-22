@@ -20,6 +20,8 @@ import {
 } from "@/components/brand/NavIcons";
 import {
   PRIMARY_NAV_LABEL,
+  PRIMARY_NAV_RAIL_ICON_WIDTH_PX,
+  PRIMARY_NAV_RAIL_LABELED_WIDTH_PX,
   type PrimaryNavSection,
 } from "@/lib/nav-primary";
 import {
@@ -73,7 +75,7 @@ const LABELED_BTN_ACTIVE = cn(
 const RAIL_STACK = "flex flex-col gap-0.5";
 
 /**
- * Primary nav rail — icon-only (56px) or labeled tabs (~180px).
+ * Primary nav rail — icon-only or labeled tabs.
  * Selected section icons turn blue; after a sustained hover they morph to
  * a plus that opens the section’s add flow.
  */
@@ -102,10 +104,15 @@ export function PrimaryNavRail({
       className={cn(
         "flex h-full shrink-0 flex-col pb-2 pt-1.5",
         labeled
-          ? "w-[180px] items-stretch px-1.5"
-          : "w-[56px] items-center",
+          ? "items-stretch px-1.5"
+          : "items-center",
         className,
       )}
+      style={{
+        width: labeled
+          ? PRIMARY_NAV_RAIL_LABELED_WIDTH_PX
+          : PRIMARY_NAV_RAIL_ICON_WIDTH_PX,
+      }}
       aria-label="Primary navigation"
     >
       <div
