@@ -260,6 +260,7 @@ function RailSectionButton({
         }
       }}
       className={cn(
+        "group",
         labeled ? LABELED_BTN_BASE : RAIL_BTN_BASE,
         active
           ? labeled

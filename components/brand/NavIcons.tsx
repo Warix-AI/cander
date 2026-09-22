@@ -137,8 +137,8 @@ export function IconChats({
 }
 
 /**
- * Images — two stacked rounded frames with sun + mountains
- * (matches the reference gallery glyph).
+ * Images — sun + soft mountain range.
+ * Outline by default; hover/selected fill completes the solid silhouette.
  */
 export function IconImages({
   className,
@@ -146,16 +146,17 @@ export function IconImages({
   strokeWidth = DEFAULT_STROKE,
   ...rest
 }: NavIconProps) {
+  const complete =
+    "fill-transparent transition-[fill] duration-200 ease-out group-hover:fill-current [[aria-selected=true]_&]:fill-current";
   return (
     <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      {/* Back frame — offset up-right */}
-      <rect x="6.5" y="3.25" width="14" height="14" rx="3.25" />
-      {/* Front frame */}
-      <rect x="3.25" y="6.5" width="14" height="14" rx="3.25" />
-      {/* Sun */}
-      <circle cx="13.85" cy="11.15" r="1.35" />
-      {/* Mountains */}
-      <path d="M5.35 17.85 9.1 14.35l2.55 2.15 2.95-3.2 2.75 4.55" />
+      {/* Sun — upper left */}
+      <circle cx="8.1" cy="7.35" r="2.9" className={complete} />
+      {/* Mountains — low left peak, tall right peak, rounded base */}
+      <path
+        className={complete}
+        d="M3.4 18.85h17.2c.45 0 .7-.5.45-.9l-3.85-6.1a1.35 1.35 0 0 0-2.25-.1l-1.7 2.15-2.95-3.85a1.35 1.35 0 0 0-2.2 0L3 17.95c-.3.4-.05.9.4.9Z"
+      />
     </NavIconBase>
   );
 }
