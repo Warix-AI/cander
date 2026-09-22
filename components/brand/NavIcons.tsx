@@ -137,8 +137,9 @@ export function IconChats({
 }
 
 /**
- * Images — sun + soft mountain range.
- * Outline by default; hover/selected fill completes the solid silhouette.
+ * Images — large soft mountain range with sun attached at the top.
+ * Outline by default; hover/selected fill completes the silhouette.
+ * Blue squircle hover pad lives on the rail button (extends past L/R/bottom).
  */
 export function IconImages({
   className,
@@ -147,15 +148,23 @@ export function IconImages({
   ...rest
 }: NavIconProps) {
   const complete =
-    "fill-transparent transition-[fill] duration-200 ease-out group-hover:fill-current [[aria-selected=true]_&]:fill-current";
+    "fill-transparent transition-[fill] duration-200 ease-out group-hover:fill-current/85 [[aria-selected=true]_&]:fill-current/85";
   return (
-    <NavIconBase size={size} strokeWidth={strokeWidth} className={className} {...rest}>
-      {/* Sun — upper left */}
-      <circle cx="8.1" cy="7.35" r="2.9" className={complete} />
-      {/* Mountains — low left peak, tall right peak, rounded base */}
+    <NavIconBase
+      size={size}
+      strokeWidth={strokeWidth}
+      className={cn("overflow-visible", className)}
+      {...rest}
+    >
+      {/* Sun — attached at top edge, above the left peak */}
+      <circle cx="7.2" cy="3.85" r="3.2" className={complete} />
+      {/*
+        Mountains nearly fill the glyph (≈ hover pad size): low left hump,
+        tall right hump, soft valley, rounded bottom matching the squircle.
+      */}
       <path
         className={complete}
-        d="M3.4 18.85h17.2c.45 0 .7-.5.45-.9l-3.85-6.1a1.35 1.35 0 0 0-2.25-.1l-1.7 2.15-2.95-3.85a1.35 1.35 0 0 0-2.2 0L3 17.95c-.3.4-.05.9.4.9Z"
+        d="M2.1 21.1c0 1 .75 1.55 1.65 1.55h16.5c.9 0 1.65-.55 1.65-1.55 0-.4-.12-.78-.4-1.15L16.05 9.55c-.45-.7-1.45-.75-2.05-.15l-1.7 2.05-3.45-4.7c-.55-.75-1.7-.7-2.2.1L2.5 19.95c-.28.37-.4.75-.4 1.15Z"
       />
     </NavIconBase>
   );

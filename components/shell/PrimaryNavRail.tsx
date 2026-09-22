@@ -233,6 +233,13 @@ function RailSectionButton({
     ? PRIMARY_NAV_ADD_LABEL[id]
     : PRIMARY_NAV_LABEL[id];
 
+  const isImages = id === "images";
+  /** Images: blue translucent squircle instead of the gray wash. */
+  const imagesHoverPad =
+    isImages && !showPlus
+      ? "relative overflow-visible hover:bg-transparent dark:hover:bg-transparent"
+      : null;
+
   return (
     <button
       type="button"
@@ -269,15 +276,30 @@ function RailSectionButton({
           : labeled
             ? LABELED_BTN_IDLE
             : RAIL_BTN_IDLE,
+        imagesHoverPad,
       )}
     >
-      {showPlus ? (
-        <IconPlus size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
-      ) : (
-        <Icon size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
-      )}
+      {isImages && !showPlus ? (
+        <span
+          aria-hidden
+          className={cn(
+            "pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[10px] opacity-0 transition-opacity duration-200 ease-out",
+            "bg-[linear-gradient(180deg,rgba(48,110,230,0.58)_0%,rgba(72,148,255,0.4)_100%)]",
+            "shadow-[0_0_12px_rgba(64,136,255,0.4)] ring-1 ring-white/25",
+            /* Slightly larger than the glyph — extends past underside + L/R */
+            "h-[30px] w-[30px] group-hover:opacity-100",
+          )}
+        />
+      ) : null}
+      <span className={cn(isImages && !showPlus && "relative z-[1]")}>
+        {showPlus ? (
+          <IconPlus size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
+        ) : (
+          <Icon size={labeled ? NAV_ICON_HEADER : NAV_ICON_RAIL} />
+        )}
+      </span>
       {labeled ? (
-        <span className="min-w-0 truncate">{label}</span>
+        <span className="relative z-[1] min-w-0 truncate">{label}</span>
       ) : null}
     </button>
   );
