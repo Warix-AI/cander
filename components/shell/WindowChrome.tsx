@@ -56,6 +56,7 @@ export function WindowChrome({
         className={className}
         leading={<NavToggle />}
         onSearch={() => openSearch()}
+        searchActive={view === "search"}
         afterSearch={
           entitlements.hasVoice ? (
             <button
@@ -66,7 +67,7 @@ export function WindowChrome({
               onClick={() => openVoice()}
               className={cn(
                 SHELL_HEADER_ICON_CLASS,
-                view === "voice" && "text-[var(--shell-select)]",
+                view === "voice" && "shell-rail-icon-active",
               )}
             >
               <VoiceWaveIcon size={14} />

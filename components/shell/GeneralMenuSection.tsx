@@ -58,20 +58,7 @@ function buildGeneralMenuRows(
   const tabs = visibleSettingsTabs(entitlements);
   const rows: MenuRow[] = [];
 
-  if (isPlatformAdmin) {
-    rows.push({ kind: "admin" });
-    for (const tab of tabs) {
-      rows.push({
-        kind: "settings",
-        id: tab.id,
-        label: SETTINGS_LABEL[tab.id] ?? tab.label,
-      });
-    }
-    rows.push({ kind: "help" });
-    return rows;
-  }
-
-  // Users: Usage first, then the rest in settings order (skipping Usage once).
+  // Usage always leads the General list (top-aligned like other sections).
   const usage = tabs.find((tab) => tab.id === "usage");
   if (usage) {
     rows.push({
@@ -80,6 +67,11 @@ function buildGeneralMenuRows(
       label: SETTINGS_LABEL.usage ?? usage.label,
     });
   }
+
+  if (isPlatformAdmin) {
+    rows.push({ kind: "admin" });
+  }
+
   for (const tab of tabs) {
     if (tab.id === "usage") continue;
     rows.push({

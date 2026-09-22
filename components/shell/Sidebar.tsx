@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { GripVertical, MessageSquare } from "lucide-react";
-import { ContextualAddRow, ContextualNavHeader } from "@/components/shell/ContextualNavPanel";
+import { ContextualAddRow } from "@/components/shell/ContextualNavPanel";
 import { GeneralMenuBody } from "@/components/shell/GeneralMenuSection";
 import { AppsNavList } from "@/components/shell/AppsNavList";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
@@ -101,6 +101,7 @@ export function Sidebar() {
     workspace,
     setWorkspace,
     view,
+    drafting,
     newChat,
     openExpertSetup,
     expertSetupId,
@@ -128,6 +129,7 @@ export function Sidebar() {
   const panelRef = useRef<HTMLDivElement>(null);
   const peekRef = useRef(false);
   const skipRestoreRef = useRef(false);
+  const wasDraftingRef = useRef(false);
 
   useEffect(() => {
     // Hydrate collapse preference once on mount.
@@ -135,6 +137,15 @@ export function Sidebar() {
     if (!open) setSidebarOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
+
+  // New chat (rail or closed dock) → land on the Chats submenu.
+  useEffect(() => {
+    if (drafting && !wasDraftingRef.current) {
+      setSection("chats");
+      persistPrimaryNavSection("chats");
+    }
+    wasDraftingRef.current = drafting;
+  }, [drafting]);
 
   useEffect(() => {
     persistContextNavOpen(sidebarOpen);
@@ -533,8 +544,6 @@ export function Sidebar() {
 
   const contextInner = (
     <>
-      <ContextualNavHeader section={section} />
-
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div className="h-full overflow-y-auto pb-1">
           <div className="flex flex-col gap-0.5">

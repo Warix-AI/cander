@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
-import { PRIMARY_NAV_LABEL, type PrimaryNavSection } from "@/lib/nav-primary";
+import type { PrimaryNavSection } from "@/lib/nav-primary";
 import { PRIMARY_NAV_ADD_LABEL } from "@/components/shell/PrimaryNavRail";
 import {
   SIDEBAR_ROW,
@@ -10,25 +10,6 @@ import {
   SIDEBAR_ROW_ICON,
 } from "@/lib/mobile-menu-styles";
 import { cn } from "@/lib/utils";
-
-/**
- * Contextual sidebar — General keeps a quiet title; other sections put the
- * first list row at the top (no title + plus header).
- */
-export function ContextualNavHeader({
-  section,
-}: {
-  section: PrimaryNavSection;
-}) {
-  if (section !== "general") return null;
-  return (
-    <div className="flex h-10 shrink-0 items-center gap-1 px-1 pb-0 pt-0">
-      <h2 className="min-w-0 flex-1 truncate px-1.5 text-[13px] font-medium tracking-[-0.01em] text-foreground">
-        {PRIMARY_NAV_LABEL.general}
-      </h2>
-    </div>
-  );
-}
 
 /** Trailing “Add …” row under the section’s items. */
 export function ContextualAddRow({

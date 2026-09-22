@@ -32,6 +32,7 @@ export function ShellWindowChromeBar({
   afterSearch,
   trailing,
   onSearch,
+  searchActive = false,
   onBack,
   onForward,
   canGoBack = false,
@@ -49,6 +50,8 @@ export function ShellWindowChromeBar({
   /** Far-right cluster (e.g. General/Settings) — separated from primary actions. */
   trailing?: ReactNode;
   onSearch?: () => void;
+  /** Blue glyph while Search view is open. */
+  searchActive?: boolean;
   onBack?: () => void;
   onForward?: () => void;
   canGoBack?: boolean;
@@ -100,7 +103,10 @@ export function ShellWindowChromeBar({
                   aria-label="Search"
                   style={desktop ? DESKTOP_NO_DRAG : undefined}
                   onClick={onSearch}
-                  className={SHELL_HEADER_ICON_CLASS}
+                  className={cn(
+                    SHELL_HEADER_ICON_CLASS,
+                    searchActive && "shell-rail-icon-active",
+                  )}
                 >
                   <Search className="h-4 w-4" strokeWidth={1.7} />
                 </button>

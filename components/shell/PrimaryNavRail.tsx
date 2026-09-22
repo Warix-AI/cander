@@ -87,12 +87,12 @@ export function PrimaryNavRail({
     newChat,
     view,
     drafting,
-    thread,
     primaryNavRailMode,
   } = useApp();
 
   const labeled = primaryNavRailMode === "labeled";
-  const newChatActive = drafting && !thread;
+  // Home new chat sets drafting + a thread id — highlight while drafting.
+  const newChatActive = drafting;
 
   return (
     <aside
@@ -116,7 +116,10 @@ export function PrimaryNavRail({
           title="New chat"
           aria-label="New chat"
           data-desktop-no-drag=""
-          onClick={() => newChat()}
+          onClick={() => {
+            onSection("chats");
+            newChat();
+          }}
           className={cn(
             labeled ? LABELED_BTN_BASE : RAIL_BTN_BASE,
             labeled && "w-full",
