@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { GripVertical, MessageSquare } from "lucide-react";
-import { ContextualAddRow, ContextualNavHeader, ContextualSectionLabel } from "@/components/shell/ContextualNavPanel";
+import { ContextualAddRow, ContextualNavHeader } from "@/components/shell/ContextualNavPanel";
 import { GeneralMenuBody } from "@/components/shell/GeneralMenuSection";
 import { AppsNavList } from "@/components/shell/AppsNavList";
 import { PinPreviewThumb } from "@/components/shell/PinPreviewThumb";
