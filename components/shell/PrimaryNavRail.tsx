@@ -57,6 +57,11 @@ export function PrimaryNavRail({
       )}
       aria-label="Primary navigation"
     >
+      {/*
+        Match ContextualNavHeader (h-10) so the first rail icon sits beside
+        the first submenu row, not the section title — leaves empty space above.
+      */}
+      <div className="h-10 w-full shrink-0" aria-hidden />
       <div className="flex flex-col items-center gap-1" role="tablist">
         {PRIMARY.map(({ id, Icon }) => {
           const active = section === id;
